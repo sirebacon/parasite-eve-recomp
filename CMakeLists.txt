@@ -24,6 +24,13 @@ set(PSX_SETUP_WIZARD ON CACHE BOOL
     "Advertise first-run setup wizard + Generate & rebuild in recomp-ui" FORCE)
 include("${PSXRECOMP_ROOT}/runtime/runtime.cmake")
 
+# Game-specific mod plugin sources (this fork's psxrecomp predates the
+# PRELOADED_MODS_DIR keyword tombarecomp's newer psxrecomp has, so both the
+# plugin sources and the preloaded-package staging below are wired by hand
+# instead of through psxrecomp_add_game_runtime()).
+file(GLOB PE_MOD_PLUGIN_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/mods/*.c")
+
 psxrecomp_add_game_runtime(psx-runtime
     # ENABLE_NETPLAY_IF_PRESENT
     # NETPLAY_LOBBY_URL "ws://netplay.retcomm.net:8765"
@@ -36,6 +43,22 @@ psxrecomp_add_game_runtime(psx-runtime
     GEN_FULL_GLOB "generated/SLUS_006.62_full_*.c"
     CODEGEN_SETUP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/codegen_setup.c"
 )
+
+target_sources(psx-runtime PRIVATE ${PE_MOD_PLUGIN_SOURCES})
+
+# Stage this project's own preloaded mod packages beside the binary. Cleared
+# first so a package removed from source doesn't linger in the build output
+# forever (copy_directory merges, it never deletes).
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded/packages")
+    add_custom_command(TARGET psx-runtime POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "$<TARGET_FILE_DIR:psx-runtime>/mods/packages"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded/packages"
+            "$<TARGET_FILE_DIR:psx-runtime>/mods/packages"
+        COMMENT "Staging Parasite Eve preloaded mod packages"
+        VERBATIM)
+endif()
 
 # Stage runtime configs next to the exe for direct build/ launches. Only copy
 # files that exist — never fail POST_BUILD when game_options.toml is absent.
