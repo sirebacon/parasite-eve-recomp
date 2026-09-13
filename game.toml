@@ -44,6 +44,11 @@ strict = true
 [runtime]
 window_title = "Parasite Eve Recompiled"
 memcard_dir = "saves"
+# PE streams menus/rooms/battles/cutscenes as code overlays. Without this the
+# runtime never captures/compiles them and they run on the slow interpreter.
+overlay_cache = true
+# Fast-forward guest idle spin-loops instead of executing every iteration.
+idle_skip = true
 
 [video]
 renderer = "opengl"
