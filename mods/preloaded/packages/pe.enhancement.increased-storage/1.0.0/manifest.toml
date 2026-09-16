@@ -1,26 +1,9 @@
 format_version = 5
 id = "pe.enhancement.increased-storage"
 version = "1.0.0"
-name = "Increased Inventory Storage"
+name = "Increased Inventory Storage (retired)"
 author = "pe-mods"
-description = "Raises Aya's inventory slot cap from 50 to 80. Patches two clamp sites (Inv_SetAyaSlotCount and Inv_GetAyaSlotLimit) confirmed by direct disassembly against the retail SLUS-00662 executable."
+description = "RETIRED as a toggleable mod (2026-09-13), following the same root-cause fix applied to pe.enhancement.faster-movement. The storage/inventory clamp values are now baked directly into the shipped SLUS-00662 executable unconditionally rather than applied via a runtime RAM patch. This package intentionally declares no [[feature]]/[[patch]] -- a live [[patch]] here would write its old clamp encodings into guest RAM at boot/savestate-load, forcing those instructions into interpreter fallback and making the game execute the STALE RAM value instead of the correct value compiled into the EXE (this is exactly what was found happening to the movement mod: mem_words showed a stale RAM-patched value even on a freshly rebuilt binary with the correct value baked in). Do not re-add [[patch]] entries here unless the EXE-level fix is reverted first."
 
 [[target]]
 game_id = "SLUS-00662"
-# No disc_sha256: the earlier value here was wrong (it hashed the boot EXE,
-# not the disc image the runtime actually hashes for this field) and made
-# the resolver fail this package's target match entirely, which blocked
-# Play. game_id alone is an unambiguous match for this project (one target
-# region). Revisit with the correct disc image hash if a stronger pin is
-# ever needed.
-
-[[feature]]
-id = "increased-storage"
-name = "Increased Storage (80 slots)"
-description = "Disabled by default. Raises the inventory slot cap from the retail 50 to 80. Patches both places that enforce the cap so the getter and setter agree; does not touch the backing item array itself, so this should be play-tested by actually filling storage past the old 50-item cap before trusting it."
-group = "Quality of Life"
-default_enabled = false
-
-[[plugin]]
-feature = "increased-storage"
-id = "pe.increased-storage"

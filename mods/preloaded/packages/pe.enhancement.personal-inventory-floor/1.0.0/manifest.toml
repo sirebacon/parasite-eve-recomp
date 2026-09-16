@@ -1,0 +1,32 @@
+format_version = 5
+id = "pe.enhancement.personal-inventory-floor"
+version = "1.0.0"
+name = "Personal Inventory Floor"
+author = "pe-mods"
+description = "Raises the floor on Aya's personal (carried) inventory capacity. The retail game grows this from 10 slots at level 1 to 46 by level 99 via a table the runtime builds at boot (confirmed 2026-09-13: every byte behind it is zero in the static disc image, so there is no fixed instruction or data byte to patch -- the value is regenerated on every New Game and every level-up). This package polls the live capacity every VBlank (pe.inventory-floor, src/mods/pe_inventory_floor.c) and raises it back to the floor whenever the game has just set it lower, which is savestate-safe by construction since a VBlank hook re-runs continuously rather than firing once at boot. Once the natural curve exceeds the floor (around level 75+), this stops touching the value and the retail late-game progression continues normally."
+
+[[target]]
+game_id = "SLUS-00662"
+
+[[feature]]
+id = "personal-inventory-floor"
+name = "Personal Inventory Floor (40)"
+description = "Guarantees Aya can carry at least this many personal items from New Game onward, instead of starting at the retail 10 and growing slowly with level. Does not affect NYPD/warehouse storage capacity (a separate system) and does not touch the natural progression once it grows past the floor on its own."
+group = "Quality of Life"
+default_enabled = true
+
+[[option]]
+feature = "personal-inventory-floor"
+id = "floor"
+label = "Minimum personal inventory slots"
+description = "Floor applied every frame while below the retail per-level curve. 50 is the hard ceiling the game's own capacity check enforces (Inv_SetAyaSlotCount/Inv_GetAyaSlotLimit, SLUS-00662 0x80052F24/0x80052F70)."
+group = "Quality of Life"
+type = "integer"
+min = 10
+max = 50
+step = 1
+default = 40
+
+[[plugin]]
+feature = "personal-inventory-floor"
+id = "pe.inventory-floor"

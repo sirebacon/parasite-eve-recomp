@@ -1,0 +1,9 @@
+format_version = 5
+id = "pe.enhancement.faster-movement"
+version = "1.0.0"
+name = "Faster Field Movement (retired)"
+author = "pe-mods"
+description = "RETIRED as a toggleable mod (2026-09-13). Aya's field-movement multiplier is now baked directly into the shipped SLUS-00662 executable unconditionally (currently 20x, up from the retail 5x) rather than applied via a runtime RAM patch. This package is kept only as a historical record and intentionally declares no [[feature]]/[[patch]] -- a live [[patch]] here would write the old 8x encoding into guest RAM at boot/savestate-load, which forces this instruction into interpreter fallback and makes the game execute the STALE RAM value instead of the correct value compiled into the EXE. (Root-caused 2026-09-13: mem_words at 0x800185C0 showed 0x3C040008 -- the old 8x replace value -- even on a freshly rebuilt 20x binary, because this patch's `expected` matched the disc's original 5x bytes and fired every boot.) Do not re-add a [[patch]] for this address unless the EXE-level fix is reverted first."
+
+[[target]]
+game_id = "SLUS-00662"

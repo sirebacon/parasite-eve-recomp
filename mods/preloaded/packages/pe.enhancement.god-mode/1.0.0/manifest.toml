@@ -1,0 +1,20 @@
+format_version = 5
+id = "pe.enhancement.god-mode"
+version = "1.0.0"
+name = "God Mode"
+author = "pe-mods"
+description = "Keeps Aya's live in-battle HP topped up to her current max HP every frame, so damage never sticks. Targets the live Combatant record (g_ActiveActor -> combatant+0x0C curHP, clamped to combatant+0x1C maxHP; include/pe1/battle.h, offsets confirmed by the decomp's own static asserts), not the save-struct HP mirror at 0x800C0E08 -- that field is itself synced FROM the live battle record, so poking it would be overwritten on the next sync and do nothing. A VBlank hook re-runs continuously, so this is savestate-safe by construction and self-corrects the instant a battle starts."
+
+[[target]]
+game_id = "SLUS-00662"
+
+[[feature]]
+id = "god-mode"
+name = "God Mode (Invincibility)"
+description = "Aya's current HP is forced to her max HP every frame during battle. Does not change max HP itself, enemy behavior, or ATB timing -- only prevents damage from reducing current HP below max."
+group = "Cheats"
+default_enabled = false
+
+[[plugin]]
+feature = "god-mode"
+id = "pe.god-mode"

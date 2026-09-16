@@ -1,0 +1,32 @@
+format_version = 5
+id = "pe.enhancement.bonus-points-floor"
+version = "1.0.0"
+name = "Bonus Points Floor"
+author = "pe-mods"
+description = "Guarantees Aya always has at least this many unspent bonus points to allocate on the stat-growth screen. Unlike max HP/current HP, g_AyaBonusPoints (0x800C0E10) is genuinely persistent save state, not a value the game recomputes and silently reverts -- confirmed via the decomp's own header notes (include/pe1/aya.h), including the game's own 99999 clamp, which this mod's own ceiling matches rather than inventing a new one. Polls every VBlank and raises the value back up whenever it's below the configured floor (from spending points, or from a fresh New Game's legitimate starting value of 0), the same floor idiom as the personal-inventory-floor package -- see that package's notes on why a one-time activation hook is the wrong shape for a value the game can change on its own after boot."
+
+[[target]]
+game_id = "SLUS-00662"
+
+[[feature]]
+id = "bonus-points-floor"
+name = "Bonus Points Floor"
+description = "Keeps at least this many bonus points available to spend on Aya's stat growth screen at all times. Does not affect already-allocated stats, level, or EXP -- only the unspent points balance."
+group = "Quality of Life"
+default_enabled = true
+
+[[option]]
+feature = "bonus-points-floor"
+id = "floor"
+label = "Minimum bonus points"
+description = "Floor applied every frame while below this amount. 99999 is the hard ceiling the game's own value clamps to."
+group = "Quality of Life"
+type = "integer"
+min = 1
+max = 99999
+step = 1
+default = 999
+
+[[plugin]]
+feature = "bonus-points-floor"
+id = "pe.bonus-points-floor"
