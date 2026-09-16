@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.20)
 set(PSXRECOMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp" CACHE PATH
     "Path to psxrecomp")
 if(NOT EXISTS "${PSXRECOMP_ROOT}/runtime/runtime.cmake")
@@ -24,20 +24,10 @@ set(PSX_SETUP_WIZARD ON CACHE BOOL
     "Advertise first-run setup wizard + Generate & rebuild in recomp-ui" FORCE)
 include("${PSXRECOMP_ROOT}/runtime/runtime.cmake")
 
-# Game-specific mod plugin sources. psxrecomp_add_game_runtime()'s
-# PRELOADED_MODS_DIR keyword (added in the psxrecomp c4/wave5 pin, 2026-09-15)
-# now handles staging this project's mods/preloaded/packages into
-# <exe-dir>/mods/bundled natively -- see docs/MOD_PACKAGES.md in psxrecomp --
-# so the hand-rolled rm -rf/copy_directory POST_BUILD step this used to need
-# is gone. PRELOADED_MODS_DIR does NOT cover compiling game-owned plugin .c
-# files, though (checked runtime.cmake directly: its EXTRAS_SOURCES forwarding
-# is wired only to CODEGEN_SETUP_SOURCES, not a general mod-source hook), so
-# target_sources() below is still required, unchanged from before.
-#
-# IMPORTANT: since mods/preloaded/packages exists in this project, psxrecomp's
-# own configure-time safety tripwire now REQUIRES PRELOADED_MODS_DIR to be
-# declared (or the literal NONE) -- omitting it is a hard configure error, not
-# a silent fallback to the old manual staging.
+# Game-specific mod plugin sources (this fork's psxrecomp predates the
+# PRELOADED_MODS_DIR keyword tombarecomp's newer psxrecomp has, so both the
+# plugin sources and the preloaded-package staging below are wired by hand
+# instead of through psxrecomp_add_game_runtime()).
 file(GLOB PE_MOD_PLUGIN_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/mods/*.c")
 
@@ -52,10 +42,23 @@ psxrecomp_add_game_runtime(psx-runtime
     GEN_MARKER "generated/SLUS_006.62_dispatch.c"
     GEN_FULL_GLOB "generated/SLUS_006.62_full_*.c"
     CODEGEN_SETUP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/codegen_setup.c"
-    PRELOADED_MODS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded"
 )
 
 target_sources(psx-runtime PRIVATE ${PE_MOD_PLUGIN_SOURCES})
+
+# Stage this project's own preloaded mod packages beside the binary. Cleared
+# first so a package removed from source doesn't linger in the build output
+# forever (copy_directory merges, it never deletes).
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded/packages")
+    add_custom_command(TARGET psx-runtime POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "$<TARGET_FILE_DIR:psx-runtime>/mods/packages"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded/packages"
+            "$<TARGET_FILE_DIR:psx-runtime>/mods/packages"
+        COMMENT "Staging Parasite Eve preloaded mod packages"
+        VERBATIM)
+endif()
 
 # Stage runtime configs next to the exe for direct build/ launches. Only copy
 # files that exist — never fail POST_BUILD when game_options.toml is absent.
