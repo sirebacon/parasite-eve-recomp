@@ -1,7 +1,7 @@
 [submodule "psxrecomp"]
 	path = psxrecomp
-	url = https://github.com/Alexbeav/psxrecomp.git
-	branch = release/wave2-v0.3.0-source
+	url = https://github.com/sirebacon/psxrecomp.git
+	branch = pe-local-work-old-pin-autocompile-buffer-fix
 [submodule "recomp-ui"]
 	path = recomp-ui
 	url = https://github.com/mstan/recomp-ui.git
