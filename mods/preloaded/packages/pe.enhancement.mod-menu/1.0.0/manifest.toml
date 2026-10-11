@@ -3,15 +3,15 @@ id = "pe.enhancement.mod-menu"
 version = "1.0.0"
 name = "In-Game Mod Menu"
 author = "pe-mods"
-description = "An in-game menu for switching mods on and off while playing. Hold L1 + R1 + Select to open or close it; D-pad up/down moves, Cross toggles, Circle closes. Drawn directly into the displayed frame with the runtime's own GPU command path, and the buttons are masked from the game while it is open. Other plugins add their own toggles through pe_menu_register_toggle() (src/mods/pe_mod_menu.h). Skeleton: settings are not saved between launches, and the toggles do not change what the launcher shows."
+description = "Adds Parasite Eve's in-game toggles to the Mods section of the runtime's F1 menu: faster movement, god mode, and debug actions. F1 pauses the game, works during FMVs, and keeps menu input away from the game. Other plugins add rows through pe_menu_register_toggle() / pe_menu_register_action() (src/mods/pe_mod_menu.h). Settings are not saved between launches, and the toggles do not change what the launcher shows."
 
 [[target]]
 game_id = "SLUS-00662"
 
 [[feature]]
 id = "mod-menu"
-name = "In-Game Mod Menu (L1+R1+Select)"
-description = "Opens a toggle list over the game with L1 + R1 + Select. Toggles take effect immediately and reset on the next launch."
+name = "In-Game Mod Menu (F1 > Mods)"
+description = "Live toggles in the F1 menu's Mods section. They take effect immediately and reset on the next launch."
 group = "Quality of Life"
 default_enabled = true
 
