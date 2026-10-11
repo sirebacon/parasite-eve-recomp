@@ -68,6 +68,22 @@ int pe_menu_register_choice(const char *sub, const char *label,
                                    names, count) ? 0 : -1;
 }
 
+int pe_menu_register_live_int(const char *sub, const char *label,
+                              const char *description, int minimum,
+                              int maximum, int step, PeMenuGet get,
+                              PeMenuSet set) {
+    return psx_mod_menu_add_live_int(pe_page(sub), label, description, minimum,
+                                     maximum, step, get, set) ? 0 : -1;
+}
+
+int pe_menu_register_live_choice(const char *sub, const char *label,
+                                 const char *description,
+                                 const char *const *names, unsigned count,
+                                 PeMenuGet get, PeMenuSet set) {
+    return psx_mod_menu_add_live_choice(pe_page(sub), label, description,
+                                        names, count, get, set) ? 0 : -1;
+}
+
 int pe_menu_register_dynamic_choice(const char *sub, const char *label,
                                     const char *description, int *index,
                                     unsigned max_count,
@@ -104,9 +120,29 @@ static void pe_move_tick(void) {
     psx_mod_write_code_word(PE_MOVE_ADDR, want);
 }
 
+/* Every PE row is registered from here, in one fixed order, so the page reads
+ * the same regardless of the order the other files' constructors run in:
+ *
+ *   Mods > PE Enhancements
+ *     Faster movement (20x)
+ *     God mode
+ *     Stats        >
+ *     Item Editor  >
+ *     Debug        >
+ *
+ * (A sub-page's folder row sits where its first row was registered.) */
+void pe_god_mode_menu_register(void);   /* pe_god_mode.c */
+void pe_stats_menu_register(void);      /* pe_stats_menu.c */
+void pe_item_editor_register(void);     /* pe_item_editor.c */
+void pe_debug_menu_register(void);      /* pe_debug_menu.c */
+
 PSX_MOD_CONSTRUCTOR(pe_register_mod_menu_plugin) {
     (void)psx_mod_register_vblank_plugin("pe.mod-menu", pe_mod_menu_vblank);
     (void)pe_menu_register_toggle(0, "Faster movement (20x)",
         "Field speed 20x instead of stock 5x.",
         &s_move_fast, pe_move_tick);
+    pe_god_mode_menu_register();
+    pe_stats_menu_register();
+    pe_item_editor_register();
+    pe_debug_menu_register();
 }

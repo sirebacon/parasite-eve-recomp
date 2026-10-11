@@ -1,5 +1,5 @@
 /*
- * Stats editor rows for the F1 Mods menu ("Stats: ...").
+ * Stats editor: F1 > Mods > PE Enhancements > Stats.
  *
  * Every row shows the same 1-based number as the in-game status screen and is
  * changed with left/right; edits apply when F1 closes. While the menu is shut,
@@ -191,9 +191,9 @@ static void pe_stats_tick(void) {
 void pe_stats_menu_register(void) {
     /* No "item capacity" row: see the note in pe_apply_stat. */
     static const char *const labels[PE_EDITABLE_STATS] = {
-        "Stats: HP level", "Stats: offense level", "Stats: defense level",
-        "Stats: PE level", "Stats: status recovery level",
-        "Stats: active time level",
+        "HP level", "Offense level", "Defense level",
+        "PE level", "Status recovery level",
+        "Active time level",
     };
     static const char *const descriptions[PE_EDITABLE_STATS] = {
         "Max HP. Applies when F1 closes.",
@@ -207,11 +207,11 @@ void pe_stats_menu_register(void) {
         s_stats[k].value = s_stats[k].shadow = 1;
         s_stats[k].raw = -1;
     }
-    (void)pe_menu_register_int(0, "Stats: level",
+    (void)pe_menu_register_int("Stats", "Level",
         "Up = real level-up. Applies on close.",
         &s_level, 1, PE_MAX_LEVEL, 1);
     for (int k = 0; k < PE_EDITABLE_STATS; k++)
-        (void)pe_menu_register_int(0, labels[k], descriptions[k],
+        (void)pe_menu_register_int("Stats", labels[k], descriptions[k],
                                    &s_stats[k].value, 1, PE_MAX_LEVEL, 1);
     (void)pe_menu_register_tick(pe_stats_tick);
 }

@@ -1,5 +1,5 @@
 /*
- * Debug rows for the in-game menu (listed in F1's Mods section, "Debug: ...").
+ * Debug page: F1 > Mods > PE Enhancements > Debug.
  *
  * Each action runs with the guest paused at a VBlank boundary and edits live
  * guest memory directly. These are development aids, not part of the shipped
@@ -192,29 +192,27 @@ static void pe_debug_unlock_all_abilities(void) {
     psx_mod_osd_message("All abilities unlocked");
 }
 
-void pe_stats_menu_register(void); /* pe_stats_menu.c */
-
-PSX_MOD_CONSTRUCTOR(pe_register_debug_menu) {
-    (void)pe_menu_register_action(0, "Debug: add 1000 bonus points",
+/* Called from pe_mod_menu.c, which fixes the order of the PE page. */
+void pe_debug_menu_register(void) {
+    (void)pe_menu_register_action("Debug", "Add 1000 bonus points",
         "Spend on the stat screen (max 99999).",
         pe_debug_add_bonus_points);
-    pe_stats_menu_register(); /* the "Stats: ..." rows, kept in this order */
-    (void)pe_menu_register_choice(0, "Debug: item type",
+    (void)pe_menu_register_choice("Debug", "Item type",
         "Left/right picks the item group.",
         &s_type_choice, pe_type_names, PE_TYPE_COUNT);
-    (void)pe_menu_register_dynamic_choice(0, "Debug: item",
+    (void)pe_menu_register_dynamic_choice("Debug", "Item",
         "Left/right picks, then give item.",
         &s_item_choice, PE_TYPE_MAX_ITEMS, pe_item_list_count, pe_item_list_name);
-    (void)pe_menu_register_action(0, "Debug: give item",
+    (void)pe_menu_register_action("Debug", "Give item",
         "Adds the item above to Aya's bag.",
         pe_debug_give_item);
-    (void)pe_menu_register_choice(0, "Debug: ability",
+    (void)pe_menu_register_choice("Debug", "Ability",
         "Left/right picks a Parasite Energy.",
         &s_tech_choice, pe_tech_names, PE_TECH_COUNT);
-    (void)pe_menu_register_action(0, "Debug: unlock ability",
+    (void)pe_menu_register_action("Debug", "Unlock ability",
         "Unlocks the ability chosen above.",
         pe_debug_unlock_ability);
-    (void)pe_menu_register_action(0, "Debug: unlock all abilities",
+    (void)pe_menu_register_action("Debug", "Unlock all abilities",
         "Unlocks every Parasite Energy.",
         pe_debug_unlock_all_abilities);
 }

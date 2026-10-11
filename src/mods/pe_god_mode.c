@@ -76,9 +76,13 @@ static void pe_god_mode_menu_tick(void) {
     if (pe_menu_god_mode) pe_god_mode_apply();
 }
 
-PSX_MOD_CONSTRUCTOR(pe_register_god_mode_plugin) {
-    (void)psx_mod_register_vblank_plugin("pe.god-mode", pe_god_mode_vblank);
+/* Called from pe_mod_menu.c, which fixes the order of the PE page. */
+void pe_god_mode_menu_register(void) {
     (void)pe_menu_register_toggle(0, "God mode",
         "Keeps Aya's HP full during battle.",
         &pe_menu_god_mode, pe_god_mode_menu_tick);
+}
+
+PSX_MOD_CONSTRUCTOR(pe_register_god_mode_plugin) {
+    (void)psx_mod_register_vblank_plugin("pe.god-mode", pe_god_mode_vblank);
 }

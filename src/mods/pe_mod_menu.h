@@ -57,6 +57,21 @@ int pe_menu_register_int(const char *sub, const char *label,
                          const char *description, int *value,
                          int minimum, int maximum, int step);
 
+/* Live rows: get() is called whenever the row is shown and set(value) when
+ * the player changes it, so the row can read/write game memory directly and
+ * changes apply immediately (the game is paused while the menu is open).
+ * set() returns non-zero if it accepted the value. */
+typedef int (*PeMenuGet)(void);
+typedef int (*PeMenuSet)(int value);
+int pe_menu_register_live_int(const char *sub, const char *label,
+                              const char *description, int minimum,
+                              int maximum, int step, PeMenuGet get,
+                              PeMenuSet set);
+int pe_menu_register_live_choice(const char *sub, const char *label,
+                                 const char *description,
+                                 const char *const *names, unsigned count,
+                                 PeMenuGet get, PeMenuSet set);
+
 /* Run fn from the menu's VBlank plugin every frame the game runs (menu
  * closed). Used to mirror game state into rows and apply edits after F1. */
 int pe_menu_register_tick(PeMenuPerFrame fn);
