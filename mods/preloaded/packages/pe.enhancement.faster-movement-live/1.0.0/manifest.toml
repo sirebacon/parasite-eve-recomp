@@ -1,24 +1,16 @@
 format_version = 5
 id = "pe.enhancement.faster-movement-live"
 version = "1.0.0"
-name = "Faster Field Movement"
+name = "Faster Field Movement (retired)"
 author = "pe-mods"
-description = "Raises Aya's field-movement speed multiplier from 5x to 20x. Supersedes the retired pe.enhancement.faster-movement package: that one's disc-image-level EXE patch (regenerating generated/SLUS_006.62_full_02.c from a patched disc/SLUS_006.62) had zero runtime effect (confirmed 2026-09-13 by live motion_z tracing showing an unchanged value across an 8x and a 20x disc-image rebuild) -- play.ps1's own header notes that Parasite Eve streams almost everything (menus, rooms, battles, cutscenes) as code overlays and 'the static recomp only covers the main EXE', so Entity_ComputeVelocity is very likely overlay-resident: the disc image only feeds the offline main-EXE generation step, never what an overlay recompiles from at runtime. This package instead uses the framework's declarative main_exe [[patch]] mechanism, which writes live guest RAM and calls dirty_ram_mark_executable_range() (see apply_main_write() in mod_runtime.cpp) -- the correct invalidation path for code the overlay/interpreter system needs to re-pick-up, and reapplied automatically after a savestate load."
+description = "Retired: does nothing. This package used to patch Entity_ComputeVelocity (0x800185C0, lui $a0 5 -> 20), chosen before the decomp was available. The decomp shows that function is a scripted-motion opcode, not Aya's player movement, and a live measurement confirmed her walk and run speeds were unchanged with it on. Aya's run speed is now the 'Run speed' setting in the in-game F1 menu (Mods > PE Enhancements), which scales Aya's movement factor while she runs (the run handler in Scene_PlayerMovement reads it every frame; patching its code does not reach the statically recompiled EXE). Its patch has been removed, so leaving this enabled is harmless."
 
 [[target]]
 game_id = "SLUS-00662"
 
 [[feature]]
 id = "faster-movement"
-name = "Faster Field Movement (20x)"
-description = "Speeds up Aya's walking and running together during field exploration. Does not affect battle movement or animation playback speed -- watch for a sliding/skating look at this multiplier."
+name = "Faster Field Movement (retired, no effect)"
+description = "Retired. Use 'Run speed' in the F1 menu (Mods > PE Enhancements) instead."
 group = "Quality of Life"
-default_enabled = true
-
-# Entity_ComputeVelocity (0x80018598): lui $a0,0x0005 (5.0x) -> 0x0014 (20.0x)
-[[patch]]
-feature = "faster-movement"
-target = "main_exe"
-address = 0x800185C0
-expected = "05 00 04 3C"
-replace  = "14 00 04 3C"
+default_enabled = false

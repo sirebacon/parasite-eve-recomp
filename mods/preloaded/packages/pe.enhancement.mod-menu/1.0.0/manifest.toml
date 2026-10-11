@@ -3,7 +3,7 @@ id = "pe.enhancement.mod-menu"
 version = "1.0.0"
 name = "In-Game Mod Menu"
 author = "pe-mods"
-description = "Adds Parasite Eve's in-game toggles to the Mods section of the runtime's F1 menu: faster movement, god mode, and debug actions. F1 pauses the game, works during FMVs, and keeps menu input away from the game. Other plugins add rows through pe_menu_register_toggle() / pe_menu_register_action() (src/mods/pe_mod_menu.h). Settings are not saved between launches, and the toggles do not change what the launcher shows."
+description = "Adds Parasite Eve's in-game toggles to the Mods section of the runtime's F1 menu: run speed, god mode, stats, item editor and debug actions. F1 pauses the game, works during FMVs, and keeps menu input away from the game. Other plugins add rows through pe_menu_register_toggle() / pe_menu_register_action() (src/mods/pe_mod_menu.h). Settings are not saved between launches, and the toggles do not change what the launcher shows."
 
 [[target]]
 game_id = "SLUS-00662"
