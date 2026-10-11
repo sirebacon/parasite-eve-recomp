@@ -1,0 +1,20 @@
+format_version = 5
+id = "pe.enhancement.mod-menu"
+version = "1.0.0"
+name = "In-Game Mod Menu"
+author = "pe-mods"
+description = "An in-game menu for switching mods on and off while playing. Hold L1 + R1 + Select to open or close it; D-pad up/down moves, Cross toggles, Circle closes. Drawn directly into the displayed frame with the runtime's own GPU command path, and the buttons are masked from the game while it is open. Other plugins add their own toggles through pe_menu_register_toggle() (src/mods/pe_mod_menu.h). Skeleton: settings are not saved between launches, and the toggles do not change what the launcher shows."
+
+[[target]]
+game_id = "SLUS-00662"
+
+[[feature]]
+id = "mod-menu"
+name = "In-Game Mod Menu (L1+R1+Select)"
+description = "Opens a toggle list over the game with L1 + R1 + Select. Toggles take effect immediately and reset on the next launch."
+group = "Quality of Life"
+default_enabled = true
+
+[[plugin]]
+feature = "mod-menu"
+id = "pe.mod-menu"

@@ -31,6 +31,7 @@
  * trusting it in a fight.
  */
 #include "mod_plugins.h"
+#include "pe_mod_menu.h"
 
 #define PE_ACTIVE_ACTOR_PTR_ADDR 0x8009D278u
 #define PE_COMBATANT_CUR_HP_OFFSET 0x0Cu
@@ -43,7 +44,9 @@ static int pe_is_plausible_kseg0_pointer(uint32_t addr) {
     return addr >= 0x80000000u && addr < 0x80200000u;
 }
 
-static void pe_god_mode_vblank(void) {
+/* Shared by this package's own VBlank plugin and by the in-game mod menu's
+ * "GOD MODE" toggle, so the behaviour is the same however it is switched on. */
+static void pe_god_mode_apply(void) {
     if (!psx_mod_game_started()) return;
 
     const uint32_t combatant = psx_mod_read_word(PE_ACTIVE_ACTOR_PTR_ADDR);
@@ -61,6 +64,19 @@ static void pe_god_mode_vblank(void) {
     }
 }
 
+static void pe_god_mode_vblank(void) {
+    pe_god_mode_apply();
+}
+
+/* In-game menu toggle. Off by default; the menu's VBlank calls the tick every
+ * frame, so this works even when the launcher feature above is disabled. */
+static int pe_menu_god_mode;
+
+static void pe_god_mode_menu_tick(void) {
+    if (pe_menu_god_mode) pe_god_mode_apply();
+}
+
 PSX_MOD_CONSTRUCTOR(pe_register_god_mode_plugin) {
     (void)psx_mod_register_vblank_plugin("pe.god-mode", pe_god_mode_vblank);
+    (void)pe_menu_register_toggle("GOD MODE", &pe_menu_god_mode, 0, pe_god_mode_menu_tick);
 }
