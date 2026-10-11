@@ -240,6 +240,7 @@ static void pe_move_tick(void) {
  *
  * (A sub-page's folder row sits where its first row was registered.) */
 void pe_god_mode_menu_register(void);   /* pe_god_mode.c */
+void pe_cheats_menu_register(void);     /* pe_cheats.c */
 void pe_stats_menu_register(void);      /* pe_stats_menu.c */
 void pe_item_editor_register(void);     /* pe_item_editor.c */
 void pe_debug_menu_register(void);      /* pe_debug_menu.c */
@@ -257,6 +258,7 @@ PSX_MOD_CONSTRUCTOR(pe_register_mod_menu_plugin) {
         &s_walk_choice, s_speed_names, PE_SPEED_CHOICES);
     (void)pe_menu_register_tick(pe_move_tick);
     pe_god_mode_menu_register();
+    pe_cheats_menu_register();
     pe_stats_menu_register();
     pe_item_editor_register();
     pe_debug_menu_register();
