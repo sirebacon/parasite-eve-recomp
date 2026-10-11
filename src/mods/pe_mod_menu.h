@@ -34,6 +34,22 @@ int pe_menu_register_toggle(const char *label, const char *description,
 int pe_menu_register_action(const char *label, const char *description,
                             PeMenuAction action);
 
+/* Pick one of `count` names; *index is the 0-based selection. `names` must be
+ * static: the menu keeps the pointer. */
+int pe_menu_register_choice(const char *label, const char *description,
+                            int *index, const char *const *names,
+                            unsigned count);
+
+/* A choice whose list depends on other rows (re-read after any row changes;
+ * *index resets to 0 when the list changes). count_fn() must not exceed
+ * max_count; name_fn must return static strings. */
+typedef unsigned (*PeMenuChoiceCount)(void);
+typedef const char *(*PeMenuChoiceName)(unsigned index);
+int pe_menu_register_dynamic_choice(const char *label, const char *description,
+                                    int *index, unsigned max_count,
+                                    PeMenuChoiceCount count_fn,
+                                    PeMenuChoiceName name_fn);
+
 #ifdef __cplusplus
 }
 #endif

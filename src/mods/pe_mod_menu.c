@@ -36,6 +36,23 @@ int pe_menu_register_action(const char *label, const char *description,
     return psx_mod_menu_add_action(label, description, action) ? 0 : -1;
 }
 
+int pe_menu_register_choice(const char *label, const char *description,
+                            int *index, const char *const *names,
+                            unsigned count) {
+    return psx_mod_menu_add_choice(label, description, index, names, count)
+        ? 0 : -1;
+}
+
+int pe_menu_register_dynamic_choice(const char *label, const char *description,
+                                    int *index, unsigned max_count,
+                                    PeMenuChoiceCount count_fn,
+                                    PeMenuChoiceName name_fn) {
+    return psx_mod_menu_add_dynamic_choice(label, description, index, max_count,
+                                           (PSXModMenuChoiceCount)count_fn,
+                                           (PSXModMenuChoiceName)name_fn)
+        ? 0 : -1;
+}
+
 static void pe_mod_menu_vblank(void) {
     if (!psx_mod_game_started()) return;
     for (int i = 0; i < s_tick_count; i++) s_ticks[i]();
