@@ -36,7 +36,10 @@
  *        borrowed + anything else     -> gauge = 0 (no free actions)
  *        full bar + allowed action    -> gauge = 4500 (half cost)
  *   The bar is tinted gold while it's between half and full.
+ *   The turn bookkeeping rides in save states, so loading an F7 state saved
+ *   mid-borrow refunds and restores the tabs exactly as if play had continued.
  */
+#include <string.h>
 #include "cpu_state.h"
 #include "mod_plugins.h"
 #include "pe_mod_menu.h"
@@ -71,16 +74,25 @@
 enum { ACT_ITEM, ACT_PE, ACT_WEAPON, ACT_ARMOR, ACT_ESCAPE, ACT_COUNT,
        ACT_NONE = -1, ACT_ATTACK = -2, ACT_OTHER = -3 };
 
-static int s_enabled;                            /* master switch */
+static int s_enabled = 1;                        /* master switch, on by default */
 static int s_allow[ACT_COUNT] = { 1, 0, 0, 0, 0 };
 
-static int s_borrowed, s_borrow_pending, s_turn_active, s_track_full;
-static unsigned s_saved_gauge;
-static int s_action;                             /* most significant action this turn */
-static int s_tab_saved;
-static uint32_t s_saved_tabs;
-static uint16_t s_bag[PE_AYA_SLOT_COUNT];
-static uint8_t s_weapon_slot, s_armor_slot;
+/* Bookkeeping that moves in step with guest RAM (the borrowed gauge, the
+ * hidden tabs, the tinted bar). It is save-state data (psx_mod_register_state),
+ * so an F7 state saved mid-turn loads with the bookkeeping that matches it.
+ * Bump PE_ATB_STATE_VERSION when the layout changes. */
+#define PE_ATB_STATE_VERSION 1u
+static struct {
+    int borrowed, borrow_pending, turn_active, track_full;
+    unsigned saved_gauge;
+    int action;                                  /* most significant action this turn */
+    int tab_saved;
+    uint32_t saved_tabs;
+    uint16_t bag[PE_AYA_SLOT_COUNT];
+    uint8_t weapon_slot, armor_slot;
+    uint8_t normal[2][4][3];                     /* the game's bar colours */
+    int have_normal, tinted;
+} s_st;
 
 static int pe_ram_pointer(uint32_t p) {
     return p >= 0x80000000u && p < 0x80200000u;
@@ -99,8 +111,6 @@ static const uint8_t s_gold[4][3] = {
     { 0x60, 0x40, 0x00 }, { 0xFF, 0xD8, 0x40 },   /* left dark, right bright */
     { 0x60, 0x40, 0x00 }, { 0xFF, 0xD8, 0x40 },
 };
-static uint8_t s_normal[2][4][3];
-static int s_have_normal, s_tinted;
 
 static void pe_bar_colors(int save, const uint8_t (*src)[3]) {
     for (uint32_t slot = 0; slot < 2; ++slot)
@@ -108,8 +118,8 @@ static void pe_bar_colors(int save, const uint8_t (*src)[3]) {
             for (uint32_t c = 0; c < 3; ++c) {
                 const uint32_t a = PE_ATB_QUAD_BASE + slot * PE_ATB_QUAD_STRIDE +
                                    s_vertex_color_offsets[v] + c;
-                if (save) s_normal[slot][v][c] = psx_mod_read_byte(a);
-                else psx_mod_write_byte(a, src ? src[v][c] : s_normal[slot][v][c]);
+                if (save) s_st.normal[slot][v][c] = psx_mod_read_byte(a);
+                else psx_mod_write_byte(a, src ? src[v][c] : s_st.normal[slot][v][c]);
             }
 }
 
@@ -122,15 +132,15 @@ static void pe_update_indicator(unsigned gauge) {
     const int want = s_enabled && pe_any_allowed() &&
                      gauge >= PE_GAUGE_HALF && gauge < PE_GAUGE_FULL;
     if (want) {
-        if (!s_tinted && !s_have_normal) { pe_bar_colors(1, 0); s_have_normal = 1; }
+        if (!s_st.tinted && !s_st.have_normal) { pe_bar_colors(1, 0); s_st.have_normal = 1; }
         pe_bar_colors(0, s_gold);
-        s_tinted = 1;
-    } else if (s_tinted) {
-        if (gauge < PE_GAUGE_FULL && s_have_normal) pe_bar_colors(0, 0); /* full: game flashes */
-        s_tinted = 0;
+        s_st.tinted = 1;
+    } else if (s_st.tinted) {
+        if (gauge < PE_GAUGE_FULL && s_st.have_normal) pe_bar_colors(0, 0); /* full: game flashes */
+        s_st.tinted = 0;
     } else if (gauge < PE_GAUGE_HALF) {
         pe_bar_colors(1, 0);                     /* remember the game's colours */
-        s_have_normal = 1;
+        s_st.have_normal = 1;
     }
 }
 
@@ -147,8 +157,8 @@ static int pe_bag_contents_changed(void) {
     for (int i = 0; i < PE_AYA_SLOT_COUNT; ++i) {
         int before = 0, after = 0;
         for (int j = 0; j < PE_AYA_SLOT_COUNT; ++j) {
-            before += s_bag[j] == s_bag[i];
-            after += now[j] == s_bag[i];
+            before += s_st.bag[j] == s_st.bag[i];
+            after += now[j] == s_st.bag[i];
         }
         if (before != after) return 1;
     }
@@ -156,10 +166,10 @@ static int pe_bag_contents_changed(void) {
 }
 
 static void pe_snapshot(void) {
-    pe_bag_read(s_bag);
-    s_weapon_slot = psx_mod_read_byte(PE_WEAPON_SLOT_ADDR);
-    s_armor_slot = psx_mod_read_byte(PE_ARMOR_SLOT_ADDR);
-    s_action = ACT_NONE;
+    pe_bag_read(s_st.bag);
+    s_st.weapon_slot = psx_mod_read_byte(PE_WEAPON_SLOT_ADDR);
+    s_st.armor_slot = psx_mod_read_byte(PE_ARMOR_SLOT_ADDR);
+    s_st.action = ACT_NONE;
 }
 
 static int pe_classify(unsigned command) {
@@ -167,7 +177,7 @@ static int pe_classify(unsigned command) {
     if (command >= 3 && command < 0x183) return ACT_ITEM;
     if (command >= 0x183 && command < 0x197) return ACT_PE;
     if (command >= 0x197 && command < 0x199)
-        return psx_mod_read_byte(PE_ARMOR_SLOT_ADDR) != s_armor_slot ? ACT_ARMOR : ACT_WEAPON;
+        return psx_mod_read_byte(PE_ARMOR_SLOT_ADDR) != s_st.armor_slot ? ACT_ARMOR : ACT_WEAPON;
     if (command >= 0x199) return ACT_ESCAPE;
     return ACT_OTHER;
 }
@@ -178,12 +188,12 @@ static void pe_note_actions(void) {
     for (unsigned i = 0; i < count && i < 32; ++i) {
         const int act = pe_classify(psx_mod_read_half(
             PE_QUEUE_ADDR + i * PE_QUEUE_STRIDE + PE_QUEUE_COMMAND));
-        if (act == ACT_ATTACK || s_action == ACT_NONE) s_action = act;
+        if (act == ACT_ATTACK || s_st.action == ACT_NONE) s_st.action = act;
     }
-    if (s_action == ACT_NONE) {
-        if (psx_mod_read_byte(PE_WEAPON_SLOT_ADDR) != s_weapon_slot) s_action = ACT_WEAPON;
-        else if (psx_mod_read_byte(PE_ARMOR_SLOT_ADDR) != s_armor_slot) s_action = ACT_ARMOR;
-        else if (pe_bag_contents_changed()) s_action = ACT_ITEM;
+    if (s_st.action == ACT_NONE) {
+        if (psx_mod_read_byte(PE_WEAPON_SLOT_ADDR) != s_st.weapon_slot) s_st.action = ACT_WEAPON;
+        else if (psx_mod_read_byte(PE_ARMOR_SLOT_ADDR) != s_st.armor_slot) s_st.action = ACT_ARMOR;
+        else if (pe_bag_contents_changed()) s_st.action = ACT_ITEM;
     }
 }
 
@@ -192,13 +202,13 @@ static int pe_action_allowed(int act) {
 }
 
 static void pe_restore_tabs(void) {
-    if (s_tab_saved) psx_mod_write_word(PE_MENU_TAB_FLAGS, s_saved_tabs);
-    s_tab_saved = 0;
+    if (s_st.tab_saved) psx_mod_write_word(PE_MENU_TAB_FLAGS, s_st.saved_tabs);
+    s_st.tab_saved = 0;
 }
 
 static void pe_reset(void) {
     pe_restore_tabs();
-    s_borrowed = s_borrow_pending = s_turn_active = s_track_full = 0;
+    s_st.borrowed = s_st.borrow_pending = s_st.turn_active = s_st.track_full = 0;
 }
 
 /* ---- the hook --------------------------------------------------------------- */
@@ -206,7 +216,7 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
     (void)cpu; (void)address;
     if (!(psx_mod_read_word(PE_GAME_BLOCK_ADDR) & PE_GAME_BLOCK_BATTLE)) {
         pe_reset();
-        s_tinted = s_have_normal = 0;     /* HUD packets are rebuilt per battle */
+        s_st.tinted = s_st.have_normal = 0;     /* HUD packets are rebuilt per battle */
         return;
     }
     const uint32_t player = psx_mod_read_word(PE_PLAYER_PTR_ADDR);
@@ -215,19 +225,19 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
     if (!pe_ram_pointer(core)) return;
     const uint32_t gauge_addr = core + COMBATANT_TURN_GAUGE;
     const uint32_t phase = psx_mod_read_word(PE_BATTLE_PHASE);
-    pe_update_indicator(s_borrowed ? s_saved_gauge : psx_mod_read_half(gauge_addr));
+    pe_update_indicator(s_st.borrowed ? s_st.saved_gauge : psx_mod_read_half(gauge_addr));
 
     if (phase == 1) {
-        if (!s_turn_active) {
-            s_turn_active = 1;
-            s_track_full = !s_borrowed && s_enabled;   /* a normal full-bar turn */
-            if (s_track_full) pe_snapshot();
+        if (!s_st.turn_active) {
+            s_st.turn_active = 1;
+            s_st.track_full = !s_st.borrowed && s_enabled;   /* a normal full-bar turn */
+            if (s_st.track_full) pe_snapshot();
         }
-        s_borrow_pending = 0;
-        if (s_borrowed || s_track_full) pe_note_actions();
+        s_st.borrow_pending = 0;
+        if (s_st.borrowed || s_st.track_full) pe_note_actions();
         /* Menu closed without doing anything: end the borrowed turn instead
          * of letting the borrowed bar be spent on shots. */
-        if (s_borrowed && s_action == ACT_NONE &&
+        if (s_st.borrowed && s_st.action == ACT_NONE &&
             psx_mod_read_byte(PE_ITEM_MENU_STATE) == 0) {
             const uint32_t pressed = psx_mod_read_word(PE_PRESSED_BITS);
             psx_mod_write_word(PE_PRESSED_BITS, (pressed | PRESS_CANCEL) & ~PRESS_ATTACK);
@@ -236,22 +246,22 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
     }
     if (phase != 0) return;
 
-    if (s_turn_active) {                             /* the turn just ended */
-        if (s_borrowed || s_track_full) pe_note_actions();
-        if (s_borrowed) {
+    if (s_st.turn_active) {                             /* the turn just ended */
+        if (s_st.borrowed || s_st.track_full) pe_note_actions();
+        if (s_st.borrowed) {
             unsigned gauge = 0;
-            if (s_action == ACT_NONE) gauge = s_saved_gauge;
-            else if (pe_action_allowed(s_action))
-                gauge = s_saved_gauge > PE_GAUGE_HALF ? s_saved_gauge - PE_GAUGE_HALF : 0;
+            if (s_st.action == ACT_NONE) gauge = s_st.saved_gauge;
+            else if (pe_action_allowed(s_st.action))
+                gauge = s_st.saved_gauge > PE_GAUGE_HALF ? s_st.saved_gauge - PE_GAUGE_HALF : 0;
             psx_mod_write_half(gauge_addr, (uint16_t)gauge);
-        } else if (s_track_full && pe_action_allowed(s_action)) {
+        } else if (s_st.track_full && pe_action_allowed(s_st.action)) {
             psx_mod_write_half(gauge_addr, (uint16_t)PE_GAUGE_HALF);
         }
         pe_reset();
         return;
     }
-    if (s_borrow_pending) {                          /* the game didn't take it */
-        psx_mod_write_half(gauge_addr, (uint16_t)s_saved_gauge);
+    if (s_st.borrow_pending) {                          /* the game didn't take it */
+        psx_mod_write_half(gauge_addr, (uint16_t)s_st.saved_gauge);
         pe_reset();
         return;
     }
@@ -261,17 +271,17 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
     const uint32_t pressed = psx_mod_read_word(PE_PRESSED_BITS);
     if ((pressed & PRESS_ITEM) && !(pressed & PRESS_ATTACK) &&
         gauge >= PE_GAUGE_HALF && gauge < PE_GAUGE_FULL) {
-        s_saved_gauge = gauge;
+        s_st.saved_gauge = gauge;
         pe_snapshot();
-        s_saved_tabs = psx_mod_read_word(PE_MENU_TAB_FLAGS);
-        s_tab_saved = 1;
-        uint32_t tabs = s_saved_tabs;
+        s_st.saved_tabs = psx_mod_read_word(PE_MENU_TAB_FLAGS);
+        s_st.tab_saved = 1;
+        uint32_t tabs = s_st.saved_tabs;
         for (int a = 0; a < ACT_COUNT; ++a)
             if (!s_allow[a]) tabs &= ~(1u << a);
         psx_mod_write_word(PE_MENU_TAB_FLAGS, tabs);
         psx_mod_write_half(gauge_addr, (uint16_t)PE_GAUGE_FULL);
         psx_mod_write_byte(PE_READY_CHIME_LATCH, 1);   /* u8 in the decomp */
-        s_borrowed = s_borrow_pending = 1;
+        s_st.borrowed = s_st.borrow_pending = 1;
     }
 }
 
@@ -292,7 +302,17 @@ void pe_atb_items_menu_register(void) {
         "Try to escape from a half bar.", &s_allow[ACT_ESCAPE], 0);
 }
 
+/* A state without our block (taken before this build, or an older layout) has
+ * no bookkeeping that matches its RAM: start clean and leave the game alone. */
+static void pe_atb_state_loaded(int result, uint32_t saved_version,
+                                const void *saved, uint32_t saved_size) {
+    (void)saved_version; (void)saved; (void)saved_size;
+    if (result != PSX_MOD_STATE_RESTORED) memset(&s_st, 0, sizeof s_st);
+}
+
 PSX_MOD_CONSTRUCTOR(pe_register_atb_items_hook) {
     (void)psx_mod_register_function_entry_plugin("pe.half-bar-atb",
         PE_BATTLE_UPDATE, pe_on_battle_update);
+    (void)psx_mod_register_state("pe.half-bar-atb", PE_ATB_STATE_VERSION,
+        &s_st, sizeof s_st, pe_atb_state_loaded);
 }
