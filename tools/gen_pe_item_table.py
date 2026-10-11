@@ -22,27 +22,27 @@ GUN_TYPES = {
 
 def item_type(v, comment):
     if v in (0x01, 0x02, 0x03, 0x04, 0x05, 0x1A, 0x1B, 0x1C): return "AMMO"
-    if 0x06 <= v <= 0x0A or 0x0D <= v <= 0x12:            return "MEDICINE & CURES"
+    if 0x06 <= v <= 0x0A or 0x0D <= v <= 0x12:            return "MEDICINE AND CURES"
     if v == 0x13 or 0x1D <= v <= 0x34:                     return "STAT BOOSTERS"
     if v == 0x15 or 0xDD <= v <= 0xEB:                     return "TRADING CARDS"
     if 0x38 <= v <= 0x3E or 0xC8 <= v <= 0xDC:             return "KEY ITEMS"
-    if v < 0x3F:                                           return "TOOLS & JUNK"
+    if v < 0x3F:                                           return "TOOLS AND JUNK"
     if v < 0x44:                                           return "MELEE"
     if v < 0x95:                                           return GUN_TYPES[comment.strip('"')]
     if v < 0xA8:                                           return "ARMOR: N KV SP"
     if v < 0xB8:                                           return "ARMOR: SV CR"
     return "ARMOR: B CM"
 
-ORDER = ["MEDICINE & CURES", "AMMO", "HANDGUNS", "MACHINE GUNS", "SHOTGUNS",
+ORDER = ["MEDICINE AND CURES", "AMMO", "HANDGUNS", "MACHINE GUNS", "SHOTGUNS",
          "RIFLES", "GRENADE LAUNCHERS", "ROCKET LAUNCHERS", "MELEE",
          "ARMOR: N KV SP", "ARMOR: SV CR", "ARMOR: B CM", "STAT BOOSTERS",
-         "TOOLS & JUNK", "KEY ITEMS", "TRADING CARDS"]
+         "TOOLS AND JUNK", "KEY ITEMS", "TRADING CARDS"]
 
 groups = {t: [] for t in ORDER}
 techs = []
 for name, val, comment in rows:
     v = int(val, 16)
-    label = name.replace("_", " ")
+    label = name.replace("_", " ")  # the menu font has A-Z, 0-9 and basic punctuation only
     if v == 0:
         continue
     if v >= 0xEC:

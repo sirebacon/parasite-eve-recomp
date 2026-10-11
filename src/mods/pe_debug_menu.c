@@ -192,24 +192,27 @@ static void pe_debug_unlock_all_abilities(void) {
     psx_mod_osd_message("All abilities unlocked");
 }
 
+void pe_stats_menu_register(void); /* pe_stats_menu.c */
+
 PSX_MOD_CONSTRUCTOR(pe_register_debug_menu) {
     (void)pe_menu_register_action("Debug: add 1000 bonus points",
-        "Spend them on the stat screen. Capped at the game's own 99999.",
+        "Spend on the stat screen (max 99999).",
         pe_debug_add_bonus_points);
+    pe_stats_menu_register(); /* the "Stats: ..." rows, kept in this order */
     (void)pe_menu_register_choice("Debug: item type",
-        "Pick a group with left/right; the item row below lists only that group.",
+        "Left/right picks the item group.",
         &s_type_choice, pe_type_names, PE_TYPE_COUNT);
     (void)pe_menu_register_dynamic_choice("Debug: item",
-        "Pick an item of the type above, then use 'Debug: give item'.",
+        "Left/right picks, then give item.",
         &s_item_choice, PE_TYPE_MAX_ITEMS, pe_item_list_count, pe_item_list_name);
     (void)pe_menu_register_action("Debug: give item",
-        "Adds the item chosen above to Aya's bag, the way the game does.",
+        "Adds the item above to Aya's bag.",
         pe_debug_give_item);
     (void)pe_menu_register_choice("Debug: ability",
-        "Pick a Parasite Energy with left/right, then 'Debug: unlock ability'.",
+        "Left/right picks a Parasite Energy.",
         &s_tech_choice, pe_tech_names, PE_TECH_COUNT);
     (void)pe_menu_register_action("Debug: unlock ability",
-        "Unlocks the Parasite Energy chosen above.",
+        "Unlocks the ability chosen above.",
         pe_debug_unlock_ability);
     (void)pe_menu_register_action("Debug: unlock all abilities",
         "Unlocks every Parasite Energy.",

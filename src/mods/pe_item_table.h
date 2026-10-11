@@ -10,7 +10,7 @@
 #pragma once
 
 static const char *const pe_type_names[] = {
-    "MEDICINE & CURES",
+    "MEDICINE AND CURES",
     "AMMO",
     "HANDGUNS",
     "MACHINE GUNS",
@@ -23,7 +23,7 @@ static const char *const pe_type_names[] = {
     "ARMOR: SV CR",
     "ARMOR: B CM",
     "STAT BOOSTERS",
-    "TOOLS & JUNK",
+    "TOOLS AND JUNK",
     "KEY ITEMS",
     "TRADING CARDS",
 };

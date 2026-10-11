@@ -40,6 +40,14 @@ int pe_menu_register_choice(const char *label, const char *description,
                             int *index, const char *const *names,
                             unsigned count);
 
+/* A number row (left/right steps by `step`, clamped to [minimum, maximum]). */
+int pe_menu_register_int(const char *label, const char *description,
+                         int *value, int minimum, int maximum, int step);
+
+/* Run fn from the menu's VBlank plugin every frame the game runs (menu
+ * closed). Used to mirror game state into rows and apply edits after F1. */
+int pe_menu_register_tick(PeMenuPerFrame fn);
+
 /* A choice whose list depends on other rows (re-read after any row changes;
  * *index resets to 0 when the list changes). count_fn() must not exceed
  * max_count; name_fn must return static strings. */

@@ -31,6 +31,18 @@ int pe_menu_register_toggle(const char *label, const char *description,
     return 0;
 }
 
+int pe_menu_register_tick(PeMenuPerFrame fn) {
+    if (!fn || s_tick_count >= PE_MENU_MAX_TICKS) return -1;
+    s_ticks[s_tick_count++] = fn;
+    return 0;
+}
+
+int pe_menu_register_int(const char *label, const char *description,
+                         int *value, int minimum, int maximum, int step) {
+    return psx_mod_menu_add_int(label, description, value, minimum, maximum,
+                                step) ? 0 : -1;
+}
+
 int pe_menu_register_action(const char *label, const char *description,
                             PeMenuAction action) {
     return psx_mod_menu_add_action(label, description, action) ? 0 : -1;
@@ -80,6 +92,6 @@ static void pe_move_tick(void) {
 PSX_MOD_CONSTRUCTOR(pe_register_mod_menu_plugin) {
     (void)psx_mod_register_vblank_plugin("pe.mod-menu", pe_mod_menu_vblank);
     (void)pe_menu_register_toggle("Faster movement (20x)",
-        "Field movement speed: 20x instead of the stock 5x.",
+        "Field speed 20x instead of stock 5x.",
         &s_move_fast, pe_move_tick);
 }
