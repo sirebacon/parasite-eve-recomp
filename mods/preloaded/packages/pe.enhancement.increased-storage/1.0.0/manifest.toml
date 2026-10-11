@@ -3,7 +3,7 @@ id = "pe.enhancement.increased-storage"
 version = "1.0.0"
 name = "Increased Inventory Storage (retired)"
 author = "pe-mods"
-description = "RETIRED as a toggleable mod (2026-09-13), following the same root-cause fix applied to pe.enhancement.faster-movement. The storage/inventory clamp values are now baked directly into the shipped SLUS-00662 executable unconditionally rather than applied via a runtime RAM patch. This package intentionally declares no [[feature]]/[[patch]] -- a live [[patch]] here would write its old clamp encodings into guest RAM at boot/savestate-load, forcing those instructions into interpreter fallback and making the game execute the STALE RAM value instead of the correct value compiled into the EXE (this is exactly what was found happening to the movement mod: mem_words showed a stale RAM-patched value even on a freshly rebuilt binary with the correct value baked in). Do not re-add [[patch]] entries here unless the EXE-level fix is reverted first."
+description = "RETIRED and parked (2026-10-10). The 80-slot inventory clamps that were baked into the disc-extracted boot EXE never reached the running game, which keeps the retail 50-slot limits; the boot EXE was restored to retail on 2026-10-10. Raising the clamp could never have worked safely: the inventory is a fixed 50-entry array that ends where Aya's equipment records begin and is part of the memory-card save layout, so extra slots would overwrite equipment data. Any revival needs a separate side store outside the save structures. This package declares no [[feature]] or [[patch]]."
 
 [[target]]
 game_id = "SLUS-00662"
