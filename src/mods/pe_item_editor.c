@@ -24,6 +24,8 @@
  * SAFETY: armor "bag +1/+2/+4" mods change Aya's bag size. Shrinking it would
  * strand items past the new limit (possibly the equipped gun), so a change
  * that lowers the bonus is refused while any of those slots is occupied.
+ * Refusals are silent (the value just does not change); the row's footer
+ * note tells the player the rule.
  */
 #include <stdint.h>
 
@@ -214,10 +216,7 @@ static int pe_bag_bonus(const uint8_t *mods, int n) {
 static int pe_set_mod(int which, int effect) {
     const uint32_t rec = pe_record(which);
     const int n = pe_mod_count(rec);
-    if (!rec || n == 0) {
-        psx_mod_osd_message(rec ? "This item has no mod slots" : "Nothing equipped");
-        return 0;
-    }
+    if (!rec || n == 0) return 0;
     if (s_slot[which] >= n) s_slot[which] = 0;
 
     uint8_t mods[PE_MAX_MODS];
@@ -226,13 +225,11 @@ static int pe_set_mod(int which, int effect) {
     for (int i = 0; i < n; i++) next[i] = mods[i];
 
     const int group = effect ? pe_mod_group(which, effect) : 0;
-    int replaced = 0;
     if (group) {
         /* One mod per group, like the game's own transfer. */
         for (int i = 0; i < n; i++)
             if (i != s_slot[which] && (next[i] & 0x1F) && (next[i] >> 5) == group) {
                 next[i] = 0;
-                replaced = 1;
             }
     }
     next[s_slot[which]] = effect ? (uint8_t)((group << 5) | effect) : 0;
@@ -245,17 +242,14 @@ static int pe_set_mod(int which, int effect) {
             if (new_limit > 50) new_limit = 50;
             if (old_limit > 50) old_limit = 50;
             for (uint32_t s = new_limit; s < old_limit; s++)
-                if (psx_mod_read_half(PE_AYA_SLOTS_ADDR + s * 2u)) {
-                    psx_mod_osd_message("Empty the last bag slots first");
-                    return 0;
-                }
+                if (psx_mod_read_half(PE_AYA_SLOTS_ADDR + s * 2u))
+                    return 0; /* would strand an item */
         }
         if (after != before)
             psx_mod_write_word(PE_BONUS_SLOTS_ADDR, (uint32_t)after); /* g_InvBonusSlotCount */
     }
     for (int i = 0; i < n; i++)
         if (next[i] != mods[i]) psx_mod_write_byte(rec + REC_MODS + (uint32_t)i, next[i]);
-    if (replaced) psx_mod_osd_message("Replaced a mod of the same kind");
     return 1;
 }
 static int ggm(void) { return pe_get_mod(PE_GUN); }
@@ -278,7 +272,7 @@ void pe_item_editor_register(void) {
         "Pick a slot, then set its mod below.", &s_slot[PE_GUN], PE_MAX_MODS,
         gsc, gsn);
     (void)pe_menu_register_live_choice(PE_SUB, "Gun: mod",
-        "Mod in the slot above. Applies now.", s_gun_mods, 21, ggm, sgm);
+        "One per kind; replaces a match.", s_gun_mods, 21, ggm, sgm);
 
     (void)pe_menu_register_dynamic_choice(PE_SUB, "Armor",
         "The equipped armor.", &s_armor_header, 1, pe_one, pe_armor_name);
@@ -292,5 +286,5 @@ void pe_item_editor_register(void) {
         "Pick a slot, then set its mod below.", &s_slot[PE_ARMOR], PE_MAX_MODS,
         asc, asn);
     (void)pe_menu_register_live_choice(PE_SUB, "Armor: mod",
-        "Mod in the slot above. Applies now.", s_armor_mods, 16, agm, sam);
+        "Bag mods cannot shrink a full bag.", s_armor_mods, 16, agm, sam);
 }
