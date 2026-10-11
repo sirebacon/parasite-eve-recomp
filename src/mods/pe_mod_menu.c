@@ -246,6 +246,7 @@ void pe_atb_items_menu_register(void);  /* pe_atb_items.c */
 void pe_stats_menu_register(void);      /* pe_stats_menu.c */
 void pe_item_editor_register(void);     /* pe_item_editor.c */
 void pe_debug_menu_register(void);      /* pe_debug_menu.c */
+void pe_loot_logger_menu_register(void); /* pe_loot_logger.c (Debug page) */
 
 PSX_MOD_CONSTRUCTOR(pe_register_mod_menu_plugin) {
     (void)psx_mod_register_vblank_plugin("pe.mod-menu", pe_mod_menu_vblank);
@@ -266,4 +267,5 @@ PSX_MOD_CONSTRUCTOR(pe_register_mod_menu_plugin) {
     pe_stats_menu_register();
     pe_item_editor_register();
     pe_debug_menu_register();
+    pe_loot_logger_menu_register();
 }
