@@ -40,6 +40,10 @@ known_crc32 = [
 seeds = "seeds/ghidra_funcs.txt"
 out_dir = "generated"
 strict = true
+# Game-function entry hooks for trusted mods (src/mods). Each address gets a
+# psx_mod_function_entry() call at the top of its generated function.
+#   0x8005F27C Draw_PrintRawText - pe_weapon_power.c (gun power in menu titles)
+mod_function_entry_funcs = ["0x8005F27C"]
 
 [runtime]
 window_title = "Parasite Eve Recompiled"
