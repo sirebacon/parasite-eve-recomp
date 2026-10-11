@@ -1,29 +1,41 @@
 /*
- * Half-bar items: Aya can use an item once her turn gauge is half full, and an
- * item costs half a bar. Attacks and Parasite Energy still need a full bar.
+ * Half-bar ATB: chosen battle actions become usable once Aya's turn gauge is
+ * half full, and cost half a bar (also when used from a full bar). Each action
+ * on the battle menu's tabs can be allowed separately; by default only Items.
+ * Attacks always need, and use, a full bar.
  *
- * The game (decomp, Battle_Update.c / Battle_TargetAndEnemyTurnFlow.c):
+ * The game (decomp):
  *   - Aya's turn gauge is Combatant +0x10 (the decomp's "hpAlive"), 0..9000.
- *   - Battle_Update (0x800299CC), in battle phase 0 (D_8009D28C), lets a turn
- *     start only when gauge >= 9000: pressed bit 0x200 starts targeting, bit
- *     0x80 (Triangle) opens the item list (item menu state 0x8009D1F0 = 1).
- *     Both move to phase 1 (Battle_HandleItemMenu).
- *   - FinishAction() empties the gauge when the turn ends and returns to phase 0.
+ *   - Battle_Update (0x800299CC), battle phase 0 (D_8009D28C), starts a turn
+ *     only when gauge >= 9000: pressed bit 0x200 starts targeting, bit 0x80
+ *     (Triangle) opens the battle menu (item menu state 0x8009D1F0 = 1). Both
+ *     move to phase 1 (Battle_HandleItemMenu); FinishAction() empties the gauge
+ *     and returns to phase 0.
+ *   - The battle menu's tabs come from g_MenuItemContextFlag (0x8009CEF0) bits
+ *     0..4: Use Item, Parasite Energy, Change Weapon, Change Armor, Escape
+ *     (Menu_CreateInventoryTabView counts the set bits; story scripts set it).
+ *   - The chosen action is queued (queue 0x800BE830, 8-byte entries, command at
+ *     +4, count D_8009CE3C); Battle_StepScriptEntry: 1..2 shots, 3..0x182
+ *     items, 0x183..0x196 Parasite Energy, 0x197..0x198 equipment change,
+ *     0x199+ escape.
  *
- * The mod ("borrow and refund"), from a build-time hook on Battle_Update entry
- * (game.toml mod_function_entry_funcs), so it runs after the pad routine has
- * computed this frame's pressed bits (D_8009D1F4) and right before the check:
- *   1. Phase 0, item button pressed (attack not), gauge 4500..8999: save the
- *      gauge and Aya's bag, set the gauge to 9000, and pre-set the "gauge full"
- *      chime latch (D_8009D288) so no chime plays. The game opens the item list.
- *   2. Phase 1 on a borrowed bar: if the item list was closed without using an
- *      item (state back to 0, bag unchanged, nothing queued), press cancel for
- *      the player and drop the attack-confirm bit, so the borrowed bar can't be
- *      spent on an attack.
- *   3. Back in phase 0: an item was used (bag changed) -> gauge = saved - 4500;
- *      nothing used -> gauge = saved. An item turn started from a full bar also
- *      leaves 4500 when an item was used.
- *   If the game didn't open the list on the borrow frame, the gauge is put back.
+ * The mod, from a build-time hook on Battle_Update entry (game.toml
+ * mod_function_entry_funcs), which runs after this frame's pressed bits are
+ * known and right before the gauge check:
+ *   1. Borrow. Phase 0, Triangle pressed (attack not), gauge 4500..8999 and at
+ *      least one action allowed: save the gauge, Aya's bag counts and equipped
+ *      slots, clear the tab bits of actions that aren't allowed (saving the
+ *      flag), set the gauge to 9000 and pre-set the "gauge full" chime latch.
+ *      The game opens the menu with only the allowed tabs.
+ *   2. During the turn, note the most significant queued action. On a borrowed
+ *      bar, closing the menu without doing anything presses cancel for the
+ *      player and drops attack, so the borrowed bar can't be spent on shots.
+ *   3. Turn end (back in phase 0): restore the tab flag, then
+ *        borrowed + allowed action    -> gauge = saved - 4500
+ *        borrowed + nothing done      -> gauge = saved
+ *        borrowed + anything else     -> gauge = 0 (no free actions)
+ *        full bar + allowed action    -> gauge = 4500 (half cost)
+ *   The bar is tinted gold while it's between half and full.
  */
 #include "cpu_state.h"
 #include "mod_plugins.h"
@@ -31,15 +43,21 @@
 
 #define PE_BATTLE_UPDATE       0x800299CCu
 #define PE_PLAYER_PTR_ADDR     0x8009D254u
-#define PE_BATTLE_PHASE        0x8009D28Cu /* 0 = free, 1 = turn (targeting/items) */
+#define PE_BATTLE_PHASE        0x8009D28Cu /* 0 = free, 1 = turn (targeting/menu) */
 #define PE_PRESSED_BITS        0x8009D1F4u /* this frame's newly pressed battle bits */
 #define PE_ITEM_MENU_STATE     0x8009D1F0u /* g_BattleItemMenuState */
-#define PE_READY_CHIME_LATCH   0x8009D288u
-#define PE_QUEUE_COUNT         0x8009CE3Cu /* commands queued this turn (u8) */
+#define PE_READY_CHIME_LATCH   0x8009D288u /* u8 */
+#define PE_MENU_TAB_FLAGS      0x8009CEF0u /* g_MenuItemContextFlag */
+#define PE_QUEUE_ADDR          0x800BE830u
+#define PE_QUEUE_STRIDE        8u
+#define PE_QUEUE_COMMAND       4u
+#define PE_QUEUE_COUNT         0x8009CE3Cu /* u8 */
 #define PE_GAME_BLOCK_ADDR     0x8009D1A0u
 #define PE_GAME_BLOCK_BATTLE   0x2u
 #define PE_AYA_SLOTS_ADDR      0x800C0E48u
 #define PE_AYA_SLOT_COUNT      50
+#define PE_WEAPON_SLOT_ADDR    0x800C0E20u
+#define PE_ARMOR_SLOT_ADDR     0x800C0E22u
 
 #define COMBATANT_TURN_GAUGE   0x10u
 #define PE_GAUGE_FULL          9000u
@@ -49,13 +67,24 @@
 #define PRESS_ATTACK  0x0200u
 #define PRESS_CANCEL  0x2000u
 
-static int s_half_bar_items;           /* menu toggle */
+/* Battle-menu actions, in tab-bit order. */
+enum { ACT_ITEM, ACT_PE, ACT_WEAPON, ACT_ARMOR, ACT_ESCAPE, ACT_COUNT,
+       ACT_NONE = -1, ACT_ATTACK = -2, ACT_OTHER = -3 };
 
-static int s_borrowed;                 /* gauge raised to full for an item turn */
-static int s_borrow_pending;           /* borrow made this frame; turn not seen yet */
-static int s_turn_active;              /* phase 1 seen */
-static unsigned s_saved_gauge;         /* real gauge before the turn */
+static int s_enabled;                            /* master switch */
+static int s_allow[ACT_COUNT] = { 1, 0, 0, 0, 0 };
+
+static int s_borrowed, s_borrow_pending, s_turn_active, s_track_full;
+static unsigned s_saved_gauge;
+static int s_action;                             /* most significant action this turn */
+static int s_tab_saved;
+static uint32_t s_saved_tabs;
 static uint16_t s_bag[PE_AYA_SLOT_COUNT];
+static uint8_t s_weapon_slot, s_armor_slot;
+
+static int pe_ram_pointer(uint32_t p) {
+    return p >= 0x80000000u && p < 0x80200000u;
+}
 
 /* ---- half-bar indicator ----------------------------------------------------
  * The ATB bar is a Gouraud quad in two draw buffers at 0x800B00E8 + slot*0x24
@@ -84,8 +113,13 @@ static void pe_bar_colors(int save, const uint8_t (*src)[3]) {
             }
 }
 
-static void pe_update_indicator(unsigned gauge, int battle) {
-    const int want = battle && s_half_bar_items &&
+static int pe_any_allowed(void) {
+    for (int a = 0; a < ACT_COUNT; ++a) if (s_allow[a]) return 1;
+    return 0;
+}
+
+static void pe_update_indicator(unsigned gauge) {
+    const int want = s_enabled && pe_any_allowed() &&
                      gauge >= PE_GAUGE_HALF && gauge < PE_GAUGE_FULL;
     if (want) {
         if (!s_tinted && !s_have_normal) { pe_bar_colors(1, 0); s_have_normal = 1; }
@@ -94,31 +128,80 @@ static void pe_update_indicator(unsigned gauge, int battle) {
     } else if (s_tinted) {
         if (gauge < PE_GAUGE_FULL && s_have_normal) pe_bar_colors(0, 0); /* full: game flashes */
         s_tinted = 0;
-    } else if (battle && gauge < PE_GAUGE_HALF) {
+    } else if (gauge < PE_GAUGE_HALF) {
         pe_bar_colors(1, 0);                     /* remember the game's colours */
         s_have_normal = 1;
     }
 }
 
-static int pe_ram_pointer(uint32_t p) {
-    return p >= 0x80000000u && p < 0x80200000u;
+/* ---- turn bookkeeping ------------------------------------------------------ */
+/* Item counts, ignoring order (Move doesn't count as using an item). */
+static void pe_bag_read(uint16_t *out) {
+    for (int i = 0; i < PE_AYA_SLOT_COUNT; ++i)
+        out[i] = psx_mod_read_half(PE_AYA_SLOTS_ADDR + (uint32_t)i * 2u);
 }
 
-static void pe_snapshot_bag(void) {
-    for (int i = 0; i < PE_AYA_SLOT_COUNT; ++i)
-        s_bag[i] = psx_mod_read_half(PE_AYA_SLOTS_ADDR + (uint32_t)i * 2u);
-}
-
-static int pe_bag_changed(void) {
-    for (int i = 0; i < PE_AYA_SLOT_COUNT; ++i)
-        if (s_bag[i] != psx_mod_read_half(PE_AYA_SLOTS_ADDR + (uint32_t)i * 2u)) return 1;
+static int pe_bag_contents_changed(void) {
+    uint16_t now[PE_AYA_SLOT_COUNT];
+    pe_bag_read(now);
+    for (int i = 0; i < PE_AYA_SLOT_COUNT; ++i) {
+        int before = 0, after = 0;
+        for (int j = 0; j < PE_AYA_SLOT_COUNT; ++j) {
+            before += s_bag[j] == s_bag[i];
+            after += now[j] == s_bag[i];
+        }
+        if (before != after) return 1;
+    }
     return 0;
 }
 
-static void pe_reset(void) {
-    s_borrowed = s_borrow_pending = s_turn_active = 0;
+static void pe_snapshot(void) {
+    pe_bag_read(s_bag);
+    s_weapon_slot = psx_mod_read_byte(PE_WEAPON_SLOT_ADDR);
+    s_armor_slot = psx_mod_read_byte(PE_ARMOR_SLOT_ADDR);
+    s_action = ACT_NONE;
 }
 
+static int pe_classify(unsigned command) {
+    if (command >= 1 && command <= 2) return ACT_ATTACK;
+    if (command >= 3 && command < 0x183) return ACT_ITEM;
+    if (command >= 0x183 && command < 0x197) return ACT_PE;
+    if (command >= 0x197 && command < 0x199)
+        return psx_mod_read_byte(PE_ARMOR_SLOT_ADDR) != s_armor_slot ? ACT_ARMOR : ACT_WEAPON;
+    if (command >= 0x199) return ACT_ESCAPE;
+    return ACT_OTHER;
+}
+
+/* Fold in the queue and the equipment slots. Attacks win over everything. */
+static void pe_note_actions(void) {
+    const unsigned count = psx_mod_read_byte(PE_QUEUE_COUNT);
+    for (unsigned i = 0; i < count && i < 32; ++i) {
+        const int act = pe_classify(psx_mod_read_half(
+            PE_QUEUE_ADDR + i * PE_QUEUE_STRIDE + PE_QUEUE_COMMAND));
+        if (act == ACT_ATTACK || s_action == ACT_NONE) s_action = act;
+    }
+    if (s_action == ACT_NONE) {
+        if (psx_mod_read_byte(PE_WEAPON_SLOT_ADDR) != s_weapon_slot) s_action = ACT_WEAPON;
+        else if (psx_mod_read_byte(PE_ARMOR_SLOT_ADDR) != s_armor_slot) s_action = ACT_ARMOR;
+        else if (pe_bag_contents_changed()) s_action = ACT_ITEM;
+    }
+}
+
+static int pe_action_allowed(int act) {
+    return act >= 0 && act < ACT_COUNT && s_allow[act];
+}
+
+static void pe_restore_tabs(void) {
+    if (s_tab_saved) psx_mod_write_word(PE_MENU_TAB_FLAGS, s_saved_tabs);
+    s_tab_saved = 0;
+}
+
+static void pe_reset(void) {
+    pe_restore_tabs();
+    s_borrowed = s_borrow_pending = s_turn_active = s_track_full = 0;
+}
+
+/* ---- the hook --------------------------------------------------------------- */
 static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
     (void)cpu; (void)address;
     if (!(psx_mod_read_word(PE_GAME_BLOCK_ADDR) & PE_GAME_BLOCK_BATTLE)) {
@@ -132,22 +215,21 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
     if (!pe_ram_pointer(core)) return;
     const uint32_t gauge_addr = core + COMBATANT_TURN_GAUGE;
     const uint32_t phase = psx_mod_read_word(PE_BATTLE_PHASE);
-    pe_update_indicator(s_borrowed ? s_saved_gauge : psx_mod_read_half(gauge_addr), 1);
+    pe_update_indicator(s_borrowed ? s_saved_gauge : psx_mod_read_half(gauge_addr));
 
     if (phase == 1) {
         if (!s_turn_active) {
             s_turn_active = 1;
-            if (!s_borrowed && s_half_bar_items) {   /* a normal full-bar turn */
-                s_saved_gauge = PE_GAUGE_FULL;
-                pe_snapshot_bag();
-            }
+            s_track_full = !s_borrowed && s_enabled;   /* a normal full-bar turn */
+            if (s_track_full) pe_snapshot();
         }
         s_borrow_pending = 0;
-        /* Item list closed without using anything: end the turn instead of
-         * letting the borrowed bar be spent on an attack. */
-        if (s_borrowed && psx_mod_read_byte(PE_ITEM_MENU_STATE) == 0 &&
-            psx_mod_read_byte(PE_QUEUE_COUNT) == 0 && !pe_bag_changed()) {
-            uint32_t pressed = psx_mod_read_word(PE_PRESSED_BITS);
+        if (s_borrowed || s_track_full) pe_note_actions();
+        /* Menu closed without doing anything: end the borrowed turn instead
+         * of letting the borrowed bar be spent on shots. */
+        if (s_borrowed && s_action == ACT_NONE &&
+            psx_mod_read_byte(PE_ITEM_MENU_STATE) == 0) {
+            const uint32_t pressed = psx_mod_read_word(PE_PRESSED_BITS);
             psx_mod_write_word(PE_PRESSED_BITS, (pressed | PRESS_CANCEL) & ~PRESS_ATTACK);
         }
         return;
@@ -155,13 +237,16 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
     if (phase != 0) return;
 
     if (s_turn_active) {                             /* the turn just ended */
-        if (s_half_bar_items && (s_borrowed || s_saved_gauge == PE_GAUGE_FULL)) {
-            unsigned gauge = s_saved_gauge;
-            if (pe_bag_changed()) gauge = gauge > PE_GAUGE_HALF ? gauge - PE_GAUGE_HALF : 0;
-            else if (!s_borrowed) gauge = psx_mod_read_half(gauge_addr); /* normal turn: leave it */
+        if (s_borrowed || s_track_full) pe_note_actions();
+        if (s_borrowed) {
+            unsigned gauge = 0;
+            if (s_action == ACT_NONE) gauge = s_saved_gauge;
+            else if (pe_action_allowed(s_action))
+                gauge = s_saved_gauge > PE_GAUGE_HALF ? s_saved_gauge - PE_GAUGE_HALF : 0;
             psx_mod_write_half(gauge_addr, (uint16_t)gauge);
+        } else if (s_track_full && pe_action_allowed(s_action)) {
+            psx_mod_write_half(gauge_addr, (uint16_t)PE_GAUGE_HALF);
         }
-        s_saved_gauge = 0;
         pe_reset();
         return;
     }
@@ -170,14 +255,20 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
         pe_reset();
         return;
     }
-    if (!s_half_bar_items) return;
+    if (!s_enabled || !pe_any_allowed()) return;
 
     const unsigned gauge = psx_mod_read_half(gauge_addr);
     const uint32_t pressed = psx_mod_read_word(PE_PRESSED_BITS);
     if ((pressed & PRESS_ITEM) && !(pressed & PRESS_ATTACK) &&
         gauge >= PE_GAUGE_HALF && gauge < PE_GAUGE_FULL) {
         s_saved_gauge = gauge;
-        pe_snapshot_bag();
+        pe_snapshot();
+        s_saved_tabs = psx_mod_read_word(PE_MENU_TAB_FLAGS);
+        s_tab_saved = 1;
+        uint32_t tabs = s_saved_tabs;
+        for (int a = 0; a < ACT_COUNT; ++a)
+            if (!s_allow[a]) tabs &= ~(1u << a);
+        psx_mod_write_word(PE_MENU_TAB_FLAGS, tabs);
         psx_mod_write_half(gauge_addr, (uint16_t)PE_GAUGE_FULL);
         psx_mod_write_byte(PE_READY_CHIME_LATCH, 1);   /* u8 in the decomp */
         s_borrowed = s_borrow_pending = 1;
@@ -185,12 +276,23 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
 }
 
 /* Called from pe_mod_menu.c, which fixes the order of the PE page. */
+#define PE_HALF_BAR_PAGE "Half-bar ATB"
 void pe_atb_items_menu_register(void) {
-    (void)pe_menu_register_toggle(0, "Half-bar items",
-        "Gold bar: items usable, cost half.", &s_half_bar_items, 0);
+    (void)pe_menu_register_toggle(PE_HALF_BAR_PAGE, "Enabled",
+        "Gold bar: chosen actions at half cost.", &s_enabled, 0);
+    (void)pe_menu_register_toggle(PE_HALF_BAR_PAGE, "Items",
+        "Use items from a half bar.", &s_allow[ACT_ITEM], 0);
+    (void)pe_menu_register_toggle(PE_HALF_BAR_PAGE, "Parasite Energy",
+        "Use PE from a half bar.", &s_allow[ACT_PE], 0);
+    (void)pe_menu_register_toggle(PE_HALF_BAR_PAGE, "Change weapon",
+        "Swap weapons from a half bar.", &s_allow[ACT_WEAPON], 0);
+    (void)pe_menu_register_toggle(PE_HALF_BAR_PAGE, "Change armor",
+        "Swap armor from a half bar.", &s_allow[ACT_ARMOR], 0);
+    (void)pe_menu_register_toggle(PE_HALF_BAR_PAGE, "Escape",
+        "Try to escape from a half bar.", &s_allow[ACT_ESCAPE], 0);
 }
 
 PSX_MOD_CONSTRUCTOR(pe_register_atb_items_hook) {
-    (void)psx_mod_register_function_entry_plugin("pe.half-bar-items",
+    (void)psx_mod_register_function_entry_plugin("pe.half-bar-atb",
         PE_BATTLE_UPDATE, pe_on_battle_update);
 }
