@@ -207,11 +207,11 @@ void pe_stats_menu_register(void) {
         s_stats[k].value = s_stats[k].shadow = 1;
         s_stats[k].raw = -1;
     }
-    (void)pe_menu_register_int("Stats: level",
+    (void)pe_menu_register_int(0, "Stats: level",
         "Up = real level-up. Applies on close.",
         &s_level, 1, PE_MAX_LEVEL, 1);
     for (int k = 0; k < PE_EDITABLE_STATS; k++)
-        (void)pe_menu_register_int(labels[k], descriptions[k],
+        (void)pe_menu_register_int(0, labels[k], descriptions[k],
                                    &s_stats[k].value, 1, PE_MAX_LEVEL, 1);
     (void)pe_menu_register_tick(pe_stats_tick);
 }

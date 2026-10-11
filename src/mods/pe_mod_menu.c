@@ -13,6 +13,7 @@
  */
 #include <stdint.h>
 #include <stddef.h>
+#include <stdio.h>
 
 #include "mod_plugins.h"
 #include "pe_mod_menu.h"
@@ -23,10 +24,20 @@
 static PeMenuPerFrame s_ticks[PE_MENU_MAX_TICKS];
 static int            s_tick_count;
 
-int pe_menu_register_toggle(const char *label, const char *description,
-                            int *flag, PeMenuPerFrame per_frame) {
+/* "PE Enhancements" or "PE Enhancements/<sub>". The runtime copies the
+ * string, so one buffer serves every call. */
+static const char *pe_page(const char *sub) {
+    static char page[96];
+    if (!sub || !*sub) return PE_MENU_PAGE;
+    snprintf(page, sizeof(page), "%s/%s", PE_MENU_PAGE, sub);
+    return page;
+}
+
+int pe_menu_register_toggle(const char *sub, const char *label,
+                            const char *description, int *flag,
+                            PeMenuPerFrame per_frame) {
     if (per_frame && s_tick_count >= PE_MENU_MAX_TICKS) return -1;
-    if (!psx_mod_menu_add_bool(label, description, flag)) return -1;
+    if (!psx_mod_menu_add_bool(pe_page(sub), label, description, flag)) return -1;
     if (per_frame) s_ticks[s_tick_count++] = per_frame;
     return 0;
 }
@@ -37,29 +48,33 @@ int pe_menu_register_tick(PeMenuPerFrame fn) {
     return 0;
 }
 
-int pe_menu_register_int(const char *label, const char *description,
-                         int *value, int minimum, int maximum, int step) {
-    return psx_mod_menu_add_int(label, description, value, minimum, maximum,
-                                step) ? 0 : -1;
+int pe_menu_register_int(const char *sub, const char *label,
+                         const char *description, int *value,
+                         int minimum, int maximum, int step) {
+    return psx_mod_menu_add_int(pe_page(sub), label, description, value,
+                                minimum, maximum, step) ? 0 : -1;
 }
 
-int pe_menu_register_action(const char *label, const char *description,
-                            PeMenuAction action) {
-    return psx_mod_menu_add_action(label, description, action) ? 0 : -1;
-}
-
-int pe_menu_register_choice(const char *label, const char *description,
-                            int *index, const char *const *names,
-                            unsigned count) {
-    return psx_mod_menu_add_choice(label, description, index, names, count)
+int pe_menu_register_action(const char *sub, const char *label,
+                            const char *description, PeMenuAction action) {
+    return psx_mod_menu_add_action(pe_page(sub), label, description, action)
         ? 0 : -1;
 }
 
-int pe_menu_register_dynamic_choice(const char *label, const char *description,
-                                    int *index, unsigned max_count,
+int pe_menu_register_choice(const char *sub, const char *label,
+                            const char *description, int *index,
+                            const char *const *names, unsigned count) {
+    return psx_mod_menu_add_choice(pe_page(sub), label, description, index,
+                                   names, count) ? 0 : -1;
+}
+
+int pe_menu_register_dynamic_choice(const char *sub, const char *label,
+                                    const char *description, int *index,
+                                    unsigned max_count,
                                     PeMenuChoiceCount count_fn,
                                     PeMenuChoiceName name_fn) {
-    return psx_mod_menu_add_dynamic_choice(label, description, index, max_count,
+    return psx_mod_menu_add_dynamic_choice(pe_page(sub), label, description,
+                                           index, max_count,
                                            (PSXModMenuChoiceCount)count_fn,
                                            (PSXModMenuChoiceName)name_fn)
         ? 0 : -1;
@@ -91,7 +106,7 @@ static void pe_move_tick(void) {
 
 PSX_MOD_CONSTRUCTOR(pe_register_mod_menu_plugin) {
     (void)psx_mod_register_vblank_plugin("pe.mod-menu", pe_mod_menu_vblank);
-    (void)pe_menu_register_toggle("Faster movement (20x)",
+    (void)pe_menu_register_toggle(0, "Faster movement (20x)",
         "Field speed 20x instead of stock 5x.",
         &s_move_fast, pe_move_tick);
 }
