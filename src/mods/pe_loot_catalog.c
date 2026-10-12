@@ -524,6 +524,34 @@ static const char *pe_rb_list_name(unsigned i) {
     return i < s_cat.rebuild_count ? s_rb_names[i] : "";
 }
 
+/* Put a new copy of base item `id` in a free bag slot: + bonuses, mod slot
+ * count and mod bytes as given. Returns 1, or 0 with a toast. */
+static int pe_create_item(uint8_t id, uint8_t slots, const int16_t bonus[3],
+                          const uint8_t *mods, int nmods) {
+    int slot = -1;
+    const uint32_t limit = pe_bag_limit();
+    for (uint32_t i = 0; i < limit && slot < 0; ++i)
+        if (psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == 0) slot = (int)i;
+    if (slot < 0) { pe_toast("Bag full"); return 0; }
+    uint32_t rec_index = PE_EQUIP_RECORD_COUNT;
+    for (uint32_t i = 0; i < PE_EQUIP_RECORD_COUNT; ++i)
+        if (!psx_mod_read_byte(PE_EQUIP_RECORDS_ADDR + i * REC_SIZE + REC_ICON)) { rec_index = i; break; }
+    if (rec_index >= PE_EQUIP_RECORD_COUNT) { pe_toast("No free equipment record"); return 0; }
+    const uint32_t base = psx_mod_read_word(PE_ITEM_TABLE_BASE_ADDR);
+    const uint32_t end = psx_mod_read_word(PE_ITEM_TABLE_END_ADDR);
+    const uint32_t index = (uint32_t)id - 1u;
+    if (end <= base || index >= ((end - base) >> 5)) { pe_toast("Unknown item"); return 0; }
+    const uint32_t src = PE_ITEM_TABLE_ORIGIN + base + index * REC_SIZE;
+    const uint32_t dst = PE_EQUIP_RECORDS_ADDR + rec_index * REC_SIZE;
+    for (uint32_t o = 0; o < REC_SIZE; o += 4) psx_mod_write_word(dst + o, psx_mod_read_word(src + o));
+    for (uint32_t i = 0; i < 3; ++i) psx_mod_write_half(dst + REC_BONUS + i * 2u, (uint16_t)bonus[i]);
+    psx_mod_write_byte(dst + REC_MOD_COUNT, slots);
+    for (uint32_t m = 0; m < PE_MAX_MODS; ++m)
+        psx_mod_write_byte(dst + REC_MODS + m, (int)m < nmods ? mods[m] : 0);
+    psx_mod_write_half(PE_AYA_SLOTS_ADDR + (uint32_t)slot * 2u, (uint16_t)(rec_index + 256u));
+    return 1;
+}
+
 static void pe_rebuild(void) {
     char msg[80];
     if (!pe_ready()) return;
@@ -536,26 +564,7 @@ static void pe_rebuild(void) {
         snprintf(msg, sizeof msg, "Need %u Junk (have %u)", (unsigned)price, (unsigned)pe_loot_junk());
         pe_toast(msg); return;
     }
-    int slot = -1;
-    const uint32_t limit = pe_bag_limit();
-    for (uint32_t i = 0; i < limit && slot < 0; ++i)
-        if (psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == 0) slot = (int)i;
-    if (slot < 0) { pe_toast("Bag full"); return; }
-    uint32_t rec_index = PE_EQUIP_RECORD_COUNT;
-    for (uint32_t i = 0; i < PE_EQUIP_RECORD_COUNT; ++i)
-        if (!psx_mod_read_byte(PE_EQUIP_RECORDS_ADDR + i * REC_SIZE + REC_ICON)) { rec_index = i; break; }
-    if (rec_index >= PE_EQUIP_RECORD_COUNT) { pe_toast("No free equipment record"); return; }
-    const uint32_t base = psx_mod_read_word(PE_ITEM_TABLE_BASE_ADDR);
-    const uint32_t end = psx_mod_read_word(PE_ITEM_TABLE_END_ADDR);
-    const uint32_t index = (uint32_t)r.id - 1u;
-    if (end <= base || index >= ((end - base) >> 5)) { pe_toast("Unknown item"); return; }
-    const uint32_t src = PE_ITEM_TABLE_ORIGIN + base + index * REC_SIZE;
-    const uint32_t dst = PE_EQUIP_RECORDS_ADDR + rec_index * REC_SIZE;
-    for (uint32_t o = 0; o < REC_SIZE; o += 4) psx_mod_write_word(dst + o, psx_mod_read_word(src + o));
-    for (uint32_t i = 0; i < 3; ++i) psx_mod_write_half(dst + REC_BONUS + i * 2u, (uint16_t)r.bonus[i]);
-    psx_mod_write_byte(dst + REC_MOD_COUNT, r.slots);
-    for (uint32_t m = 0; m < PE_MAX_MODS; ++m) psx_mod_write_byte(dst + REC_MODS + m, 0);
-    psx_mod_write_half(PE_AYA_SLOTS_ADDR + (uint32_t)slot * 2u, (uint16_t)(rec_index + 256u));
+    if (!pe_create_item(r.id, r.slots, r.bonus, 0, 0)) return;
 
     pe_loot_spend_junk(price);
     memmove(&s_cat.rebuild[s_rb_choice], &s_cat.rebuild[s_rb_choice + 1],
@@ -597,6 +606,31 @@ static int pe_get_install_cost(void) {
 static int pe_get_rebuild_cost(void) {
     if (!s_cat.rebuild_count || s_rb_choice < 0 || s_rb_choice >= s_cat.rebuild_count) return 0;
     return (int)pe_rebuild_price(&s_cat.rebuild[s_rb_choice]);
+}
+
+/* ---- debug (Debug > Loot tuning) -------------------------------------------------- */
+static void pe_debug_unlock_all(void) {
+    s_cat.bits[PE_GUN] = ((1u << (PE_GUN_EFFECTS + 1)) - 1u) & ~1u;
+    s_cat.bits[PE_ARMOR] = ((1u << (PE_ARMOR_EFFECTS + 1)) - 1u) & ~1u;
+    pe_toast("Mod Catalog: all effects unlocked");
+}
+static void pe_debug_clear_catalog(void) {
+    memset(&s_cat, 0, sizeof s_cat);
+    pe_toast("Mod Catalog and Rebuild list cleared");
+}
+/* Fixed test gear, one mod per rule: a group mod, an ungrouped one, a
+ * premium one, another group; the armor carries the protected bag mod. */
+static void pe_debug_test_gun(void) {
+    static const uint8_t mods[4] = { 0x22u, 0x09u, 0x74u, 0x91u };  /* ROF 3, Heat, 3 Commands, Steal on attack */
+    static const int16_t bonus[3] = { 5, 0, 0 };
+    if (!pe_loaded()) { pe_toast("Load a game first"); return; }
+    if (pe_create_item(0x45u, 6u, bonus, mods, 4)) pe_toast("Test gun added: M9 +5 with 4 mods");
+}
+static void pe_debug_test_armor(void) {
+    static const uint8_t mods[4] = { 0x01u, 0x06u, 0xA8u, 0x0Bu };  /* Resist Poison, Auto Medicine, Bag +1, Max HP Up */
+    static const int16_t bonus[3] = { 0, 0, 0 };
+    if (!pe_loaded()) { pe_toast("Load a game first"); return; }
+    if (pe_create_item(0x97u, 4u, bonus, mods, 4)) pe_toast("Test armor added: N Protector with 4 mods");
 }
 
 /* ---- persistence ------------------------------------------------------------------ */
@@ -701,6 +735,14 @@ void pe_loot_catalog_menu_register(void) {
         "Junk for a premium effect (+Tool).", &s_price[2], 0, 500, 5);
     (void)pe_menu_register_int(PE_TUNING_PAGE, "Rebuild markup %",
         "Rebuild price vs dismantle payout.", &s_rebuild_markup, 100, 300, 10);
+    (void)pe_menu_register_action(PE_TUNING_PAGE, "Unlock all effects",
+        "Debug: fill the Mod Catalog.", pe_debug_unlock_all);
+    (void)pe_menu_register_action(PE_TUNING_PAGE, "Clear catalog",
+        "Debug: empty Catalog and Rebuild list.", pe_debug_clear_catalog);
+    (void)pe_menu_register_action(PE_TUNING_PAGE, "Give test gun",
+        "Debug: M9 +5, ROF3 Heat 3Cmd Steal.", pe_debug_test_gun);
+    (void)pe_menu_register_action(PE_TUNING_PAGE, "Give test armor",
+        "Debug: N Protector, 4 armor mods.", pe_debug_test_armor);
 
     (void)psx_mod_register_function_entry_plugin("pe.loot-catalog.save",
         PE_FN_SAVE_SERIALIZE, pe_on_save_serialize);
