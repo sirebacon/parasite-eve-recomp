@@ -161,6 +161,8 @@ static uint16_t s_rare_shown[2];   /* rare drops to draw in gold this battle */
 static int s_rare_list_seen;       /* the items-found list has been shown */
 static int s_color_saved;
 static uint32_t s_saved_color, s_saved_color_shaded;
+static uint16_t s_wayne_prev;      /* Wayne's count during a hand-in */
+static int s_wayne_dropped;        /* ... it went down: he made a gun */
 static uint16_t s_steal_item;      /* Aya just stole this; highlight its name */
 static uint32_t s_steal_frame;
 
@@ -492,6 +494,8 @@ static void pe_on_task_count_items(struct CPUState *cpu, uint32_t address) {
     s_last_count_frame = s_frames;
     if (!new_handin) return;                 /* one hand-in per visit to the menu */
     s_handin_left = 0;
+    s_wayne_prev = psx_mod_read_half(PE_WAYNE_COUNTER);
+    s_wayne_dropped = 0;
 
     if (psx_mod_read_word(PE_ACTIVE_LIST_PTR) != PE_AYA_SLOTS_ADDR) return;
     const uint32_t limit = psx_mod_read_word(PE_ACTIVE_LIST_LIMIT);
@@ -716,9 +720,27 @@ static void pe_loot_tick(void) {
      * free movement ends one early (the menu was left). */
     s_free_frames = pe_free_field() ? s_free_frames + 1u : 0u;
     if (s_handin_left && s_free_frames > 60u) s_handin_left = 0;
+    static int s_wayne_check;                /* judge the hand-in once he is done talking */
+    if (s_handin_active || s_wayne_check) {  /* a craft takes 300 off his count */
+        const uint16_t w = psx_mod_read_half(PE_WAYNE_COUNTER);
+        if (w < s_wayne_prev) s_wayne_dropped = 1;
+        s_wayne_prev = w;
+    }
     if (s_handin_active && !s_handin_left &&
-        s_frames - s_last_count_frame > PE_HANDIN_GUARD_FRAMES)
+        s_frames - s_last_count_frame > PE_HANDIN_GUARD_FRAMES) {
         s_handin_active = 0;
+        s_wayne_check = 1;
+    }
+    if (s_wayne_check && !s_handin_active && s_free_frames > 60u) {
+        s_wayne_check = 0;
+        /* At 300+ with no gun made: before Day 4 his menu only stores Junk. */
+        if (!s_wayne_dropped && s_wayne_prev >= PE_WAYNE_CRAFT_COST) {
+            char msg[112];
+            snprintf(msg, sizeof msg, "Wayne has %u Junk but can't build yet. Come back from "
+                     "Day 4: your next hand-in makes the gun", (unsigned)s_wayne_prev);
+            psx_mod_osd_message(msg);
+        }
+    }
     if (!s_handin_active && pe_free_field()) pe_sweep();
 }
 
