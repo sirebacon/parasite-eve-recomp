@@ -6,8 +6,8 @@
  * The game's item menu has a fixed action table, so instead of new rows the
  * existing Discard does the overhaul's work when it makes sense:
  *
- *   - Discard on a gun or armor dismantles it: the confirm dialog reads
- *     "<name> will be dismantled for N Junk", and "yes" unlocks its effects in
+ *   - Discard on a gun or armor dismantles it (the row reads "Dismantle"): the
+ *     confirm dialog reads "<name>: N Junk, rebuildable", and "yes" unlocks its effects in
  *     the Mod Catalog, puts it on the Rebuild list and pays the Junk
  *     (pe_catalog_dismantle_reward); the game's own code then removes it.
  *   - Combine (C10): a real fourth action row, "Combine", on Medicine 1-3
@@ -108,7 +108,11 @@ static uint8_t pe_glyph(char c) {
     if (c >= 'A' && c <= 'Z') return (uint8_t)(0x10 + (c - 'A'));
     if (c >= 'a' && c <= 'z') return (uint8_t)(0x30 + (c - 'a'));
     if (c >= '0' && c <= '9') return (uint8_t)(c - '0');
-    return 0x0F;
+    switch (c) {                              /* from the game's own dialogue */
+    case '.': return 0x2F; case ',': return 0x4B; case ':': return 0x4A;
+    case '!': return 0x2B; case '\'': return 0x2E;
+    default: return 0x0F;
+    }
 }
 
 /* What the selected item is: 1 = gun/armor (rec set), 0 = anything else. */
@@ -155,7 +159,7 @@ static void pe_on_append_text(struct CPUState *cpu, uint32_t address) {
     uint8_t out[48];
     unsigned n = 0;
     char buf[40];
-    snprintf(buf, sizeof buf, " will be dismantled for %u Junk",
+    snprintf(buf, sizeof buf, ": %u Junk, rebuildable",
              (unsigned)pe_catalog_dismantle_preview(sel.rec));
     n = pe_put_ascii(out, n, sizeof out - 1, buf);
     out[n++] = 0xFFu;
