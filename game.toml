@@ -51,8 +51,10 @@ strict = true
 #   0x8003F800 Save_SerializeTail   - memory-card save (mod data in the save tail)
 #   0x8003FBD8 Save_DeserializeTail - memory-card load
 #   0x800194F8 Task_CountItemsByValue - script item counts (Wayne counts Junk)
+#   0x8005A318 Inv_TransferItemBetweenLists - Tool use (plain-Tool donor salvage)
 mod_function_entry_funcs = ["0x8005F27C", "0x800299CC", "0x8004B70C", "0x8005D2B4",
-                            "0x80053D2C", "0x8003F800", "0x8003FBD8", "0x800194F8"]
+                            "0x80053D2C", "0x8003F800", "0x8003FBD8", "0x800194F8",
+                            "0x8005A318"]
 
 [runtime]
 window_title = "Parasite Eve Recompiled"

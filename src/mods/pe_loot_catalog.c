@@ -40,6 +40,11 @@
 #define PE_FN_INV_DISPATCH      0x8005D2B4u
 #define PE_FN_SAVE_SERIALIZE    0x8003F800u
 #define PE_FN_SAVE_DESERIALIZE  0x8003FBD8u
+#define PE_FN_TOOL_TRANSFER     0x8005A318u   /* Inv_TransferItemBetweenLists */
+#define PE_SEL_INDEX_ADDR       0x8009D090u   /* g_InvSavedSelectionIndex[2] */
+#define PE_SEL_STORAGE_ADDR     0x8009D098u   /* g_InvSavedSelectionFromStorage[2] */
+#define PE_LIST_OVERRIDE_ADDR   0x8009D04Cu   /* g_InvActiveListOverride */
+#define PE_OVERRIDE_LIMIT_ADDR  0x8009D054u   /* g_InvOverrideSlotLimit */
 #define PE_INV_CMD_START_NEW_GAME 1117
 
 #define PE_MAX_HP_ADDR          0x800C0E06u
@@ -272,13 +277,14 @@ static int pe_is_last_club(int slot) {
     return 1;
 }
 
-/* Junk a dismantle pays and how many effects it newly unlocks. */
-static uint32_t pe_dismantle_preview(uint32_t rec, int which, int *unlocks_out) {
-    uint32_t payout = 5u + 2u * (uint32_t)pe_bonus_sum(rec);
+/* Junk for salvaging gear with these + bonuses and mod bytes, and how many
+ * effects it newly unlocks. */
+static uint32_t pe_salvage_payout(int which, int bonus_sum, const uint8_t *mods, int n,
+                                  int *unlocks_out) {
+    uint32_t payout = 5u + 2u * (uint32_t)bonus_sum;
     int unlocks = 0, dupes = 0;
-    const int n = pe_mod_count(rec);
     for (int m = 0; m < n; ++m) {
-        const int e = psx_mod_read_byte(rec + REC_MODS + (uint32_t)m) & 0x1F;
+        const int e = mods[m] & 0x1F;
         if (!e) continue;
         payout += 3u;
         if (pe_unlocked(which, e)) ++dupes; else ++unlocks;
@@ -287,6 +293,35 @@ static uint32_t pe_dismantle_preview(uint32_t rec, int which, int *unlocks_out) 
     if (payout > PE_PAYOUT_CAP) payout = PE_PAYOUT_CAP;
     if (unlocks_out) *unlocks_out = unlocks;
     return payout;
+}
+
+static int pe_read_mods(uint32_t rec, uint8_t *mods) {
+    const int n = pe_mod_count(rec);
+    for (int m = 0; m < n; ++m) mods[m] = (uint8_t)psx_mod_read_byte(rec + REC_MODS + (uint32_t)m);
+    return n;
+}
+
+/* Junk a dismantle pays and how many effects it newly unlocks. */
+static uint32_t pe_dismantle_preview(uint32_t rec, int which, int *unlocks_out) {
+    uint8_t mods[PE_MAX_MODS];
+    const int n = pe_read_mods(rec, mods);
+    return pe_salvage_payout(which, pe_bonus_sum(rec), mods, n, unlocks_out);
+}
+
+/* Unlock the effects in `mods` and put the item on the Rebuild list (newest first). */
+static void pe_record_salvage(int which, uint8_t id, uint8_t slots, const int16_t bonus[3],
+                              const uint8_t *mods, int n, uint32_t payout) {
+    for (int m = 0; m < n; ++m) {
+        const int e = mods[m] & 0x1F;
+        if (e) s_cat.bits[which] |= 1u << e;
+    }
+    if (s_cat.rebuild_count == PE_REBUILD_MAX) --s_cat.rebuild_count;   /* drop oldest */
+    memmove(&s_cat.rebuild[1], &s_cat.rebuild[0], sizeof(PeRebuildEntry) * s_cat.rebuild_count);
+    s_cat.rebuild[0].id = id;
+    s_cat.rebuild[0].slots = slots;
+    for (uint32_t i = 0; i < 3; ++i) s_cat.rebuild[0].bonus[i] = bonus[i];
+    s_cat.rebuild[0].payout = (uint16_t)payout;
+    ++s_cat.rebuild_count;
 }
 
 static void pe_dismantle(void) {
@@ -303,8 +338,9 @@ static void pe_dismantle(void) {
     if (pe_is_last_club(slot)) { pe_toast("Keep your last Club"); s_dis_armed = -1; return; }
 
     int unlocks = 0;
-    const uint32_t payout = pe_dismantle_preview(rec, which, &unlocks);
-    const int n = pe_mod_count(rec);
+    uint8_t mods[PE_MAX_MODS];
+    const int n = pe_read_mods(rec, mods);
+    const uint32_t payout = pe_salvage_payout(which, pe_bonus_sum(rec), mods, n, &unlocks);
 
     const char *name = pe_item_name(psx_mod_read_byte(rec + REC_ITEM_ID));
     if (s_dis_armed != slot) {                /* first press: show what happens */
@@ -316,18 +352,10 @@ static void pe_dismantle(void) {
     }
     s_dis_armed = -1;
 
-    for (int m = 0; m < n; ++m) {             /* unlock its effects */
-        const int e = psx_mod_read_byte(rec + REC_MODS + (uint32_t)m) & 0x1F;
-        if (e) s_cat.bits[which] |= 1u << e;
-    }
-    if (s_cat.rebuild_count == PE_REBUILD_MAX) --s_cat.rebuild_count;   /* drop oldest */
-    memmove(&s_cat.rebuild[1], &s_cat.rebuild[0], sizeof(PeRebuildEntry) * s_cat.rebuild_count);
-    s_cat.rebuild[0].id = psx_mod_read_byte(rec + REC_ITEM_ID);
-    s_cat.rebuild[0].slots = (uint8_t)psx_mod_read_byte(rec + REC_MOD_COUNT);
-    for (uint32_t i = 0; i < 3; ++i)
-        s_cat.rebuild[0].bonus[i] = (int16_t)psx_mod_read_half(rec + REC_BONUS + i * 2u);
-    s_cat.rebuild[0].payout = (uint16_t)payout;
-    ++s_cat.rebuild_count;
+    int16_t bonus[3];
+    for (uint32_t i = 0; i < 3; ++i) bonus[i] = (int16_t)psx_mod_read_half(rec + REC_BONUS + i * 2u);
+    pe_record_salvage(which, (uint8_t)psx_mod_read_byte(rec + REC_ITEM_ID),
+                      (uint8_t)psx_mod_read_byte(rec + REC_MOD_COUNT), bonus, mods, n, payout);
 
     for (uint32_t o = 0; o < REC_SIZE; o += 4) psx_mod_write_word(rec + o, 0);   /* free record */
     psx_mod_write_half(PE_AYA_SLOTS_ADDR + (uint32_t)slot * 2u, 0);
@@ -633,6 +661,74 @@ static void pe_debug_test_armor(void) {
     if (pe_create_item(0x97u, 4u, bonus, mods, 4)) pe_toast("Test armor added: N Protector with 4 mods");
 }
 
+/* ---- Tool salvage (decision 42) ------------------------------------------------------
+ * A plain Tool deletes the donor item, and whatever was left on it was lost.
+ * Treat that donor as dismantled: what stays behind unlocks in the Catalog,
+ * pays dismantle Junk and goes on the Rebuild list. A Super Tool keeps the
+ * donor, so nothing happens. Runs at the entry of
+ * Inv_TransferItemBetweenLists(selection, modifier, flags, cost): the donor is
+ * saved selection `selection`, the target is the other one; modifier >= 0
+ * moves that one mod, < 0 moves the + bonuses; flags bit 0 = Super Tool. */
+static uint32_t pe_selection_record(uint32_t sel) {
+    if (sel >= 2u) return 0;
+    const int index = (int32_t)psx_mod_read_word(PE_SEL_INDEX_ADDR + sel * 4u);
+    uint32_t list = PE_AYA_SLOTS_ADDR, limit = pe_bag_limit();
+    const uint32_t override = psx_mod_read_word(PE_LIST_OVERRIDE_ADDR);
+    if (psx_mod_read_word(PE_SEL_STORAGE_ADDR + sel * 4u) && override) {
+        list = override;
+        limit = psx_mod_read_word(PE_OVERRIDE_LIMIT_ADDR);
+    }
+    if (index < 0 || (uint32_t)index >= limit) return 0;
+    return pe_record_of_value(psx_mod_read_half(list + (uint32_t)index * 2u));
+}
+
+/* Would the game's transfer of `value` find room on `dest`? (same group
+ * overwrites, else the first empty slot) */
+static int pe_tool_move_fits(uint32_t dest, int value) {
+    const int n = psx_mod_read_byte(dest + REC_MOD_COUNT);
+    if (value & 0xE0)
+        for (int i = 0; i < n; ++i)
+            if ((psx_mod_read_byte(dest + REC_MODS + (uint32_t)i) & 0xE0) == (value & 0xE0)) return 1;
+    for (int i = 0; i < n; ++i)
+        if (!(psx_mod_read_byte(dest + REC_MODS + (uint32_t)i) & 0x1F)) return 1;
+    return 0;
+}
+
+static void pe_on_tool_transfer(struct CPUState *cpu, uint32_t address) {
+    (void)address;
+    const uint32_t sel = cpu->gpr[4];
+    const int modifier = (int32_t)cpu->gpr[5];
+    if (cpu->gpr[6] & 1u) return;             /* Super Tool: donor survives */
+    if (!pe_loot_enabled() || !pe_loaded()) return;
+    const uint32_t src = pe_selection_record(sel);
+    const uint32_t dest = pe_selection_record(sel ^ 1u);
+    const int which = src ? pe_record_type(src) : -1;
+    if (which < 0 || !dest) return;
+
+    uint8_t mods[PE_MAX_MODS];
+    const int n = pe_read_mods(src, mods);
+    int16_t bonus[3];
+    for (uint32_t i = 0; i < 3; ++i) bonus[i] = (int16_t)psx_mod_read_half(src + REC_BONUS + i * 2u);
+    if (modifier >= 0) {                      /* that mod leaves if it fits */
+        if (modifier < n && pe_tool_move_fits(dest, mods[modifier])) mods[modifier] = 0;
+    } else {                                  /* the + bonuses leave */
+        bonus[0] = bonus[1] = bonus[2] = 0;
+    }
+    int bonus_sum = 0;
+    for (int i = 0; i < 3; ++i) if (bonus[i] > 0) bonus_sum += bonus[i];
+
+    int unlocks = 0;
+    const uint32_t payout = pe_salvage_payout(which, bonus_sum, mods, n, &unlocks);
+    const uint8_t id = (uint8_t)psx_mod_read_byte(src + REC_ITEM_ID);
+    pe_record_salvage(which, id, (uint8_t)psx_mod_read_byte(src + REC_MOD_COUNT),
+                      bonus, mods, n, payout);
+    pe_loot_give_junk(payout);
+    char msg[96];
+    snprintf(msg, sizeof msg, "Salvaged %s: +%u Junk, %d new effect(s)",
+             pe_item_name(id), (unsigned)payout, unlocks);
+    pe_toast(msg);
+}
+
 /* ---- persistence ------------------------------------------------------------------ */
 static uint32_t pe_checksum(const uint8_t *p, uint32_t n) {
     uint32_t s = 0x5A17C0DEu;
@@ -750,6 +846,8 @@ void pe_loot_catalog_menu_register(void) {
         PE_FN_SAVE_DESERIALIZE, pe_on_save_deserialize);
     (void)psx_mod_register_function_entry_plugin("pe.loot-catalog.inv-command",
         PE_FN_INV_DISPATCH, pe_on_inv_dispatch);
+    (void)psx_mod_register_function_entry_plugin("pe.loot-catalog.tool",
+        PE_FN_TOOL_TRANSFER, pe_on_tool_transfer);
     (void)psx_mod_register_state("pe.loot.catalog", PE_CATALOG_STATE_VERSION,
         &s_cat, sizeof s_cat, pe_catalog_state_loaded);
 }
