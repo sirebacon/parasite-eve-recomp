@@ -102,7 +102,8 @@ static PeSelected pe_selected(void) {
         }
         return s;
     }
-    if (!list && s_discard_combines && v >= PE_ITEM_MEDICINE_1 && v <= PE_ITEM_MEDICINE_3) {
+    if (!list && s_discard_combines && pe_loot_enabled() &&
+        v >= PE_ITEM_MEDICINE_1 && v <= PE_ITEM_MEDICINE_3) {
         const uint32_t limit = pe_bag_limit();
         for (uint32_t i = 0; i < limit; ++i)
             if ((int)i != slot && psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == v) {

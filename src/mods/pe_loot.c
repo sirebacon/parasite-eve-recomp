@@ -128,7 +128,7 @@ static struct {
     /* v3 */
     uint16_t charm_left;          /* won battles of Lucky Charm left */
     uint8_t preset;               /* 0 Relaxed, 1 Normal, 2 Grind (39) */
-    uint8_t pad;
+    uint8_t disabled;             /* "Junk economy" switched off for this game */
 } s_st = { .preset = 1 };
 #define PE_LOOT_STATE_V2_SIZE 28u
 
@@ -526,10 +526,11 @@ static void pe_on_task_count_items(struct CPUState *cpu, uint32_t address) {
 static void pe_on_inv_dispatch(struct CPUState *cpu, uint32_t address) {
     (void)address;
     const int command = (int)cpu->gpr[4];
-    if (command == PE_INV_CMD_START_NEW_GAME) {   /* the chosen difficulty stays */
+    if (command == PE_INV_CMD_START_NEW_GAME) {   /* difficulty and the switch stay */
         const uint8_t preset = s_st.preset < 3 ? s_st.preset : 1;
         memset(&s_st, 0, sizeof s_st);
         s_st.preset = preset;
+        s_st.disabled = (uint8_t)!s_enabled;
         return;
     }
     if (command != PE_INV_CMD_REMOVE_ITEM || cpu->gpr[5] != PE_ITEM_JUNK) return;
@@ -553,7 +554,8 @@ static void pe_on_save_serialize(struct CPUState *cpu, uint32_t address) {
     psx_mod_write_word(at + 4u, PE_TAIL_VERSION);
     psx_mod_write_word(at + 8u, s_st.junk);
     psx_mod_write_word(at + 12u, packed);
-    const uint32_t extra = (uint32_t)s_st.charm_left | ((uint32_t)s_st.preset << 16);
+    const uint32_t extra = (uint32_t)s_st.charm_left | ((uint32_t)s_st.preset << 16) |
+                           ((uint32_t)(s_st.disabled & 1u) << 24);
     psx_mod_write_word(at + 16u, extra);
     psx_mod_write_word(at + 20u, s_st.junk ^ packed ^ extra ^ 0xA5A5A5A5u);
 }
@@ -564,6 +566,7 @@ static void pe_on_save_deserialize(struct CPUState *cpu, uint32_t address) {
     const uint8_t preset = s_st.preset < 3 ? s_st.preset : 1;   /* a vanilla save keeps it */
     memset(&s_st, 0, sizeof s_st);   /* a vanilla save: start at 0, the sweep converts */
     s_st.preset = preset;
+    s_st.disabled = (uint8_t)!s_enabled;
     if (psx_mod_read_word(at) != PE_TAIL_MAGIC) return;
     const uint32_t version = psx_mod_read_word(at + 4u);
     const uint32_t junk = psx_mod_read_word(at + 8u);
@@ -585,7 +588,9 @@ static void pe_on_save_deserialize(struct CPUState *cpu, uint32_t address) {
         s_st.rare_carry = (uint16_t)(packed >> 16);
         s_st.charm_left = (uint16_t)extra;
         s_st.preset = (uint8_t)(extra >> 16) < 3 ? (uint8_t)(extra >> 16) : 1;
+        s_st.disabled = (uint8_t)((extra >> 24) & 1u);
     }
+    s_enabled = !s_st.disabled;      /* the save's own choice */
 }
 
 /* ---- per frame -------------------------------------------------------------- */
@@ -639,8 +644,41 @@ static void pe_highlight_steal_message(void) {
     }
 }
 
+/* Turned off: nothing of the overhaul may stay half-done, and the game runs
+ * as vanilla (Junk back in the bag, Wayne counts it, Tools as usual). The
+ * counter is kept; "Take out Junk" moves it into the bag and trunk. */
+static void pe_loot_switched_off(void) {
+    pe_restore_active_list();                /* never leave a hand-in redirect behind */
+    s_handin_active = 0;                     /* a started hand-in still gets its Junk */
+    s_st.steal_bank = 0;
+    s_rare_shown[0] = s_rare_shown[1] = 0;
+    pe_restore_text_color();
+    s_in_battle = 0;
+    if (!pe_game_loaded()) return;
+    char msg[96];
+    snprintf(msg, sizeof msg, "Junk economy off: %u Junk kept (Workshop > Take out Junk)",
+             (unsigned)s_st.junk);
+    psx_mod_osd_message(msg);
+}
+
+/* Turned on: the sweep moves Junk from the bag and trunk into the counter at
+ * the next free moment; a battle in progress pays nothing extra. */
+static void pe_loot_switched_on(void) {
+    s_in_battle = pe_game_loaded() && pe_in_battle();
+    s_st.steal_bank = 0;
+    if (pe_game_loaded())
+        psx_mod_osd_message("Junk economy on: Junk in the bag and trunk joins the counter");
+}
+
 static void pe_loot_tick(void) {
+    static int s_was_enabled = -1;
     ++s_frames;
+    if (s_was_enabled != s_enabled) {
+        if (s_was_enabled == 1) pe_loot_switched_off();
+        else if (s_was_enabled == 0) pe_loot_switched_on();
+        s_was_enabled = s_enabled;
+        s_st.disabled = (uint8_t)!s_enabled;
+    }
     if (pe_game_loaded()) pe_highlight_steal_message();
     if (!s_enabled || !pe_game_loaded()) { s_in_battle = 0; return; }
 
@@ -689,10 +727,12 @@ static void pe_loot_state_loaded(int result, uint32_t saved_version,
                                  const void *saved, uint32_t saved_size) {
     if (result == PSX_MOD_STATE_RESTORED) {
         if (s_st.preset > 2) s_st.preset = 1;
+        s_enabled = !s_st.disabled;
         return;
     }
     memset(&s_st, 0, sizeof s_st);
     s_st.preset = 1;
+    s_st.disabled = (uint8_t)!s_enabled;
     /* Phase 1 states (v1) began with the Junk counter: keep it. v2 is v3
      * without the Lucky Charm and the preset. */
     if (result == PSX_MOD_STATE_MISMATCH && saved_version == 1u && saved && saved_size >= 4u)
@@ -718,6 +758,29 @@ static int pe_get_rare_within(void) {
     const int left = (int)pe_rare_guarantee() - (int)s_st.rare_dry;
     const int step = (int)pe_pity_step();
     return left < 1 ? 1 : (left + step - 1) / step;
+}
+/* With the economy off: the counter's Junk back into the bag, then the trunk,
+ * as far as there is room (the game's own Junk again, for Wayne). */
+static void pe_take_out_junk(void) {
+    char msg[80];
+    if (!pe_game_loaded()) { psx_mod_osd_message("Load a game first"); return; }
+    if (s_enabled) { psx_mod_osd_message("Turn Junk economy off first (it would go back)"); return; }
+    uint32_t moved = 0;
+    uint32_t limit = psx_mod_read_byte(0x800C0E0Cu) + psx_mod_read_word(0x8009D018u);
+    if (limit > PE_AYA_SLOT_COUNT) limit = PE_AYA_SLOT_COUNT;
+    for (uint32_t i = 0; i < limit && s_st.junk; ++i) {
+        const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
+        if (psx_mod_read_half(a)) continue;
+        psx_mod_write_half(a, PE_ITEM_JUNK); --s_st.junk; ++moved;
+    }
+    for (uint32_t i = 0; i < PE_STORAGE_COUNT && s_st.junk; ++i) {
+        const uint32_t a = PE_STORAGE_ADDR + i * 2u;
+        if (psx_mod_read_half(a)) continue;
+        psx_mod_write_half(a, PE_ITEM_JUNK); --s_st.junk; ++moved;
+    }
+    snprintf(msg, sizeof msg, "%u Junk to the bag and trunk, %u left in the counter",
+             (unsigned)moved, (unsigned)s_st.junk);
+    psx_mod_osd_message(msg);
 }
 static int pe_get_preset(void) { return s_st.preset < 3 ? s_st.preset : 1; }
 static int pe_set_preset(int v) {
@@ -754,6 +817,8 @@ void pe_loot_menu_register(void) {
     (void)pe_menu_register_live_int(PE_WORKSHOP_PAGE, "Junk",
         "Earned in battles and chests.", 0, 99999, 1,
         pe_get_junk, pe_set_junk_readonly);
+    (void)pe_menu_register_action(PE_WORKSHOP_PAGE, "Take out Junk",
+        "Economy off: counter Junk to bag/trunk.", pe_take_out_junk);
     (void)pe_menu_register_live_int(PE_WORKSHOP_PAGE, "Rare drop within",
         "Battles until a rare drop is certain.", 1, 999, 1,
         pe_get_rare_within, pe_set_junk_readonly);

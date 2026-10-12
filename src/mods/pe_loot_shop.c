@@ -303,6 +303,7 @@ static void pe_buy(void) {
 /* ---- rescue (decision 36) --------------------------------------------------- */
 static void pe_spare_club(void) {
     if (!pe_loaded()) { pe_toast("Load a game first"); return; }
+    if (!pe_loot_enabled()) { pe_toast("Junk economy is off (Workshop)"); return; }
     if (!pe_cannot_attack()) { pe_toast("Aya can still fight: no spare Club"); return; }
     const int slot = pe_bag_find(0);
     if (slot < 0) { pe_toast("Bag full"); return; }

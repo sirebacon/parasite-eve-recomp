@@ -656,6 +656,7 @@ static void pe_install(void) {
  * installs into the slot shown on the Slot row. */
 static void pe_grid_accept(void) {
     char msg[64];
+    if (!pe_ready()) return;
     const int e = pe_grid_effect();
     if (!pe_unlocked(s_target, e)) { pe_install(); return; }   /* explains why not */
     if (s_grid_armed != s_grid) {
