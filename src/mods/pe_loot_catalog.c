@@ -94,15 +94,27 @@ static const char *const s_gun_mods[21] = {
     "TRANQUILIZER", "COUNTERATTACK", "QUICKDRAW", "STEAL (HALF ATK)",
     "STEAL ON ATTACK", "CRITICAL UP", "2 COMMANDS", "3 COMMANDS",
 };
-static const char *const s_armor_mods[16] = {
+static const char *const s_armor_mods[21] = {
     "EMPTY",
     "RESIST POISON", "RESIST STIFFNESS", "RESIST DARKNESS", "LESS STOLEN",
     "RESIST CONFUSION", "AUTO MEDICINE", "AUTO CURE", "BAG +1", "BAG +2",
     "BAG +4", "MAX HP UP", "ATTACK UP", "SLOWER ACTIVE TIME", "PE BURDEN DOWN",
     "ATTACK DOWN",
+    /* 16 unused; 17-20 the economy mods (pe_loot.h, custom items doc C1-C4) */
+    "", "LOWERS SHOP PRICES", "INCREASES JUNK FOUND", "FINDS RARE ITEMS MORE OFTEN",
+    "MORE JUNK FROM DISMANTLING",
 };
 #define PE_GUN_EFFECTS   20
-#define PE_ARMOR_EFFECTS 15
+#define PE_ARMOR_EFFECTS 20                   /* highest armor effect; 16 unused */
+
+/* Effects on each board, in board order. */
+static const uint8_t s_board_gun[] = {
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+};
+static const uint8_t s_board_armor[] = {
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    PE_FX_SCAVENGER, PE_FX_LUCKY_FIND, PE_FX_SALVAGER, PE_FX_BARGAIN,
+};
 
 /* Mod Catalog board tiles: 7 characters fit one. */
 static const char *const s_gun_short[21] = {
@@ -110,9 +122,10 @@ static const char *const s_gun_short[21] = {
     "HEAT", "FROST", "CYANIDE", "ACID", "TRANQ", "COUNTER", "QUICK", "STEAL",
     "STL ATK", "CRIT UP", "2 CMDS", "3 CMDS",
 };
-static const char *const s_armor_short[16] = {
+static const char *const s_armor_short[21] = {
     "", "POISON", "STIFF", "DARK", "STL DN", "CONFUSE", "AUTOMED", "AUTOCUR",
     "BAG +1", "BAG +2", "BAG +4", "MAX HP", "ATK UP", "SLOW AT", "PE BRDN", "ATK DN",
+    "", "BARGAIN", "SCAVENG", "LUCKY", "SALVAGE",
 };
 
 /* Price tier per effect: 0 common, 1 mid, 2 premium (Junk + a Tool) -- the
@@ -120,11 +133,15 @@ static const char *const s_armor_short[16] = {
 static const uint8_t s_gun_tier[21] = {
     0, 0, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 2, 2,
 };
-static const uint8_t s_armor_tier[16] = {
+static const uint8_t s_armor_tier[21] = {
     0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0,
+    0, 1, 1, 1, 1,                            /* economy mods: mid (custom items doc) */
 };
 static int s_price[3] = { 10, 30, 80 };   /* tunable (Debug > Loot tuning) */
 static int s_rebuild_markup = 150;        /* percent of the payout */
+
+/* Install price of a tier after the preset and Bargain (pe_loot_price). */
+static int pe_tier_price(int tier) { return (int)pe_loot_price((uint32_t)s_price[tier]); }
 
 static int pe_mod_group(int which, int effect) {
     if (which == PE_ARMOR) return (effect >= 8 && effect <= 10) ? 5 : 0;
@@ -305,6 +322,7 @@ static uint32_t pe_salvage_payout(int which, int bonus_sum, const uint8_t *mods,
         if (pe_unlocked(which, e)) ++dupes; else ++unlocks;
     }
     payout += 5u * (uint32_t)dupes;
+    if (pe_loot_armor_has(PE_FX_SALVAGER)) payout += payout / 4u;   /* C3 */
     if (payout > PE_PAYOUT_CAP) payout = PE_PAYOUT_CAP;
     if (unlocks_out) *unlocks_out = unlocks;
     return payout;
@@ -419,9 +437,14 @@ static int pe_seen(int which, int e) {
 }
 
 static int pe_effect_count(int which) {
-    return which == PE_GUN ? PE_GUN_EFFECTS : PE_ARMOR_EFFECTS;
+    return which == PE_GUN ? (int)sizeof s_board_gun : (int)sizeof s_board_armor;
 }
-static int pe_grid_effect(void) { return s_grid + 1; }
+/* Effect on board tile i of `which`, or 0. */
+static int pe_board_effect(int which, int i) {
+    if (i < 0 || i >= pe_effect_count(which)) return 0;
+    return which == PE_GUN ? s_board_gun[i] : s_board_armor[i];
+}
+static int pe_grid_effect(void) { return pe_board_effect(s_target, s_grid); }
 
 static unsigned pe_grid_count(void) {
     const int n = pe_effect_count(s_target);
@@ -443,12 +466,12 @@ static int pe_grid_cell(int index, char *label, unsigned size, unsigned *flags) 
     if (index < 0) {                          /* header: unlocked / total */
         int got = 0;
         const int n = pe_effect_count(which);
-        for (int e = 1; e <= n; ++e) got += pe_unlocked(which, e);
+        for (int i = 0; i < n; ++i) got += pe_unlocked(which, pe_board_effect(which, i));
         snprintf(label, size, "%d/%d", got, n);
         return 1;
     }
-    const int e = index + 1;
-    if (e > pe_effect_count(which)) return 0;
+    const int e = pe_board_effect(which, index);
+    if (!e) return 0;
     unsigned f = 0;
     if (pe_unlocked(which, e)) {
         snprintf(label, size, "%s", which == PE_GUN ? s_gun_short[e] : s_armor_short[e]);
@@ -496,11 +519,11 @@ static unsigned pe_one(void) { return 1; }
 static const char *pe_sel_name(unsigned i) {
     (void)i;
     const int e = pe_grid_effect();
-    if (e > pe_effect_count(s_target)) return "";
+    if (!e) return "";
     if (pe_unlocked(s_target, e)) {
         const int tier = pe_effect_tier(s_target, e);
         snprintf(s_sel_text, sizeof s_sel_text, "%s %d%s", pe_effect_name(s_target, e),
-                 s_price[tier], tier == 2 ? "+TOOL" : "");
+                 pe_tier_price(tier), tier == 2 ? "+TOOL" : "");
     } else if (pe_loaded() && pe_seen(s_target, e)) {
         snprintf(s_sel_text, sizeof s_sel_text, "%s: DISMANTLE", pe_effect_name(s_target, e));
     } else {
@@ -580,7 +603,7 @@ static void pe_install(void) {
     }
 
     const int tier = pe_effect_tier(s_target, e);
-    const uint32_t price = (uint32_t)s_price[tier];
+    const uint32_t price = (uint32_t)pe_tier_price(tier);
     if (pe_loot_junk() < price) {
         snprintf(msg, sizeof msg, "Need %u Junk (have %u)", (unsigned)price, (unsigned)pe_loot_junk());
         pe_toast(msg); return;
@@ -615,7 +638,7 @@ static void pe_grid_accept(void) {
         s_grid_armed = s_grid;
         const int tier = pe_effect_tier(s_target, e);
         snprintf(msg, sizeof msg, "Slot %d, %d Junk%s: press again", s_slot_choice + 1,
-                 s_price[tier], tier == 2 ? " + Tool" : "");
+                 pe_tier_price(tier), tier == 2 ? " + Tool" : "");
         pe_toast(msg);
         return;
     }
@@ -647,7 +670,7 @@ static int s_rb_choice;
 static char s_rb_names[PE_REBUILD_MAX][32];
 
 static uint32_t pe_rebuild_price(const PeRebuildEntry *r) {
-    uint32_t p = (uint32_t)r->payout * (uint32_t)s_rebuild_markup / 100u;
+    uint32_t p = pe_loot_price((uint32_t)r->payout * (uint32_t)s_rebuild_markup / 100u);
     if (p < r->payout) p = r->payout;         /* never below what dismantling paid */
     return p > PE_REBUILD_CAP ? PE_REBUILD_CAP : p;
 }
@@ -743,8 +766,9 @@ static int pe_get_rebuild_cost(void) {
 
 /* ---- debug (Debug > Loot tuning) -------------------------------------------------- */
 static void pe_debug_unlock_all(void) {
-    s_cat.bits[PE_GUN] = ((1u << (PE_GUN_EFFECTS + 1)) - 1u) & ~1u;
-    s_cat.bits[PE_ARMOR] = ((1u << (PE_ARMOR_EFFECTS + 1)) - 1u) & ~1u;
+    for (int which = 0; which < 2; ++which)
+        for (int i = 0; i < pe_effect_count(which); ++i)
+            s_cat.bits[which] |= 1u << pe_board_effect(which, i);
     pe_toast("Mod Catalog: all effects unlocked");
 }
 static void pe_debug_clear_catalog(void) {
@@ -859,6 +883,16 @@ static void pe_on_tool_transfer(struct CPUState *cpu, uint32_t address) {
     snprintf(msg, sizeof msg, "Salvaged %s: +%u Junk, %d new effect(s)",
              pe_item_name(id), (unsigned)payout, unlocks + kept_new);
     pe_toast(msg);
+}
+
+/* ---- pe_loot.h: armor effects for the rare table -------------------------------- */
+int pe_catalog_armor_unlocked(int effect) {
+    return effect > 0 && effect <= PE_ARMOR_EFFECTS && pe_unlocked(PE_ARMOR, effect);
+}
+int pe_catalog_unlock_armor(int effect) {
+    if (effect <= 0 || effect > PE_ARMOR_EFFECTS || pe_unlocked(PE_ARMOR, effect)) return 0;
+    s_cat.bits[PE_ARMOR] |= 1u << effect;
+    return 1;
 }
 
 /* ---- persistence ------------------------------------------------------------------ */

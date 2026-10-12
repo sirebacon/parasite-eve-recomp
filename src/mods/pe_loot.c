@@ -37,6 +37,15 @@
  *     ("<item> obtained", built in D_800A1B50 by Inv_GetItemEffectData) is
  *     wrapped in the textbox's own red highlight codes (0xFB 0x04 ... 0xFB
  *     0x05); the textbox has no other color. User request, 2026-10-12.
+ *   - Phase 6 (custom items doc C1-C7, decisions 19, 39): difficulty presets
+ *     Relaxed / Normal / Grind scale battle Junk (x1.5 / x1 / x0.75), the
+ *     rare guarantee (x0.7 / x1 / x1.3) and every price (-25% / 0 / +25%,
+ *     caps still apply); the economy armor mods Scavenger (+50% battle Junk)
+ *     and Lucky Find (pity builds twice as fast) are read from the equipped
+ *     armor; a carried Lucky Charm is used up at the next won battle and
+ *     doubles pity progress for 10 won battles; the rare table also unlocks
+ *     the four economy mods straight into the Mod Catalog and drops Lucky
+ *     Charms; an empty steal banks a little Junk, paid on a win (19, 35).
  *   - Saved in the save's free tail (0x1C90 of the 8 KB block, covered by the
  *     game's CRC) and in save states (psx_mod_register_state "pe.loot").
  *     A new game resets it (Inv_DispatchCommand 1117).
@@ -65,6 +74,10 @@
 #define PE_INV_CMD_START_NEW_GAME 1117
 
 #define PE_ITEM_JUNK          0x14u
+#define PE_ITEM_LUCKY_CHARM   0x19u        /* ITEM25, relabelled (pe_custom.c) */
+#define PE_ARMOR_SLOT_ADDR    0x800C0E22u  /* s8 bag slot of the equipped armor */
+#define PE_EQUIP_RECORDS_ADDR 0x800C0EACu
+#define PE_CHARM_BATTLES      10u
 #define PE_WAYNE_COUNTER      0x800A78B0u  /* u16 script variable */
 #define PE_WAYNE_CRAFT_COST   300u
 #define PE_AYA_SLOTS_ADDR     0x800C0E48u
@@ -98,21 +111,26 @@
 #define PE_CARD_BUFFER        0x8009EED0u  /* g_MemCardFileBuffer */
 #define PE_TAIL_OFFSET        0x1C90u
 #define PE_TAIL_MAGIC         0x544C4550u  /* "PELT" */
-#define PE_TAIL_VERSION       2u
+#define PE_TAIL_VERSION       3u
 
 #define PE_HANDIN_GUARD_FRAMES 120u        /* no sweep this soon after a count */
 #define PE_HANDIN_MAX          999u        /* Junk per hand-in */
 
 /* ---- state ---------------------------------------------------------------- */
-#define PE_LOOT_STATE_VERSION 2u
+#define PE_LOOT_STATE_VERSION 3u
 static struct {
     uint32_t junk;
     uint16_t steal_bank;          /* Junk stolen this battle, paid on a win */
     uint16_t hits[PE_ENEMY_SLOTS];
-    uint16_t rare_dry;            /* won battles since the last rare drop */
+    uint16_t rare_dry;            /* pity progress since the last rare drop */
     uint16_t rare_carry;          /* a rare drop that didn't fit the list */
     uint32_t rng;                 /* xorshift state (rides in save states) */
-} s_st;
+    /* v3 */
+    uint16_t charm_left;          /* won battles of Lucky Charm left */
+    uint8_t preset;               /* 0 Relaxed, 1 Normal, 2 Grind (39) */
+    uint8_t pad;
+} s_st = { .preset = 1 };
+#define PE_LOOT_STATE_V2_SIZE 28u
 
 static int s_enabled = 1;          /* "Junk economy", on by default (28) */
 static int s_handin_mode;          /* 0 = up to Wayne's next gun, 1 = all */
@@ -123,6 +141,13 @@ static int s_tune_nohit_bonus = 25;/* decision 32, percent */
 static int s_tune_rare_base = 4;   /* decision 18: soft pity, percent */
 static int s_tune_rare_step = 1;   /* + percent per dry battle */
 static int s_tune_rare_guarantee = 25; /* certain by this many battles */
+static int s_tune_empty_steal = 2; /* decision 19: Junk for an empty steal */
+
+/* Presets (39): battle Junk %, rare guarantee %, price %. */
+static const char *const s_preset_names[] = { "Relaxed", "Normal", "Grind" };
+static const uint16_t s_preset_junk[3]  = { 150, 100, 75 };
+static const uint16_t s_preset_pity[3]  = { 70, 100, 130 };
+static const uint16_t s_preset_price[3] = { 75, 100, 125 };
 
 static int s_in_battle;
 static uint32_t s_frames, s_last_count_frame;
@@ -172,8 +197,33 @@ int pe_loot_spend_junk(uint32_t n) {
 }
 void pe_loot_give_junk(uint32_t n) { pe_add_junk(n); }
 
+/* The equipped armor carries effect `effect` (low 5 bits of a mod byte). */
+int pe_loot_armor_has(int effect) {
+    const int slot = (int8_t)psx_mod_read_byte(PE_ARMOR_SLOT_ADDR);
+    if (slot < 0 || slot >= (int)PE_AYA_SLOT_COUNT) return 0;
+    const uint16_t v = psx_mod_read_half(PE_AYA_SLOTS_ADDR + (uint32_t)slot * 2u);
+    if (v < 256 || v >= 384) return 0;
+    const uint32_t rec = PE_EQUIP_RECORDS_ADDR + (uint32_t)(v - 256) * 0x20u;
+    if (psx_mod_read_byte(rec + 0x06u) != 9) return 0;
+    int n = psx_mod_read_byte(rec + 0x14u);
+    if (n > 10) n = 10;
+    for (int m = 0; m < n; ++m)
+        if ((psx_mod_read_byte(rec + 0x15u + (uint32_t)m) & 0x1F) == effect) return 1;
+    return 0;
+}
+
+/* A price after the preset and Bargain (C4); callers apply their caps after. */
+uint32_t pe_loot_price(uint32_t base) {
+    if (!base) return 0;
+    uint32_t pct = s_preset_price[s_st.preset < 3 ? s_st.preset : 1];
+    if (pe_loot_armor_has(PE_FX_BARGAIN)) pct = pct * 85u / 100u;
+    const uint32_t p = (base * pct + 50u) / 100u;
+    return p ? p : 1u;
+}
+
 /* ---- rare drops (phase 2) ---------------------------------------------------- */
 #define PE_RARE_BOOSTER 0u                 /* table marker: pick a stat booster */
+#define PE_RARE_ECON    1u                 /* table marker: unlock an economy mod */
 static const struct { uint8_t weight; uint16_t item; } s_rare_table[] = {
     { 40, 0x16u },              /* Tool */
     { 35, PE_RARE_BOOSTER },    /* stat booster, tier by battle EXP */
@@ -181,7 +231,16 @@ static const struct { uint8_t weight; uint16_t item; } s_rare_table[] = {
     {  5, 0x0Cu },              /* Duper Junk (restores 1/2 PE) */
     {  7, 0x37u },              /* Mod Permit */
     {  3, 0x17u },              /* Super Tool */
+    {  6, PE_RARE_ECON },       /* C5: Scavenger, Lucky Find, Salvager, Bargain */
+    {  5, PE_ITEM_LUCKY_CHARM },/* C7 */
 };
+static const struct { int effect; const char *name; } s_econ_mods[] = {
+    { PE_FX_SCAVENGER, "Increases Junk found" },
+    { PE_FX_LUCKY_FIND, "Finds rare items more often" },
+    { PE_FX_SALVAGER, "More Junk from dismantling" },
+    { PE_FX_BARGAIN, "Lowers shop prices" },
+};
+#define PE_ECON_COUNT 4
 /* Offense, Range, Bullet Cap, Defense, CR Evade, PE: tier 1 at these ids. */
 static const uint16_t s_booster_base[] = { 0x1Du, 0x21u, 0x25u, 0x29u, 0x2Du, 0x31u };
 
@@ -192,13 +251,34 @@ static uint32_t pe_rand(void) {
     return x;
 }
 
+/* Economy mods not unlocked yet, written to `out`; returns how many. */
+static int pe_econ_missing(int *out) {
+    int n = 0;
+    for (int i = 0; i < PE_ECON_COUNT; ++i)
+        if (!pe_catalog_armor_unlocked(s_econ_mods[i].effect)) out[n++] = i;
+    return n;
+}
+
 static uint16_t pe_pick_rare(uint32_t exp) {
+    int missing[PE_ECON_COUNT];
+    const int econ = pe_econ_missing(missing);
     uint32_t total = 0;
     for (size_t i = 0; i < sizeof s_rare_table / sizeof s_rare_table[0]; ++i)
-        total += s_rare_table[i].weight;
+        if (s_rare_table[i].item != PE_RARE_ECON || econ) total += s_rare_table[i].weight;
     uint32_t r = pe_rand() % total;
     for (size_t i = 0; i < sizeof s_rare_table / sizeof s_rare_table[0]; ++i) {
+        if (s_rare_table[i].item == PE_RARE_ECON && !econ) continue;   /* all found */
         if (r < s_rare_table[i].weight) {
+            if (s_rare_table[i].item == PE_RARE_ECON) {
+                /* Straight into the Mod Catalog: no carrier item (C5). */
+                const int pick = missing[pe_rand() % (uint32_t)econ];
+                char msg[80];
+                pe_catalog_unlock_armor(s_econ_mods[pick].effect);
+                snprintf(msg, sizeof msg, "Rare find: armor mod \"%s\" (Mod Catalog)",
+                         s_econ_mods[pick].name);
+                psx_mod_osd_message(msg);
+                return 0;
+            }
             if (s_rare_table[i].item != PE_RARE_BOOSTER) return s_rare_table[i].item;
             const uint32_t tier = exp < 20u ? 0u : exp < 60u ? 1u : exp < 150u ? 2u : 3u;
             return (uint16_t)(s_booster_base[pe_rand() % 6u] + tier);
@@ -208,17 +288,45 @@ static uint16_t pe_pick_rare(uint32_t exp) {
     return 0x16u;
 }
 
-/* Soft pity: base + step per dry battle, certain at the guarantee. */
+/* Rare guarantee after the preset (39). */
+static uint32_t pe_rare_guarantee(void) {
+    const uint32_t g = (uint32_t)s_tune_rare_guarantee * s_preset_pity[s_st.preset < 3 ? s_st.preset : 1] / 100u;
+    return g ? g : 1u;
+}
+
+/* Pity progress a dry battle adds: 1, x2 with Lucky Find (C2), x2 while a
+ * Lucky Charm is active (C7). */
+static uint32_t pe_pity_step(void) {
+    uint32_t step = pe_loot_armor_has(PE_FX_LUCKY_FIND) ? 2u : 1u;
+    if (s_st.charm_left) step *= 2u;
+    return step;
+}
+
+/* Soft pity: base + step per unit of progress, certain at the guarantee. */
 static uint16_t pe_roll_rare(uint32_t exp) {
     const uint32_t dry = s_st.rare_dry;
     const uint32_t chance = (uint32_t)s_tune_rare_base + (uint32_t)s_tune_rare_step * dry;
-    const int certain = s_tune_rare_guarantee > 0 && dry + 1u >= (uint32_t)s_tune_rare_guarantee;
+    const int certain = dry + 1u >= pe_rare_guarantee();
     if (certain || pe_rand() % 100u < chance) {
         s_st.rare_dry = 0;
         return pe_pick_rare(exp);
     }
-    if (s_st.rare_dry < 0xFFFFu) ++s_st.rare_dry;
+    const uint32_t next = dry + pe_pity_step();
+    s_st.rare_dry = next > 0xFFFFu ? 0xFFFFu : (uint16_t)next;
     return 0;
+}
+
+/* A carried Lucky Charm is used up at a won battle when none is active. */
+static void pe_charm_battle_won(void) {
+    if (s_st.charm_left) { --s_st.charm_left; return; }
+    for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT; ++i) {
+        const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
+        if (psx_mod_read_half(a) != PE_ITEM_LUCKY_CHARM) continue;
+        psx_mod_write_half(a, 0);
+        s_st.charm_left = PE_CHARM_BATTLES;
+        psx_mod_osd_message("Lucky Charm: rare finds come faster for 10 battles");
+        return;
+    }
 }
 
 /* ---- battle end ------------------------------------------------------------ */
@@ -241,6 +349,7 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
         }
         /* Rare drop (and one carried over from a full list) after the vanilla
          * items, as {id, extra = -1}. */
+        pe_charm_battle_won();
         const uint16_t rolled = pe_roll_rare(exp);
         const uint16_t adds[2] = { s_st.rare_carry, rolled };
         s_st.rare_carry = 0;
@@ -266,6 +375,8 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
     uint32_t hits = 0;
     for (int s = 0; s < PE_ENEMY_SLOTS; ++s) hits += s_st.hits[s];
     if (hits < 4) earned += earned * (uint32_t)s_tune_nohit_bonus * (4u - hits) / 400u;
+    earned = earned * s_preset_junk[s_st.preset < 3 ? s_st.preset : 1] / 100u;   /* 39 */
+    if (pe_loot_armor_has(PE_FX_SCAVENGER)) earned += earned / 2u;               /* C1 */
 
     const uint32_t total = earned + vanilla + s_st.steal_bank;
     s_st.steal_bank = 0;
@@ -319,9 +430,16 @@ static void pe_on_print_raw_text(struct CPUState *cpu, uint32_t address) {
 static void pe_on_inv_add_item(struct CPUState *cpu, uint32_t address) {
     (void)address;
     const uint32_t ra = cpu->gpr[31];
-    if (ra >= PE_FN_RESOLVE_HIT_START && ra < PE_FN_RESOLVE_HIT_END && cpu->gpr[4]) {
+    const int from_steal = ra >= PE_FN_RESOLVE_HIT_START && ra < PE_FN_RESOLVE_HIT_END;
+    if (from_steal && cpu->gpr[4]) {
         s_steal_item = (uint16_t)cpu->gpr[4];     /* its message gets the red name */
         s_steal_frame = s_frames;
+    }
+    /* An empty steal (the enemy's item is gone) banks a little Junk (19, 35). */
+    if (from_steal && !cpu->gpr[4] && s_enabled && pe_game_loaded()) {
+        const uint32_t bank = (uint32_t)s_st.steal_bank + (uint32_t)s_tune_empty_steal;
+        s_st.steal_bank = bank > 0xFFFFu ? 0xFFFFu : (uint16_t)bank;
+        return;
     }
     if (!s_enabled || !pe_game_loaded() || cpu->gpr[4] != PE_ITEM_JUNK) return;
     cpu->gpr[4] = 0;   /* Inv_AddItem(0): adds nothing, returns success */
@@ -408,7 +526,12 @@ static void pe_on_task_count_items(struct CPUState *cpu, uint32_t address) {
 static void pe_on_inv_dispatch(struct CPUState *cpu, uint32_t address) {
     (void)address;
     const int command = (int)cpu->gpr[4];
-    if (command == PE_INV_CMD_START_NEW_GAME) { memset(&s_st, 0, sizeof s_st); return; }
+    if (command == PE_INV_CMD_START_NEW_GAME) {   /* the chosen difficulty stays */
+        const uint8_t preset = s_st.preset < 3 ? s_st.preset : 1;
+        memset(&s_st, 0, sizeof s_st);
+        s_st.preset = preset;
+        return;
+    }
     if (command != PE_INV_CMD_REMOVE_ITEM || cpu->gpr[5] != PE_ITEM_JUNK) return;
     pe_restore_active_list();                /* the body re-selects Aya's bag anyway */
     if (!s_handin_left || !s_st.junk) return;
@@ -430,13 +553,17 @@ static void pe_on_save_serialize(struct CPUState *cpu, uint32_t address) {
     psx_mod_write_word(at + 4u, PE_TAIL_VERSION);
     psx_mod_write_word(at + 8u, s_st.junk);
     psx_mod_write_word(at + 12u, packed);
-    psx_mod_write_word(at + 16u, s_st.junk ^ packed ^ 0xA5A5A5A5u);
+    const uint32_t extra = (uint32_t)s_st.charm_left | ((uint32_t)s_st.preset << 16);
+    psx_mod_write_word(at + 16u, extra);
+    psx_mod_write_word(at + 20u, s_st.junk ^ packed ^ extra ^ 0xA5A5A5A5u);
 }
 
 static void pe_on_save_deserialize(struct CPUState *cpu, uint32_t address) {
     (void)cpu; (void)address;
     const uint32_t at = PE_CARD_BUFFER + PE_TAIL_OFFSET;
+    const uint8_t preset = s_st.preset < 3 ? s_st.preset : 1;   /* a vanilla save keeps it */
     memset(&s_st, 0, sizeof s_st);   /* a vanilla save: start at 0, the sweep converts */
+    s_st.preset = preset;
     if (psx_mod_read_word(at) != PE_TAIL_MAGIC) return;
     const uint32_t version = psx_mod_read_word(at + 4u);
     const uint32_t junk = psx_mod_read_word(at + 8u);
@@ -449,6 +576,15 @@ static void pe_on_save_deserialize(struct CPUState *cpu, uint32_t address) {
         s_st.junk = junk;
         s_st.rare_dry = (uint16_t)packed;
         s_st.rare_carry = (uint16_t)(packed >> 16);
+    } else if (version == 3u) {
+        const uint32_t packed = psx_mod_read_word(at + 12u);
+        const uint32_t extra = psx_mod_read_word(at + 16u);
+        if ((junk ^ packed ^ extra ^ 0xA5A5A5A5u) != psx_mod_read_word(at + 20u)) return;
+        s_st.junk = junk;
+        s_st.rare_dry = (uint16_t)packed;
+        s_st.rare_carry = (uint16_t)(packed >> 16);
+        s_st.charm_left = (uint16_t)extra;
+        s_st.preset = (uint8_t)(extra >> 16) < 3 ? (uint8_t)(extra >> 16) : 1;
     }
 }
 
@@ -551,11 +687,19 @@ static void pe_loot_tick(void) {
 /* ---- save states ------------------------------------------------------------ */
 static void pe_loot_state_loaded(int result, uint32_t saved_version,
                                  const void *saved, uint32_t saved_size) {
-    if (result == PSX_MOD_STATE_RESTORED) return;
+    if (result == PSX_MOD_STATE_RESTORED) {
+        if (s_st.preset > 2) s_st.preset = 1;
+        return;
+    }
     memset(&s_st, 0, sizeof s_st);
-    /* Phase 1 states (v1) began with the Junk counter: keep it. */
+    s_st.preset = 1;
+    /* Phase 1 states (v1) began with the Junk counter: keep it. v2 is v3
+     * without the Lucky Charm and the preset. */
     if (result == PSX_MOD_STATE_MISMATCH && saved_version == 1u && saved && saved_size >= 4u)
         memcpy(&s_st.junk, saved, sizeof s_st.junk);
+    if (result == PSX_MOD_STATE_MISMATCH && saved_version == 2u && saved &&
+        saved_size == PE_LOOT_STATE_V2_SIZE)
+        memcpy(&s_st, saved, PE_LOOT_STATE_V2_SIZE);
 }
 
 static void pe_loot_restored(void) {
@@ -571,9 +715,17 @@ static void pe_loot_restored(void) {
 static int pe_get_junk(void) { return (int)s_st.junk; }
 static int pe_set_junk_readonly(int value) { (void)value; return 0; }
 static int pe_get_rare_within(void) {
-    const int left = s_tune_rare_guarantee - (int)s_st.rare_dry;
-    return left < 1 ? 1 : left;
+    const int left = (int)pe_rare_guarantee() - (int)s_st.rare_dry;
+    const int step = (int)pe_pity_step();
+    return left < 1 ? 1 : (left + step - 1) / step;
 }
+static int pe_get_preset(void) { return s_st.preset < 3 ? s_st.preset : 1; }
+static int pe_set_preset(int v) {
+    if (v < 0 || v > 2) return 0;
+    s_st.preset = (uint8_t)v;
+    return 1;
+}
+static int pe_get_charm(void) { return s_st.charm_left; }
 static void pe_give_100_junk(void) {
     char msg[48];
     pe_add_junk(100);
@@ -607,6 +759,11 @@ void pe_loot_menu_register(void) {
         pe_get_rare_within, pe_set_junk_readonly);
     (void)pe_menu_register_choice(PE_WORKSHOP_PAGE, "Wayne hand-in",
         "Junk that Discard junk gives Wayne.", &s_handin_mode, s_handin_names, 2);
+    (void)pe_menu_register_live_choice(PE_WORKSHOP_PAGE, "Difficulty",
+        "Junk, rare luck and prices. Any time.", s_preset_names, 3,
+        pe_get_preset, pe_set_preset);
+    (void)pe_menu_register_live_int(PE_WORKSHOP_PAGE, "Lucky Charm battles",
+        "Battles of faster rare finds left.", 0, 99, 1, pe_get_charm, pe_set_junk_readonly);
 
     (void)pe_menu_register_int(PE_TUNING_PAGE, "Junk floor",
         "Junk for every won battle.", &s_tune_floor, 0, 10, 1);
@@ -622,6 +779,8 @@ void pe_loot_menu_register(void) {
         "Added for each battle without one.", &s_tune_rare_step, 0, 50, 1);
     (void)pe_menu_register_int(PE_TUNING_PAGE, "Rare guarantee",
         "Battles until a rare drop is certain.", &s_tune_rare_guarantee, 1, 200, 1);
+    (void)pe_menu_register_int(PE_TUNING_PAGE, "Empty steal Junk",
+        "Junk for stealing from an empty enemy.", &s_tune_empty_steal, 0, 20, 1);
     (void)pe_menu_register_action(PE_TUNING_PAGE, "Give 100 Junk",
         "Debug: add 100 Junk.", pe_give_100_junk);
     (void)pe_menu_register_action(PE_TUNING_PAGE, "Give 1000 Junk",

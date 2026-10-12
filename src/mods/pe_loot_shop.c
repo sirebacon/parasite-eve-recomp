@@ -3,8 +3,8 @@
  * (bridge findings pe-loot-overhaul-design-2026-10-11.md, decisions 14, 36,
  * 37, 40, 43; checklist phase 4). F1 > PE Enhancements > Workshop >
  *
- *   Requisition  a board of goods: medicine, cures, bullets, rockets and
- *                Tools. Accept (or Buy) buys one. Tools cost 40 Junk, +10 per
+ *   Requisition  a board of goods: medicine, cures, bullets, rockets, Smoke
+ *                Grenades (C6) and Tools. Accept (or Buy) buys one. Tools cost 40 Junk, +10 per
  *                Tool bought, never more than 100 (decision 14); the count is
  *                saved. Not sold (decisions 14, 33, 43): Super Tools, guns,
  *                armor, stat boosters, Revive, Full Recover, Maeda's bullets.
@@ -88,6 +88,7 @@ static const PeGood s_goods[] = {
     { 0x02, "AMMO 15", "BULLETS X15",  5 },
     { 0x03, "AMMO 30", "BULLETS X30",  9 },
     { 0x05, "ROCKET",  "ROCKET",       20 },
+    { 0x18, "SMOKE",   "SMOKE GRENADE", 15 },  /* C6: ITEM24, pe_custom.c */
     { PE_ITEM_TOOL, "TOOL", "TOOL",    0 },
 };
 #define PE_GOODS ((int)(sizeof s_goods / sizeof s_goods[0]))
@@ -188,8 +189,10 @@ static int pe_cannot_attack(void) {
 }
 
 /* ---- prices ----------------------------------------------------------------- */
+/* Prices go through the preset and Bargain (pe_loot_price); the Tool cap
+ * applies after them (decisions 14, 40). */
 static uint32_t pe_tool_price(void) {
-    uint32_t p = (uint32_t)s_tool_start + (uint32_t)s_tool_step * s_shop.tools_bought;
+    uint32_t p = pe_loot_price((uint32_t)s_tool_start + (uint32_t)s_tool_step * s_shop.tools_bought);
     if (p > (uint32_t)s_tool_cap) p = (uint32_t)s_tool_cap;   /* decision 14 cap */
     return p;
 }
@@ -197,8 +200,8 @@ static uint32_t pe_tool_price(void) {
 static uint32_t pe_price(const PeGood *g) {
     if (g->id == PE_ITEM_TOOL) return pe_tool_price();
     if (g->id == PE_ITEM_BULLETS_15 && pe_loaded() && pe_cannot_attack()) return 0;  /* 36 */
-    uint32_t p = ((uint32_t)g->price * (uint32_t)s_price_pct + 50u) / 100u;
-    return p ? p : 1u;
+    const uint32_t p = ((uint32_t)g->price * (uint32_t)s_price_pct + 50u) / 100u;
+    return pe_loot_price(p ? p : 1u);
 }
 
 /* Why one of g can't be bought now, or 0. */
