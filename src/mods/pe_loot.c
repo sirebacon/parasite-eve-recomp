@@ -47,6 +47,7 @@
 #include "cpu_state.h"
 #include "mod_plugins.h"
 #include "pe_mod_menu.h"
+#include "pe_loot.h"
 
 #define PE_FN_SET_TOTAL_EXP     0x8004B70Cu  /* game.toml mod_function_entry_funcs */
 #define PE_FN_INV_DISPATCH      0x8005D2B4u
@@ -160,6 +161,16 @@ static int pe_ram_pointer(uint32_t p) {
 static void pe_add_junk(uint32_t n) {
     s_st.junk = s_st.junk + n > 99999u ? 99999u : s_st.junk + n;
 }
+
+/* pe_loot.h */
+int pe_loot_enabled(void) { return s_enabled; }
+uint32_t pe_loot_junk(void) { return s_st.junk; }
+int pe_loot_spend_junk(uint32_t n) {
+    if (s_st.junk < n) return 0;
+    s_st.junk -= n;
+    return 1;
+}
+void pe_loot_give_junk(uint32_t n) { pe_add_junk(n); }
 
 /* ---- rare drops (phase 2) ---------------------------------------------------- */
 #define PE_RARE_BOOSTER 0u                 /* table marker: pick a stat booster */
