@@ -272,14 +272,22 @@ static const char *pe_sel_name(unsigned i) {
 
 static const char *pe_result_name(unsigned i) { (void)i; return s_result; }
 
-static void pe_buy(void) {
-    char msg[64];
-    if (!pe_loaded()) { pe_toast("Load a game first"); return; }
-    if (!pe_loot_enabled()) { pe_toast("Junk economy is off (Workshop)"); return; }
-    pe_goods_count();
-    const PeGood *g = &s_goods[s_grid];
-    const char *why = pe_blocked(g);
-    if (why) { pe_toast(why); return; }
+/* pe_loot.h, for Wayne's in-game Workshop (pe_wayne_menu.c) and the F1 page. */
+int pe_shop_count(void) { return PE_GOODS; }
+uint16_t pe_shop_item(int i) { return i >= 0 && i < PE_GOODS ? s_goods[i].id : 0; }
+uint32_t pe_shop_price_index(int i) { return i >= 0 && i < PE_GOODS ? pe_price(&s_goods[i]) : 0; }
+const char *pe_shop_blocked_index(int i) {
+    if (i < 0 || i >= PE_GOODS) return "No such goods";
+    if (!pe_loaded()) return "Load a game first";
+    if (!pe_loot_enabled()) return "Junk economy is off";
+    return pe_blocked(&s_goods[i]);
+}
+
+/* Buy one of goods i; msg gets what happened. Returns 1 if bought. */
+int pe_shop_buy_index(int i, char *msg, size_t msg_size) {
+    const char *why = pe_shop_blocked_index(i);
+    if (why) { snprintf(msg, msg_size, "%s", why); return 0; }
+    const PeGood *g = &s_goods[i];
     const uint32_t price = pe_price(g);
     const int pool = pe_ammo_pool_of_item(g->id);
     if (pool >= 0) {
@@ -295,8 +303,15 @@ static void pe_buy(void) {
     }
     if (price) pe_loot_spend_junk(price);
     if (g->id == PE_ITEM_TOOL && s_shop.tools_bought < 0xFFFFu) ++s_shop.tools_bought;
-    snprintf(msg, sizeof msg, "Bought %s: -%u Junk (total %u)", g->name, (unsigned)price,
+    snprintf(msg, msg_size, "Bought %s: -%u Junk (total %u)", g->name, (unsigned)price,
              (unsigned)pe_loot_junk());
+    return 1;
+}
+
+static void pe_buy(void) {
+    char msg[64];
+    pe_goods_count();
+    pe_shop_buy_index(s_grid, msg, sizeof msg);
     pe_toast(msg);
 }
 

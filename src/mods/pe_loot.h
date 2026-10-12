@@ -1,6 +1,7 @@
 /* Shared Junk counter of the loot overhaul (pe_loot.c), for the Mod Catalog,
  * Rebuild and shop (pe_loot_catalog.c, pe_loot_shop.c). */
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -30,6 +31,19 @@ int pe_catalog_unlock_armor(int effect); /* 1 if it was new */
  * reward unlocks, adds a Rebuild entry and pays Junk; the caller frees it. */
 uint32_t pe_catalog_dismantle_preview(uint32_t rec);
 uint32_t pe_catalog_dismantle_reward(uint32_t rec, int *unlocks_out);
+
+/* Requisition goods (pe_loot_shop.c) and the Rebuild list (pe_loot_catalog.c),
+ * by index, for Wayne's in-game Workshop and the F1 pages. The *_index
+ * actions write what happened to msg and return 1 on success. */
+int pe_shop_count(void);
+uint16_t pe_shop_item(int i);
+uint32_t pe_shop_price_index(int i);
+const char *pe_shop_blocked_index(int i);   /* why it can't be bought now, or 0 */
+int pe_shop_buy_index(int i, char *msg, size_t msg_size);
+int pe_rebuild_count(void);
+uint8_t pe_rebuild_item(int i);
+uint32_t pe_rebuild_price_index(int i);
+int pe_rebuild_index(int i, char *msg, size_t msg_size);
 
 #ifdef __cplusplus
 }

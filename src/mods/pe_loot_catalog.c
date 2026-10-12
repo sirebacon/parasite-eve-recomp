@@ -740,25 +740,40 @@ static int pe_create_item(uint8_t id, uint8_t slots, const int16_t bonus[3],
     return 1;
 }
 
+/* pe_loot.h, for Wayne's in-game Workshop (pe_wayne_menu.c) and the F1 page. */
+int pe_rebuild_count(void) { return s_cat.rebuild_count; }
+uint8_t pe_rebuild_item(int i) { return i >= 0 && i < s_cat.rebuild_count ? s_cat.rebuild[i].id : 0; }
+uint32_t pe_rebuild_price_index(int i) {
+    return i >= 0 && i < s_cat.rebuild_count ? pe_rebuild_price(&s_cat.rebuild[i]) : 0;
+}
+
+/* Rebuild entry i; msg gets what happened. Returns 1 if rebuilt. */
+int pe_rebuild_index(int i, char *msg, size_t msg_size) {
+    if (!pe_loaded()) { snprintf(msg, msg_size, "Load a game first"); return 0; }
+    if (!pe_loot_enabled()) { snprintf(msg, msg_size, "Junk economy is off"); return 0; }
+    if (i < 0 || i >= s_cat.rebuild_count) { snprintf(msg, msg_size, "Nothing to rebuild"); return 0; }
+    const PeRebuildEntry r = s_cat.rebuild[i];
+    const uint32_t price = pe_rebuild_price(&r);
+    if (pe_loot_junk() < price) {
+        snprintf(msg, msg_size, "Need %u Junk (have %u)", (unsigned)price, (unsigned)pe_loot_junk());
+        return 0;
+    }
+    if (!pe_create_item(r.id, r.slots, r.bonus, 0, 0)) {
+        snprintf(msg, msg_size, "Bag full");
+        return 0;
+    }
+    pe_loot_spend_junk(price);
+    memmove(&s_cat.rebuild[i], &s_cat.rebuild[i + 1],
+            sizeof(PeRebuildEntry) * (size_t)(s_cat.rebuild_count - i - 1));
+    --s_cat.rebuild_count;
+    snprintf(msg, msg_size, "Rebuilt %s (-%u Junk)", pe_item_name(r.id), (unsigned)price);
+    return 1;
+}
+
 static void pe_rebuild(void) {
     char msg[80];
     if (!pe_ready()) return;
-    if (!s_cat.rebuild_count || s_rb_choice < 0 || s_rb_choice >= s_cat.rebuild_count) {
-        pe_toast("Nothing to rebuild"); return;
-    }
-    const PeRebuildEntry r = s_cat.rebuild[s_rb_choice];
-    const uint32_t price = pe_rebuild_price(&r);
-    if (pe_loot_junk() < price) {
-        snprintf(msg, sizeof msg, "Need %u Junk (have %u)", (unsigned)price, (unsigned)pe_loot_junk());
-        pe_toast(msg); return;
-    }
-    if (!pe_create_item(r.id, r.slots, r.bonus, 0, 0)) return;
-
-    pe_loot_spend_junk(price);
-    memmove(&s_cat.rebuild[s_rb_choice], &s_cat.rebuild[s_rb_choice + 1],
-            sizeof(PeRebuildEntry) * (size_t)(s_cat.rebuild_count - s_rb_choice - 1));
-    --s_cat.rebuild_count;
-    snprintf(msg, sizeof msg, "Rebuilt %s (-%u Junk)", pe_item_name(r.id), (unsigned)price);
+    pe_rebuild_index(s_rb_choice, msg, sizeof msg);
     pe_toast(msg);
 }
 
