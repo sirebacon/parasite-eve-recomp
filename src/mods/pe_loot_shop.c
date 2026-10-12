@@ -9,7 +9,8 @@
  *                saved. Not sold (decisions 14, 33, 43): Super Tools, guns,
  *                armor, stat boosters, Revive, Full Recover, Maeda's bullets.
  *   Spare Club   decision 36: when Aya can't attack (no melee weapon, and no
- *                gun with rounds loaded or in its ammo pool), a free Club 1,
+ *                gun with rounds loaded or in its ammo pool, in the bag or the
+ *                trunk), a free Club 1,
  *                and Bullets x15 cost 0 until she has ammo again. A toast
  *                points here when it happens.
  *
@@ -39,6 +40,8 @@
 #define PE_SLOT_COUNT_ADDR      0x800C0E0Cu
 #define PE_BONUS_SLOTS_ADDR     0x8009D018u
 #define PE_AYA_SLOTS_ADDR       0x800C0E48u
+#define PE_STORAGE_ADDR         0x800C1EB8u   /* the trunk: 100 slots */
+#define PE_STORAGE_COUNT        100u
 #define PE_EQUIP_RECORDS_ADDR   0x800C0EACu
 #define PE_EQUIP_RECORD_COUNT   128u
 #define PE_AMMO_POOLS_ADDR      0x800A1E64u   /* D_800A1E64[3] */
@@ -164,18 +167,23 @@ static int pe_gun_pool(int kind) {
     return -1;
 }
 
-/* Decision 36: Aya can't attack with anything she carries. */
+/* A bag or trunk value that is a weapon Aya could attack with. */
+static int pe_can_attack_with(uint16_t v) {
+    if (v < 256 || v >= 256 + PE_EQUIP_RECORD_COUNT) return 0;
+    const uint32_t rec = PE_EQUIP_RECORDS_ADDR + (uint32_t)(v - 256) * REC_SIZE;
+    const int kind = psx_mod_read_byte(rec + REC_KIND);
+    if (kind == 8) return 1;                  /* melee */
+    const int pool = pe_gun_pool(kind);
+    return pool >= 0 && (psx_mod_read_half(rec + REC_AMMO) || pe_pool_rounds(pool));
+}
+
+/* Decision 36: nothing in the bag or the trunk lets Aya attack. */
 static int pe_cannot_attack(void) {
     const uint32_t limit = pe_bag_limit();
-    for (uint32_t i = 0; i < limit; ++i) {
-        const uint16_t v = pe_bag(i);
-        if (v < 256 || v >= 256 + PE_EQUIP_RECORD_COUNT) continue;
-        const uint32_t rec = PE_EQUIP_RECORDS_ADDR + (uint32_t)(v - 256) * REC_SIZE;
-        const int kind = psx_mod_read_byte(rec + REC_KIND);
-        if (kind == 8) return 0;              /* melee */
-        const int pool = pe_gun_pool(kind);
-        if (pool >= 0 && (psx_mod_read_half(rec + REC_AMMO) || pe_pool_rounds(pool))) return 0;
-    }
+    for (uint32_t i = 0; i < limit; ++i)
+        if (pe_can_attack_with(pe_bag(i))) return 0;
+    for (uint32_t i = 0; i < PE_STORAGE_COUNT; ++i)
+        if (pe_can_attack_with(psx_mod_read_half(PE_STORAGE_ADDR + i * 2u))) return 0;
     return 1;
 }
 
