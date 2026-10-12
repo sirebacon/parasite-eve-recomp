@@ -28,6 +28,25 @@
 #include "mod_plugins.h"
 
 #define PE_INV_SLOT_COUNT_ADDR 0x800C0E0Cu
+#define PE_AYA_SLOTS_ADDR      0x800C0E48u  /* g_AyaInventoryItems */
+#define PE_ACTIVE_LIST_PTR     0x8009D048u  /* g_InvItemPtr */
+#define PE_ACTIVE_LIST_LIMIT   0x8009D050u  /* g_InvSlotLimit */
+#define PE_BONUS_SLOTS_ADDR    0x8009D018u  /* g_InvBonusSlotCount */
+
+/* The game caches the bag's length in g_InvSlotLimit whenever it selects Aya's
+ * bag (Inv_GetAyaSlotLimit = slot count + armor bonus slots, max 50), and its
+ * own capacity setter refreshes that cache. Raising the slot count from here
+ * must do the same, or the game keeps the old length until it next re-selects
+ * the bag: items in the new slots are then invisible, and a weapon equipped
+ * from one builds an empty battle action (Aya's turn gauge never fills). */
+static void pe_inventory_floor_sync_limit(void) {
+    if (psx_mod_read_word(PE_ACTIVE_LIST_PTR) != PE_AYA_SLOTS_ADDR) return;
+    uint32_t limit = psx_mod_read_byte(PE_INV_SLOT_COUNT_ADDR) +
+                     psx_mod_read_word(PE_BONUS_SLOTS_ADDR);
+    if (limit > 50u) limit = 50u;
+    if (psx_mod_read_word(PE_ACTIVE_LIST_LIMIT) < limit)
+        psx_mod_write_word(PE_ACTIVE_LIST_LIMIT, limit);
+}
 
 static int pe_inventory_floor_slots(void) {
     char text[16] = "";
@@ -58,6 +77,7 @@ static void pe_inventory_floor_vblank(void) {
     if ((int)current < floor_slots) {
         psx_mod_write_byte(PE_INV_SLOT_COUNT_ADDR, (uint8_t)floor_slots);
     }
+    pe_inventory_floor_sync_limit();
 }
 
 PSX_MOD_CONSTRUCTOR(pe_register_inventory_floor_plugin) {
