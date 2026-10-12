@@ -58,7 +58,10 @@
 #define NODE_ROWS_MIRROR  0x6Cu
 #define PE_INPUT_ACCEPT   0x10000u
 #define PE_INPUT_CANCEL   0x40u
-#define PE_COMBINE_ROW    3
+/* Shown order Use / Move / Combine / Discard: rows 2 and 3 are drawn swapped,
+ * so the game's row 2 (Discard) appears last and row 3 (Combine) above it. */
+#define PE_COMBINE_ROW    2               /* where Combine is shown */
+#define PE_DISCARD_SHOWN  3               /* where Discard is shown */
 
 #define PE_MENU_ACTIVE_LIST      0x8009CF10u   /* g_MenuActiveItemList */
 #define PE_MENU_ACTIVE_SLOT      0x8009CF04u   /* g_MenuActiveItemSlot */
@@ -80,6 +83,7 @@ static int s_combine_row = 1;            /* C10: the Combine action row */
 static uint32_t s_suffix;                /* our label suffix, mod memory */
 static uint32_t s_combine_text;          /* "Combine", mod memory */
 static uint32_t s_extended_node;         /* the action list we gave a 4th row */
+static int s_restore_cursor;             /* put the cursor back on Discard's row */
 
 static int pe_ram_pointer(uint32_t p) { return p >= 0x80000000u && p < 0x80200000u; }
 
@@ -218,26 +222,50 @@ static void pe_set_rows(uint32_t node, int rows) {
                            psx_mod_read_word(parent + NODE_VISIBLE_ROWS) + (uint32_t)((rows - now) * 16));
 }
 
-/* Sfx_ContextPick(row) entry, once per frame for row 0: grow or shrink. */
+/* The extended list is the one on screen: still the current node, still a
+ * four-row consumables list (a new list can reuse the node's memory). */
+static int pe_extended_active(void) {
+    return s_extended_node && s_extended_node == psx_mod_read_word(PE_MENU_CURRENT_NODE) &&
+           psx_mod_read_word(s_extended_node + NODE_Y_LIMIT) == 4u &&
+           psx_mod_read_word(PE_MENU_ACTION_CONTEXT) == 0;
+}
+
+/* Sfx_ContextPick(row) entry: on the extended list rows 2 and 3 swap (Combine
+ * above Discard); once per frame, at row 0, grow or shrink the list. */
 static void pe_on_context_pick(struct CPUState *cpu, uint32_t address) {
     (void)address;
-    if (cpu->gpr[4] != 0) return;
+    const uint32_t row = cpu->gpr[4];
+    if (row != 0) {
+        if (pe_extended_active()) {
+            if (row == 2) cpu->gpr[4] = 3;
+            else if (row == 3) cpu->gpr[4] = 2;
+        }
+        return;
+    }
     const uint32_t node = pe_action_list_node();
-    if (!node) { s_extended_node = 0; return; }
+    if (!node) return;                       /* e.g. the Discard dialog is on top */
     const int want = pe_combine_pair(0) >= 0;
-    if (want && s_extended_node != node && psx_mod_read_word(node + NODE_Y_LIMIT) == 3u) {
+    const uint32_t rows = psx_mod_read_word(node + NODE_Y_LIMIT);
+    if (want && rows == 3u) {
         pe_set_rows(node, 4);
         s_extended_node = node;
-    } else if (!want && s_extended_node == node) {
+    } else if (!want && s_extended_node == node && rows == 4u) {
         pe_set_rows(node, 3);
         s_extended_node = 0;
+    }
+    /* After a Discard press the cursor was moved to Discard's real row (2);
+     * back on the list (the dialog said no), it goes back down. */
+    if (s_restore_cursor && node == s_extended_node) {
+        if (psx_mod_read_word(node + NODE_CURSOR_Y) == 2u)
+            psx_mod_write_word(node + NODE_CURSOR_Y, PE_DISCARD_SHOWN);
+        s_restore_cursor = 0;
     }
 }
 
 /* Draw_PrintCenteredTextInWidth(text, width) entry: label the fourth row. */
 static void pe_on_centered_text(struct CPUState *cpu, uint32_t address) {
     (void)address;
-    if (!s_extended_node || s_extended_node != psx_mod_read_word(PE_MENU_CURRENT_NODE)) return;
+    if (!pe_extended_active()) return;
     if (cpu->gpr[4] != pe_text_entry(0x04u, 3u)) return;   /* action 3's label */
     if (!s_combine_text) {
         s_combine_text = psx_mod_alloc_guest_memory(16, 4);
@@ -253,12 +281,17 @@ static void pe_on_centered_text(struct CPUState *cpu, uint32_t address) {
 /* Menu_StepEquipScreen(node, flags) entry: accept on the Combine row. */
 static void pe_on_step_equip_screen(struct CPUState *cpu, uint32_t address) {
     (void)address;
-    if (!(cpu->gpr[5] & PE_INPUT_ACCEPT) || !s_extended_node) return;
+    if (!(cpu->gpr[5] & PE_INPUT_ACCEPT) || !pe_extended_active()) return;
     const uint32_t parent = cpu->gpr[4];
     if (!pe_ram_pointer(parent) || psx_mod_read_word(parent + NODE_CHILD0) != s_extended_node) return;
     const uint32_t list = s_extended_node;
     const int cell = (int)psx_mod_read_word(list + NODE_GRID_WIDTH) * (int)psx_mod_read_word(list + NODE_CURSOR_Y) +
                      (int)psx_mod_read_word(list + NODE_CURSOR_X);
+    if (cell == PE_DISCARD_SHOWN) {          /* the game's Discard is its row 2 */
+        psx_mod_write_word(list + NODE_CURSOR_Y, 2u);
+        s_restore_cursor = 1;
+        return;
+    }
     if (cell != PE_COMBINE_ROW) return;
     uint16_t id = 0;
     const int other = pe_combine_pair(&id);
