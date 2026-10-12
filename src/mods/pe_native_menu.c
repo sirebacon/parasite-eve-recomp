@@ -266,20 +266,35 @@ static void pe_on_context_pick(struct CPUState *cpu, uint32_t address) {
     }
 }
 
-/* Draw_PrintCenteredTextInWidth(text, width) entry: label the fourth row. */
+/* A short label in mod memory, written once. */
+static uint32_t pe_label(uint32_t *slot, const char *ascii) {
+    if (*slot) return *slot;
+    const uint32_t g = psx_mod_alloc_guest_memory(16, 4);
+    if (!g) return 0;
+    uint8_t out[16];
+    unsigned n = pe_put_ascii(out, 0, sizeof out - 1, ascii);
+    out[n++] = 0xFFu;
+    for (unsigned i = 0; i < n; ++i) psx_mod_write_byte(g + i, out[i]);
+    return *slot = g;
+}
+
+/* Draw_PrintCenteredTextInWidth(text, width) entry: action row labels.
+ *   - "Combine" for the extended medicine list's fourth row (action 3);
+ *   - "Dismantle" for Discard (action 2) on a gun or armor while Discard
+ *     dismantles (decision 47); everything else keeps "Discard". */
 static void pe_on_centered_text(struct CPUState *cpu, uint32_t address) {
     (void)address;
-    if (!pe_extended_active()) return;
-    if (cpu->gpr[4] != pe_text_entry(0x04u, 3u)) return;   /* action 3's label */
-    if (!s_combine_text) {
-        s_combine_text = psx_mod_alloc_guest_memory(16, 4);
-        if (!s_combine_text) return;
-        uint8_t out[16];
-        unsigned n = pe_put_ascii(out, 0, sizeof out - 1, "Combine");
-        out[n++] = 0xFFu;
-        for (unsigned i = 0; i < n; ++i) psx_mod_write_byte(s_combine_text + i, out[i]);
+    static uint32_t s_dismantle_text;
+    const uint32_t text = cpu->gpr[4];
+    if (pe_extended_active() && text == pe_text_entry(0x04u, 3u)) {
+        const uint32_t g = pe_label(&s_combine_text, "Combine");
+        if (g) cpu->gpr[4] = g;
+        return;
     }
-    cpu->gpr[4] = s_combine_text;
+    if (text == pe_text_entry(0x04u, 2u) && pe_action_list_node() && pe_selected().what == 1) {
+        const uint32_t g = pe_label(&s_dismantle_text, "Dismantle");
+        if (g) cpu->gpr[4] = g;
+    }
 }
 
 /* Menu_StepEquipScreen(node, flags) entry: accept on the Combine row. */
