@@ -10,9 +10,18 @@
  *     "<name> will be dismantled for N Junk", and "yes" unlocks its effects in
  *     the Mod Catalog, puts it on the Rebuild list and pays the Junk
  *     (pe_catalog_dismantle_reward); the game's own code then removes it.
- *   - Discard on Medicine 1-3 while the bag holds two of it combines them
- *     (C10): "<name> x2 will become <next>", and "yes" turns the other one
- *     into the next medicine while the game removes the selected one.
+ *   - Combine (C10): a real fourth action row, "Combine", on Medicine 1-3
+ *     in Aya's bag while she holds two of it (not in battle). The action list
+ *     is a widget of three rows reading g_MenuItemActionStateTable
+ *     (0x80092234, int [context][3]); consumables (context 0) are Use / Move
+ *     / Discard. While the list is open for such a medicine, the list node
+ *     (g_MenuWidgetCurrentNode) gets a fourth row (y_limit / visible_rows)
+ *     and its panel 16 px more height; the fourth row reads the next
+ *     context's first entry, action 3, whose label (Str_LookupTable4(3),
+ *     drawn by Draw_PrintCenteredTextInWidth) is swapped for "Combine", and
+ *     accepting it (Menu_StepEquipScreen with the cursor on row 3) combines
+ *     the pair -- the selected medicine becomes the next one, the other goes
+ *     -- and closes the list as a cancel would. Discard stays vanilla.
  *
  * Hooks: Util_AppendFFTerminatedBytes (0x80052C08) while the dialog label is
  * built (Menu_StepItemDetailPanel appends Str_LookupTable4(4) " will be
@@ -31,6 +40,25 @@
 
 #define PE_FN_APPEND_FF_TEXT     0x80052C08u   /* Util_AppendFFTerminatedBytes(dst, src) */
 #define PE_FN_DISCARD_CONFIRM    0x80045110u   /* Menu_OnItemDiscardConfirm(dialog, yes) */
+#define PE_FN_CONTEXT_PICK       0x80050878u   /* Sfx_ContextPick(row): draws an action row */
+#define PE_FN_CENTERED_TEXT      0x8005F354u   /* Draw_PrintCenteredTextInWidth(text, w) */
+#define PE_FN_STEP_EQUIP_SCREEN  0x80044B0Cu   /* Menu_StepEquipScreen(node, flags) */
+
+#define PE_MENU_CURRENT_NODE     0x8009D15Cu   /* g_MenuWidgetCurrentNode */
+#define PE_MENU_ACTION_CONTEXT   0x8009CDA8u   /* g_MenuItemActionContext: 0 consumables */
+#define PE_GAME_BLOCK_ADDR       0x8009D1A0u
+#define NODE_PARENT       0x04u
+#define NODE_CHILD0       0x08u
+#define NODE_UPDATE       0x2Cu
+#define NODE_GRID_WIDTH   0x34u
+#define NODE_VISIBLE_ROWS 0x38u
+#define NODE_CURSOR_X     0x44u
+#define NODE_CURSOR_Y     0x48u
+#define NODE_Y_LIMIT      0x58u
+#define NODE_ROWS_MIRROR  0x6Cu
+#define PE_INPUT_ACCEPT   0x10000u
+#define PE_INPUT_CANCEL   0x40u
+#define PE_COMBINE_ROW    3
 
 #define PE_MENU_ACTIVE_LIST      0x8009CF10u   /* g_MenuActiveItemList */
 #define PE_MENU_ACTIVE_SLOT      0x8009CF04u   /* g_MenuActiveItemSlot */
@@ -48,8 +76,10 @@
 #define PE_ITEM_MEDICINE_3 0x08u
 
 static int s_discard_dismantles = 1;     /* decision 25 via Discard (44) */
-static int s_discard_combines = 1;       /* C10 via Discard (44) */
+static int s_combine_row = 1;            /* C10: the Combine action row */
 static uint32_t s_suffix;                /* our label suffix, mod memory */
+static uint32_t s_combine_text;          /* "Combine", mod memory */
+static uint32_t s_extended_node;         /* the action list we gave a 4th row */
 
 static int pe_ram_pointer(uint32_t p) { return p >= 0x80000000u && p < 0x80200000u; }
 
@@ -77,8 +107,7 @@ static uint8_t pe_glyph(char c) {
     return 0x0F;
 }
 
-/* What the selected item is: 1 = gun/armor (rec set), 2 = Medicine 1-3 with
- * another of it in the bag (other = that slot), 0 = neither. */
+/* What the selected item is: 1 = gun/armor (rec set), 0 = anything else. */
 typedef struct { int what; uint32_t rec; uint16_t id; int other; } PeSelected;
 
 static PeSelected pe_selected(void) {
@@ -102,28 +131,7 @@ static PeSelected pe_selected(void) {
         }
         return s;
     }
-    if (!list && s_discard_combines && pe_loot_enabled() &&
-        v >= PE_ITEM_MEDICINE_1 && v <= PE_ITEM_MEDICINE_3) {
-        const uint32_t limit = pe_bag_limit();
-        for (uint32_t i = 0; i < limit; ++i)
-            if ((int)i != slot && psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == v) {
-                s.what = 2; s.id = v; s.other = (int)i;
-                break;
-            }
-    }
     return s;
-}
-
-/* Copy of a game item name (text table +0x08) into out, glyph codes. */
-static unsigned pe_put_item_name(uint8_t *out, unsigned n, unsigned max, uint16_t id) {
-    const uint32_t name = pe_text_entry(0x08u, (unsigned)id - 1u);
-    if (!name) return n;
-    for (unsigned i = 0; n < max; ++i) {
-        const uint8_t c = psx_mod_read_byte(name + i);
-        if (c == 0xFFu) break;
-        out[n++] = c;
-    }
-    return n;
 }
 
 static unsigned pe_put_ascii(uint8_t *out, unsigned n, unsigned max, const char *text) {
@@ -143,14 +151,9 @@ static void pe_on_append_text(struct CPUState *cpu, uint32_t address) {
     uint8_t out[48];
     unsigned n = 0;
     char buf[40];
-    if (sel.what == 1) {
-        snprintf(buf, sizeof buf, " will be dismantled for %u Junk",
-                 (unsigned)pe_catalog_dismantle_preview(sel.rec));
-        n = pe_put_ascii(out, n, sizeof out - 1, buf);
-    } else {
-        n = pe_put_ascii(out, n, sizeof out - 1, " x2 will become ");
-        n = pe_put_item_name(out, n, sizeof out - 1, (uint16_t)(sel.id + 1u));
-    }
+    snprintf(buf, sizeof buf, " will be dismantled for %u Junk",
+             (unsigned)pe_catalog_dismantle_preview(sel.rec));
+    n = pe_put_ascii(out, n, sizeof out - 1, buf);
     out[n++] = 0xFFu;
     for (unsigned i = 0; i < n; ++i) psx_mod_write_byte(s_suffix + i, out[i]);
     cpu->gpr[5] = s_suffix;
@@ -169,11 +172,105 @@ static void pe_on_discard_confirm(struct CPUState *cpu, uint32_t address) {
         snprintf(msg, sizeof msg, "Dismantled: +%u Junk, %d new effect(s) (total %u)",
                  (unsigned)paid, unlocks, (unsigned)pe_loot_junk());
         psx_mod_osd_message(msg);
-    } else if (sel.what == 2) {
-        psx_mod_write_half(PE_AYA_SLOTS_ADDR + (uint32_t)sel.other * 2u, (uint16_t)(sel.id + 1u));
-        snprintf(msg, sizeof msg, "Combined into Medicine %u", (unsigned)(sel.id - PE_ITEM_MEDICINE_1 + 2u));
-        psx_mod_osd_message(msg);
     }
+}
+
+/* ---- Combine row (C10) ------------------------------------------------------ */
+/* The bag slot of another medicine like the selected one, or -1 (only for
+ * Medicine 1-3 selected in Aya's bag, outside battle, economy on). */
+static int pe_combine_pair(uint16_t *id_out) {
+    if (!s_combine_row || !pe_loot_enabled() || !pe_loaded()) return -1;
+    if (psx_mod_read_word(PE_GAME_BLOCK_ADDR) & 0x2u) return -1;
+    if (psx_mod_read_word(PE_MENU_ACTIVE_LIST) != 0) return -1;
+    if (psx_mod_read_word(PE_MENU_ACTION_CONTEXT) != 0) return -1;
+    const int slot = (int)psx_mod_read_word(PE_MENU_ACTIVE_SLOT);
+    const uint32_t limit = pe_bag_limit();
+    if (slot < 0 || (uint32_t)slot >= limit) return -1;
+    const uint16_t v = psx_mod_read_half(PE_AYA_SLOTS_ADDR + (uint32_t)slot * 2u);
+    if (v < PE_ITEM_MEDICINE_1 || v > PE_ITEM_MEDICINE_3) return -1;
+    for (uint32_t i = 0; i < limit; ++i)
+        if ((int)i != slot && psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == v) {
+            if (id_out) *id_out = v;
+            return (int)i;
+        }
+    return -1;
+}
+
+/* The open item-action list node, if the current node is one. */
+static uint32_t pe_action_list_node(void) {
+    const uint32_t node = psx_mod_read_word(PE_MENU_CURRENT_NODE);
+    if (!pe_ram_pointer(node)) return 0;
+    const uint32_t parent = psx_mod_read_word(node + NODE_PARENT);
+    if (!pe_ram_pointer(parent) || psx_mod_read_word(parent + NODE_UPDATE) != PE_FN_STEP_EQUIP_SCREEN)
+        return 0;
+    return node;
+}
+
+static void pe_set_rows(uint32_t node, int rows) {
+    const uint32_t parent = psx_mod_read_word(node + NODE_PARENT);
+    const int now = (int)psx_mod_read_word(node + NODE_Y_LIMIT);
+    if (now == rows) return;
+    psx_mod_write_word(node + NODE_Y_LIMIT, (uint32_t)rows);
+    psx_mod_write_word(node + NODE_VISIBLE_ROWS, (uint32_t)rows);
+    psx_mod_write_word(node + NODE_ROWS_MIRROR, (uint32_t)rows);
+    if (pe_ram_pointer(parent))                /* the panel: 16 px per row */
+        psx_mod_write_word(parent + NODE_VISIBLE_ROWS,
+                           psx_mod_read_word(parent + NODE_VISIBLE_ROWS) + (uint32_t)((rows - now) * 16));
+}
+
+/* Sfx_ContextPick(row) entry, once per frame for row 0: grow or shrink. */
+static void pe_on_context_pick(struct CPUState *cpu, uint32_t address) {
+    (void)address;
+    if (cpu->gpr[4] != 0) return;
+    const uint32_t node = pe_action_list_node();
+    if (!node) { s_extended_node = 0; return; }
+    const int want = pe_combine_pair(0) >= 0;
+    if (want && s_extended_node != node && psx_mod_read_word(node + NODE_Y_LIMIT) == 3u) {
+        pe_set_rows(node, 4);
+        s_extended_node = node;
+    } else if (!want && s_extended_node == node) {
+        pe_set_rows(node, 3);
+        s_extended_node = 0;
+    }
+}
+
+/* Draw_PrintCenteredTextInWidth(text, width) entry: label the fourth row. */
+static void pe_on_centered_text(struct CPUState *cpu, uint32_t address) {
+    (void)address;
+    if (!s_extended_node || s_extended_node != psx_mod_read_word(PE_MENU_CURRENT_NODE)) return;
+    if (cpu->gpr[4] != pe_text_entry(0x04u, 3u)) return;   /* action 3's label */
+    if (!s_combine_text) {
+        s_combine_text = psx_mod_alloc_guest_memory(16, 4);
+        if (!s_combine_text) return;
+        uint8_t out[16];
+        unsigned n = pe_put_ascii(out, 0, sizeof out - 1, "Combine");
+        out[n++] = 0xFFu;
+        for (unsigned i = 0; i < n; ++i) psx_mod_write_byte(s_combine_text + i, out[i]);
+    }
+    cpu->gpr[4] = s_combine_text;
+}
+
+/* Menu_StepEquipScreen(node, flags) entry: accept on the Combine row. */
+static void pe_on_step_equip_screen(struct CPUState *cpu, uint32_t address) {
+    (void)address;
+    if (!(cpu->gpr[5] & PE_INPUT_ACCEPT) || !s_extended_node) return;
+    const uint32_t parent = cpu->gpr[4];
+    if (!pe_ram_pointer(parent) || psx_mod_read_word(parent + NODE_CHILD0) != s_extended_node) return;
+    const uint32_t list = s_extended_node;
+    const int cell = (int)psx_mod_read_word(list + NODE_GRID_WIDTH) * (int)psx_mod_read_word(list + NODE_CURSOR_Y) +
+                     (int)psx_mod_read_word(list + NODE_CURSOR_X);
+    if (cell != PE_COMBINE_ROW) return;
+    uint16_t id = 0;
+    const int other = pe_combine_pair(&id);
+    if (other < 0) return;
+    const int slot = (int)psx_mod_read_word(PE_MENU_ACTIVE_SLOT);
+    psx_mod_write_half(PE_AYA_SLOTS_ADDR + (uint32_t)slot * 2u, (uint16_t)(id + 1u));
+    psx_mod_write_half(PE_AYA_SLOTS_ADDR + (uint32_t)other * 2u, 0);
+    char msg[48];
+    snprintf(msg, sizeof msg, "Combined into Medicine %u", (unsigned)(id - PE_ITEM_MEDICINE_1 + 2u));
+    psx_mod_osd_message(msg);
+    s_extended_node = 0;
+    cpu->gpr[5] = PE_INPUT_CANCEL;            /* the game closes the list */
 }
 
 #define PE_WORKSHOP_PAGE "Workshop"
@@ -182,10 +279,16 @@ static void pe_on_discard_confirm(struct CPUState *cpu, uint32_t address) {
 void pe_native_menu_register(void) {
     (void)pe_menu_register_toggle(PE_WORKSHOP_PAGE, "Discard dismantles",
         "Discarding gear in Aya's menu pays Junk.", &s_discard_dismantles, 0);
-    (void)pe_menu_register_toggle(PE_WORKSHOP_PAGE, "Discard combines",
-        "Discard Medicine x2: next medicine.", &s_discard_combines, 0);
+    (void)pe_menu_register_toggle(PE_WORKSHOP_PAGE, "Combine medicine",
+        "Combine row: Medicine x2 -> next.", &s_combine_row, 0);
     (void)psx_mod_register_function_entry_plugin("pe.native.append-text",
         PE_FN_APPEND_FF_TEXT, pe_on_append_text);
     (void)psx_mod_register_function_entry_plugin("pe.native.discard",
         PE_FN_DISCARD_CONFIRM, pe_on_discard_confirm);
+    (void)psx_mod_register_function_entry_plugin("pe.native.combine-rows",
+        PE_FN_CONTEXT_PICK, pe_on_context_pick);
+    (void)psx_mod_register_function_entry_plugin("pe.native.combine-label",
+        PE_FN_CENTERED_TEXT, pe_on_centered_text);
+    (void)psx_mod_register_function_entry_plugin("pe.native.combine-accept",
+        PE_FN_STEP_EQUIP_SCREEN, pe_on_step_equip_screen);
 }
