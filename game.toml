@@ -44,7 +44,14 @@ strict = true
 # psx_mod_function_entry() call at the top of its generated function.
 #   0x8005F27C Draw_PrintRawText - pe_weapon_power.c (gun power in menu titles)
 #   0x800299CC Battle_Update     - pe_atb_items.c (half-bar items)
-mod_function_entry_funcs = ["0x8005F27C", "0x800299CC"]
+#   Loot overhaul (bridge findings pe-loot-overhaul-design-2026-10-11.md, 6.4-6.6):
+#   0x8004B70C Aya_SetTotalExp   - battle-end rewards (a0 EXP, a1 BP, a2 reward list)
+#   0x8005D2B4 Inv_DispatchCommand - script inventory commands (Wayne's hand-in)
+#   0x80053D2C Inv_AddItem       - chest/story pickups and steals
+#   0x8003F800 Save_SerializeTail   - memory-card save (mod data in the save tail)
+#   0x8003FBD8 Save_DeserializeTail - memory-card load
+mod_function_entry_funcs = ["0x8005F27C", "0x800299CC", "0x8004B70C", "0x8005D2B4",
+                            "0x80053D2C", "0x8003F800", "0x8003FBD8"]
 
 [runtime]
 window_title = "Parasite Eve Recompiled"

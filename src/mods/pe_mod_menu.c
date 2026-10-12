@@ -243,6 +243,7 @@ void pe_god_mode_menu_register(void);   /* pe_god_mode.c */
 void pe_cheats_menu_register(void);     /* pe_cheats.c */
 void pe_weapon_power_menu_register(void); /* pe_weapon_power.c */
 void pe_atb_items_menu_register(void);  /* pe_atb_items.c */
+void pe_wayne_refund_menu_register(void); /* pe_wayne_refund.c */
 void pe_stats_menu_register(void);      /* pe_stats_menu.c */
 void pe_item_editor_register(void);     /* pe_item_editor.c */
 void pe_debug_menu_register(void);      /* pe_debug_menu.c */
@@ -264,6 +265,7 @@ PSX_MOD_CONSTRUCTOR(pe_register_mod_menu_plugin) {
     pe_cheats_menu_register();
     pe_weapon_power_menu_register();
     pe_atb_items_menu_register();
+    pe_wayne_refund_menu_register();
     pe_stats_menu_register();
     pe_item_editor_register();
     pe_debug_menu_register();
