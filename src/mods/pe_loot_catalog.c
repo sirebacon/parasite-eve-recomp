@@ -272,6 +272,23 @@ static int pe_is_last_club(int slot) {
     return 1;
 }
 
+/* Junk a dismantle pays and how many effects it newly unlocks. */
+static uint32_t pe_dismantle_preview(uint32_t rec, int which, int *unlocks_out) {
+    uint32_t payout = 5u + 2u * (uint32_t)pe_bonus_sum(rec);
+    int unlocks = 0, dupes = 0;
+    const int n = pe_mod_count(rec);
+    for (int m = 0; m < n; ++m) {
+        const int e = psx_mod_read_byte(rec + REC_MODS + (uint32_t)m) & 0x1F;
+        if (!e) continue;
+        payout += 3u;
+        if (pe_unlocked(which, e)) ++dupes; else ++unlocks;
+    }
+    payout += 5u * (uint32_t)dupes;
+    if (payout > PE_PAYOUT_CAP) payout = PE_PAYOUT_CAP;
+    if (unlocks_out) *unlocks_out = unlocks;
+    return payout;
+}
+
 static void pe_dismantle(void) {
     char msg[96];
     if (!pe_ready()) return;
@@ -285,17 +302,9 @@ static void pe_dismantle(void) {
     if (which < 0) return;
     if (pe_is_last_club(slot)) { pe_toast("Keep your last Club"); s_dis_armed = -1; return; }
 
-    uint32_t payout = 5u + 2u * (uint32_t)pe_bonus_sum(rec);
-    int unlocks = 0, dupes = 0;
+    int unlocks = 0;
+    const uint32_t payout = pe_dismantle_preview(rec, which, &unlocks);
     const int n = pe_mod_count(rec);
-    for (int m = 0; m < n; ++m) {
-        const int e = psx_mod_read_byte(rec + REC_MODS + (uint32_t)m) & 0x1F;
-        if (!e) continue;
-        payout += 3u;
-        if (pe_unlocked(which, e)) ++dupes; else ++unlocks;
-    }
-    payout += 5u * (uint32_t)dupes;
-    if (payout > PE_PAYOUT_CAP) payout = PE_PAYOUT_CAP;
 
     const char *name = pe_item_name(psx_mod_read_byte(rec + REC_ITEM_ID));
     if (s_dis_armed != slot) {                /* first press: show what happens */
@@ -336,12 +345,24 @@ static int s_eff_locked[24];
 static unsigned s_eff_count;
 static char s_eff_names[24][32];
 static char s_slot_names[PE_MAX_MODS][32];
-static const char *const s_target_names[] = { "EQUIPPED GUN", "EQUIPPED ARMOR" };
+static char s_target_names[2][32];
 
-static uint32_t pe_target_record(void) {
+static uint32_t pe_equipped_record(int which) {
     if (!pe_loaded()) return 0;
-    const uint32_t rec = pe_bag_record(pe_equipped_slot(s_target));
-    return rec && pe_record_type(rec) == s_target ? rec : 0;
+    const uint32_t rec = pe_bag_record(pe_equipped_slot(which));
+    return rec && pe_record_type(rec) == which ? rec : 0;
+}
+
+static uint32_t pe_target_record(void) { return pe_equipped_record(s_target); }
+
+/* "GUN: <name>" / "ARMOR: <name>": the item the Catalog works on. */
+static unsigned pe_target_list_count(void) { return 2; }
+static const char *pe_target_list_name(unsigned i) {
+    if (i > 1) return "";
+    const uint32_t rec = pe_equipped_record((int)i);
+    snprintf(s_target_names[i], sizeof s_target_names[0], "%s: %s", i ? "ARMOR" : "GUN",
+             rec ? pe_item_name(psx_mod_read_byte(rec + REC_ITEM_ID)) : "NONE EQUIPPED");
+    return s_target_names[i];
 }
 
 /* Effect seen on any carried item of this type (bag), for the LOCKED preview. */
@@ -449,7 +470,8 @@ static void pe_install(void) {
     psx_mod_write_byte(slot_addr, (uint8_t)((group << 5) | e));
     pe_loot_spend_junk(price);
     if (tier == 2) pe_take_tool(0);
-    snprintf(msg, sizeof msg, "Installed %s (-%u Junk%s)%s", pe_effect_name(s_target, e),
+    snprintf(msg, sizeof msg, "%s: installed %s (-%u Junk%s)%s",
+             pe_item_name(psx_mod_read_byte(rec + REC_ITEM_ID)), pe_effect_name(s_target, e),
              (unsigned)price, tier == 2 ? ", Tool" : "",
              pe_is_bag_mod(s_target, e) ? ". Re-equip to grow the bag" : "");
     pe_toast(msg);
@@ -467,7 +489,8 @@ static void pe_remove(void) {
     if (!e) { pe_toast("That slot is empty"); return; }
     if (pe_is_bag_mod(s_target, e)) { pe_toast("Bag mods can't be removed here"); return; }
     psx_mod_write_byte(a, 0);
-    snprintf(msg, sizeof msg, "Removed %s (still in the Mod Catalog)", pe_effect_name(s_target, e));
+    snprintf(msg, sizeof msg, "%s: removed %s (stays unlocked)",
+             pe_item_name(psx_mod_read_byte(rec + REC_ITEM_ID)), pe_effect_name(s_target, e));
     pe_toast(msg);
 }
 
@@ -542,6 +565,40 @@ static void pe_rebuild(void) {
     pe_toast(msg);
 }
 
+/* ---- live shop rows: your Junk, what the selection costs or pays ------------------- */
+static int pe_get_junk(void) { return (int)pe_loot_junk(); }
+
+static uint32_t pe_selected_dismantle_record(int *which) {
+    if (!pe_loaded()) return 0;
+    pe_dis_list_count();
+    if (!s_dis_count || s_dis_choice < 0 || (unsigned)s_dis_choice >= s_dis_count) return 0;
+    const uint32_t rec = pe_bag_record(s_dis_slots[s_dis_choice]);
+    *which = rec ? pe_record_type(rec) : -1;
+    return *which >= 0 ? rec : 0;
+}
+static int pe_get_dismantle_pays(void) {
+    int which;
+    const uint32_t rec = pe_selected_dismantle_record(&which);
+    return rec ? (int)pe_dismantle_preview(rec, which, 0) : 0;
+}
+static int pe_get_dismantle_unlocks(void) {
+    int which, unlocks = 0;
+    const uint32_t rec = pe_selected_dismantle_record(&which);
+    if (rec) pe_dismantle_preview(rec, which, &unlocks);
+    return unlocks;
+}
+static int pe_get_install_cost(void) {
+    pe_eff_list_count();
+    if (!s_eff_count || s_eff_choice < 0 || (unsigned)s_eff_choice >= s_eff_count ||
+        s_eff_locked[s_eff_choice])
+        return 0;
+    return s_price[pe_effect_tier(s_target, s_eff_ids[s_eff_choice])];
+}
+static int pe_get_rebuild_cost(void) {
+    if (!s_cat.rebuild_count || s_rb_choice < 0 || s_rb_choice >= s_cat.rebuild_count) return 0;
+    return (int)pe_rebuild_price(&s_cat.rebuild[s_rb_choice]);
+}
+
 /* ---- persistence ------------------------------------------------------------------ */
 static uint32_t pe_checksum(const uint8_t *p, uint32_t n) {
     uint32_t s = 0x5A17C0DEu;
@@ -594,20 +651,31 @@ static void pe_catalog_state_loaded(int result, uint32_t saved_version,
 
 /* Called from pe_mod_menu.c after pe_loot_menu_register (Workshop rows first). */
 void pe_loot_catalog_menu_register(void) {
+    (void)pe_menu_register_live_int(PE_DIS_PAGE, "Your Junk",
+        "Junk you have now.", 0, 99999, 1, pe_get_junk, pe_readonly);
     (void)pe_menu_register_dynamic_choice(PE_DIS_PAGE, "Item",
         "Unequipped gun or armor.", &s_dis_choice, 50,
         pe_dis_list_count, pe_dis_list_name);
+    (void)pe_menu_register_live_int(PE_DIS_PAGE, "Pays (Junk)",
+        "Junk this item gives.", 0, 999, 1, pe_get_dismantle_pays, pe_readonly);
+    (void)pe_menu_register_live_int(PE_DIS_PAGE, "New effects",
+        "Effects it adds to the Catalog.", 0, 10, 1, pe_get_dismantle_unlocks, pe_readonly);
     (void)pe_menu_register_action(PE_DIS_PAGE, "Dismantle",
         "Press twice. Effects go to the Catalog.", pe_dismantle);
 
-    (void)pe_menu_register_choice(PE_CAT_PAGE, "Item",
-        "Install on the equipped gun or armor.", &s_target, s_target_names, 2);
+    (void)pe_menu_register_live_int(PE_CAT_PAGE, "Your Junk",
+        "Junk you have now.", 0, 99999, 1, pe_get_junk, pe_readonly);
+    (void)pe_menu_register_dynamic_choice(PE_CAT_PAGE, "Item",
+        "Your equipped gun or armor.", &s_target, 2,
+        pe_target_list_count, pe_target_list_name);
     (void)pe_menu_register_dynamic_choice(PE_CAT_PAGE, "Effect",
         "Price in Junk. LOCKED: dismantle first.", &s_eff_choice, 24,
         pe_eff_list_count, pe_eff_list_name);
     (void)pe_menu_register_dynamic_choice(PE_CAT_PAGE, "Slot",
         "Mod slot to fill or clear.", &s_slot_choice, PE_MAX_MODS,
         pe_slot_list_count, pe_slot_list_name);
+    (void)pe_menu_register_live_int(PE_CAT_PAGE, "Cost (Junk)",
+        "Price of this effect. +TOOL: a Tool too.", 0, 999, 1, pe_get_install_cost, pe_readonly);
     (void)pe_menu_register_action(PE_CAT_PAGE, "Install",
         "Put the effect in the slot.", pe_install);
     (void)pe_menu_register_action(PE_CAT_PAGE, "Remove",
@@ -615,9 +683,13 @@ void pe_loot_catalog_menu_register(void) {
     (void)pe_menu_register_live_int(PE_CAT_PAGE, "Unlocked effects",
         "Effects you can install.", 0, 64, 1, pe_get_unlocked, pe_readonly);
 
+    (void)pe_menu_register_live_int(PE_RB_PAGE, "Your Junk",
+        "Junk you have now.", 0, 99999, 1, pe_get_junk, pe_readonly);
     (void)pe_menu_register_dynamic_choice(PE_RB_PAGE, "Item",
         "Dismantled gear, newest first.", &s_rb_choice, PE_REBUILD_MAX,
         pe_rb_list_count, pe_rb_list_name);
+    (void)pe_menu_register_live_int(PE_RB_PAGE, "Cost (Junk)",
+        "Price to rebuild this item.", 0, 999, 1, pe_get_rebuild_cost, pe_readonly);
     (void)pe_menu_register_action(PE_RB_PAGE, "Rebuild",
         "Buy it back with empty mod slots.", pe_rebuild);
 

@@ -574,6 +574,18 @@ static int pe_get_rare_within(void) {
     const int left = s_tune_rare_guarantee - (int)s_st.rare_dry;
     return left < 1 ? 1 : left;
 }
+static void pe_give_100_junk(void) {
+    char msg[48];
+    pe_add_junk(100);
+    snprintf(msg, sizeof msg, "+100 Junk (total %u)", (unsigned)s_st.junk);
+    psx_mod_osd_message(msg);
+}
+static void pe_give_1000_junk(void) {
+    char msg[48];
+    pe_add_junk(1000);
+    snprintf(msg, sizeof msg, "+1000 Junk (total %u)", (unsigned)s_st.junk);
+    psx_mod_osd_message(msg);
+}
 static int pe_set_junk_debug(int value) {
     if (value < 0 || value > 99999) return 0;
     s_st.junk = (uint32_t)value;
@@ -610,6 +622,10 @@ void pe_loot_menu_register(void) {
         "Added for each battle without one.", &s_tune_rare_step, 0, 50, 1);
     (void)pe_menu_register_int(PE_TUNING_PAGE, "Rare guarantee",
         "Battles until a rare drop is certain.", &s_tune_rare_guarantee, 1, 200, 1);
+    (void)pe_menu_register_action(PE_TUNING_PAGE, "Give 100 Junk",
+        "Debug: add 100 Junk.", pe_give_100_junk);
+    (void)pe_menu_register_action(PE_TUNING_PAGE, "Give 1000 Junk",
+        "Debug: add 1000 Junk.", pe_give_1000_junk);
     (void)pe_menu_register_live_int(PE_TUNING_PAGE, "Set Junk",
         "Debug: change the Junk counter.", 0, 99999, 10,
         pe_get_junk, pe_set_junk_debug);
