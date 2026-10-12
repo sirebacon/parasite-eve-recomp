@@ -7,7 +7,7 @@
  * existing Discard does the overhaul's work when it makes sense:
  *
  *   - Discard on a gun or armor dismantles it (the row reads "Dismantle"): the
- *     confirm dialog reads "<name>: N Junk, rebuildable", and "yes" unlocks its effects in
+ *     confirm dialog reads "<name>: N Junk, M mods recovered, rebuildable" (shorter for long names), and "yes" unlocks its effects in
  *     the Mod Catalog, puts it on the Rebuild list and pays the Junk
  *     (pe_catalog_dismantle_reward); the game's own code then removes it.
  *   - Combine (C10): a real fourth action row, "Combine", on Medicine 1-3
@@ -156,12 +156,26 @@ static void pe_on_append_text(struct CPUState *cpu, uint32_t address) {
     if (!sel.what) return;
     if (!s_suffix) s_suffix = psx_mod_alloc_guest_memory(48, 4);
     if (!s_suffix) return;
+    /* One line (the menu font has no line break), about 36 characters with the
+     * name: the longest of these that fits. Mods = effects still on the item,
+     * which go to the Mod Catalog. */
+    unsigned name_len = 0;
+    while (name_len < 40 && psx_mod_read_byte(PE_MENU_LABEL_BUFFER + name_len) != 0xFFu) ++name_len;
+    int mods = 0;
+    int slots = psx_mod_read_byte(sel.rec + 0x14u);
+    if (slots > 10) slots = 10;
+    for (int m = 0; m < slots; ++m) mods += (psx_mod_read_byte(sel.rec + 0x15u + (uint32_t)m) & 0x1F) != 0;
+    const unsigned junk = (unsigned)pe_catalog_dismantle_preview(sel.rec);
+    char buf[48];
+    if (mods) {
+        snprintf(buf, sizeof buf, ": %u Junk, %d mod%s recovered, rebuildable", junk, mods, mods == 1 ? "" : "s");
+        if (name_len + strlen(buf) > 36u)
+            snprintf(buf, sizeof buf, ": %u Junk, %d mod%s recovered", junk, mods, mods == 1 ? "" : "s");
+    } else {
+        snprintf(buf, sizeof buf, ": %u Junk, rebuildable", junk);
+    }
     uint8_t out[48];
-    unsigned n = 0;
-    char buf[40];
-    snprintf(buf, sizeof buf, ": %u Junk, rebuildable",
-             (unsigned)pe_catalog_dismantle_preview(sel.rec));
-    n = pe_put_ascii(out, n, sizeof out - 1, buf);
+    unsigned n = pe_put_ascii(out, 0, sizeof out - 1, buf);
     out[n++] = 0xFFu;
     for (unsigned i = 0; i < n; ++i) psx_mod_write_byte(s_suffix + i, out[i]);
     cpu->gpr[5] = s_suffix;
