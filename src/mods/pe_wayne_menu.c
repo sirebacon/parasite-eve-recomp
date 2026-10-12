@@ -314,6 +314,27 @@ static void pe_reset(void) {
     memset(&s_ui, 0, sizeof s_ui);
 }
 
+/* Save states: s_ui rides along (block "pe.wayne.ui"), but our text lives in
+ * mod memory, which snapshots don't hold -- so after a load the box is pointed
+ * at a freshly written copy of the screen it showed (Wayne's own text is read
+ * again from the room, which the snapshot restored). */
+static void pe_wayne_state_loaded(int result, uint32_t saved_version, const void *saved,
+                                  uint32_t saved_size) {
+    (void)saved_version; (void)saved; (void)saved_size;
+    if (result != PSX_MOD_STATE_RESTORED) pe_reset();
+}
+
+static void pe_wayne_restored(void) {
+    if (s_ui.screen == SCR_NONE) return;
+    const uint32_t e = s_ui.entry;
+    if (e < PE_TEXTBOX_BASE || e >= PE_TEXTBOX_BASE + PE_TEXTBOX_COUNT * PE_TEXTBOX_STRIDE ||
+        psx_mod_read_byte(e + TB_STATE) != 2 || !pe_is_wayne_menu(s_ui.orig_msg)) {
+        pe_reset();
+        return;
+    }
+    pe_show(s_ui.screen, (int8_t)psx_mod_read_byte(PE_CHOICE_CURSOR));
+}
+
 static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
     (void)cpu; (void)address;
     if (!psx_mod_game_started() || !psx_mod_read_half(PE_MAX_HP_ADDR)) return;
@@ -404,4 +425,6 @@ static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
 void pe_wayne_menu_register(void) {
     (void)psx_mod_register_function_entry_plugin("pe.wayne.workshop",
         PE_FN_DRAW_TEXTBOXES, pe_on_draw_textboxes);
+    (void)psx_mod_register_state("pe.wayne.ui", 1u, &s_ui, sizeof s_ui, pe_wayne_state_loaded);
+    (void)psx_mod_register_restore_callback(pe_wayne_restored);
 }

@@ -765,6 +765,14 @@ static void pe_loot_state_loaded(int result, uint32_t saved_version,
 }
 
 static void pe_loot_restored(void) {
+    /* A snapshot from the two frames of a hand-in count points Aya's list at
+     * our scratch list, in mod memory that snapshots don't hold: back to the bag. */
+    if (psx_mod_read_word(PE_ACTIVE_LIST_PTR) >= 0x1F000000u) {
+        uint32_t limit = psx_mod_read_byte(0x800C0E0Cu) + psx_mod_read_word(0x8009D018u);
+        if (limit > PE_AYA_SLOT_COUNT) limit = PE_AYA_SLOT_COUNT;
+        psx_mod_write_word(PE_ACTIVE_LIST_PTR, PE_AYA_SLOTS_ADDR);
+        psx_mod_write_word(PE_ACTIVE_LIST_LIMIT, limit);
+    }
     s_in_battle = pe_game_loaded() && pe_in_battle();
     s_handin_active = 0;
     s_handin_left = 0;

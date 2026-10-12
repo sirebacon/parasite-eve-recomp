@@ -246,10 +246,14 @@ static void pe_on_context_pick(struct CPUState *cpu, uint32_t address) {
     if (!node) return;                       /* e.g. the Discard dialog is on top */
     const int want = pe_combine_pair(0) >= 0;
     const uint32_t rows = psx_mod_read_word(node + NODE_Y_LIMIT);
+    /* Consumable lists have three rows unless we added one, so a four-row one
+     * (e.g. brought back by a save state) is ours either way. */
     if (want && rows == 3u) {
         pe_set_rows(node, 4);
         s_extended_node = node;
-    } else if (!want && s_extended_node == node && rows == 4u) {
+    } else if (want && rows == 4u) {
+        s_extended_node = node;
+    } else if (!want && rows == 4u && psx_mod_read_word(PE_MENU_ACTION_CONTEXT) == 0) {
         pe_set_rows(node, 3);
         s_extended_node = 0;
     }
@@ -306,6 +310,12 @@ static void pe_on_step_equip_screen(struct CPUState *cpu, uint32_t address) {
     cpu->gpr[5] = PE_INPUT_CANCEL;            /* the game closes the list */
 }
 
+/* After a save state loads, nothing here is current any more. */
+static void pe_native_restored(void) {
+    s_extended_node = 0;
+    s_restore_cursor = 0;
+}
+
 #define PE_WORKSHOP_PAGE "Workshop"
 
 /* Called from pe_mod_menu.c after pe_loot_shop_menu_register. */
@@ -324,4 +334,5 @@ void pe_native_menu_register(void) {
         PE_FN_CENTERED_TEXT, pe_on_centered_text);
     (void)psx_mod_register_function_entry_plugin("pe.native.combine-accept",
         PE_FN_STEP_EQUIP_SCREEN, pe_on_step_equip_screen);
+    (void)psx_mod_register_restore_callback(pe_native_restored);
 }
