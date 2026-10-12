@@ -26,6 +26,10 @@ uint32_t pe_loot_price(uint32_t base);  /* after preset and Bargain; caps after 
 /* pe_loot_catalog.c: armor effects in the Mod Catalog. */
 int pe_catalog_armor_unlocked(int effect);
 int pe_catalog_unlock_armor(int effect); /* 1 if it was new */
+/* Dismantling the gun/armor in equipment record `rec` (0 if it isn't one). The
+ * reward unlocks, adds a Rebuild entry and pays Junk; the caller frees it. */
+uint32_t pe_catalog_dismantle_preview(uint32_t rec);
+uint32_t pe_catalog_dismantle_reward(uint32_t rec, int *unlocks_out);
 
 #ifdef __cplusplus
 }

@@ -53,9 +53,11 @@ strict = true
 #   0x800194F8 Task_CountItemsByValue - script item counts (Wayne counts Junk)
 #   0x8005A318 Inv_TransferItemBetweenLists - Tool use (plain-Tool donor salvage)
 #   0x80023E14 Battle_ApplyDamage - battle item use (Smoke Grenade, pe_custom.c)
+#   0x80052C08 Util_AppendFFTerminatedBytes - discard dialog text (pe_native_menu.c)
+#   0x80045110 Menu_OnItemDiscardConfirm - Discard dismantles / combines (pe_native_menu.c)
 mod_function_entry_funcs = ["0x8005F27C", "0x800299CC", "0x8004B70C", "0x8005D2B4",
                             "0x80053D2C", "0x8003F800", "0x8003FBD8", "0x800194F8",
-                            "0x8005A318", "0x80023E14"]
+                            "0x8005A318", "0x80023E14", "0x80052C08", "0x80045110"]
 
 [runtime]
 window_title = "Parasite Eve Recompiled"

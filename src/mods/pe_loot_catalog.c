@@ -398,6 +398,30 @@ static void pe_dismantle(void) {
     pe_toast(msg);
 }
 
+/* pe_loot.h, for the game's own Discard (pe_native_menu.c): what dismantling
+ * the gun or armor in record `rec` pays (0 if it isn't one), and the reward
+ * itself -- effects unlocked, Rebuild entry, Junk -- leaving the record for
+ * the game to free. */
+uint32_t pe_catalog_dismantle_preview(uint32_t rec) {
+    const int which = rec ? pe_record_type(rec) : -1;
+    return which < 0 ? 0u : pe_dismantle_preview(rec, which, 0);
+}
+uint32_t pe_catalog_dismantle_reward(uint32_t rec, int *unlocks_out) {
+    const int which = rec ? pe_record_type(rec) : -1;
+    if (which < 0) return 0;
+    int unlocks = 0;
+    uint8_t mods[PE_MAX_MODS];
+    const int n = pe_read_mods(rec, mods);
+    const uint32_t payout = pe_salvage_payout(which, pe_bonus_sum(rec), mods, n, &unlocks);
+    int16_t bonus[3];
+    for (uint32_t i = 0; i < 3; ++i) bonus[i] = (int16_t)psx_mod_read_half(rec + REC_BONUS + i * 2u);
+    pe_record_salvage(which, (uint8_t)psx_mod_read_byte(rec + REC_ITEM_ID),
+                      (uint8_t)psx_mod_read_byte(rec + REC_MOD_COUNT), bonus, mods, n, payout);
+    pe_loot_give_junk(payout);
+    if (unlocks_out) *unlocks_out = unlocks;
+    return payout;
+}
+
 /* ---- Mod Catalog ---------------------------------------------------------------- */
 static int s_target;                      /* 0 = equipped gun, 1 = equipped armor */
 static int s_grid;                        /* board cursor: effect s_grid + 1 */
