@@ -694,11 +694,22 @@ static int pe_tool_move_fits(uint32_t dest, int value) {
     return 0;
 }
 
+/* The target mod a same-group move overwrites (0 if none). */
+static int pe_tool_overwritten(uint32_t dest, int value) {
+    if (!(value & 0xE0)) return 0;
+    const int n = psx_mod_read_byte(dest + REC_MOD_COUNT);
+    for (int i = 0; i < n; ++i) {
+        const int old = psx_mod_read_byte(dest + REC_MODS + (uint32_t)i);
+        if ((old & 0xE0) == (value & 0xE0)) return old & 0x1F;
+    }
+    return 0;
+}
+
 static void pe_on_tool_transfer(struct CPUState *cpu, uint32_t address) {
     (void)address;
+    char msg[96];
     const uint32_t sel = cpu->gpr[4];
     const int modifier = (int32_t)cpu->gpr[5];
-    if (cpu->gpr[6] & 1u) return;             /* Super Tool: donor survives */
     if (!pe_loot_enabled() || !pe_loaded()) return;
     const uint32_t src = pe_selection_record(sel);
     const uint32_t dest = pe_selection_record(sel ^ 1u);
@@ -707,6 +718,23 @@ static void pe_on_tool_transfer(struct CPUState *cpu, uint32_t address) {
 
     uint8_t mods[PE_MAX_MODS];
     const int n = pe_read_mods(src, mods);
+
+    /* Any Tool: a target mod replaced by a same-group move goes to the Catalog. */
+    int kept_new = 0;
+    const int dest_which = pe_record_type(dest);
+    if (modifier >= 0 && modifier < n && dest_which >= 0) {
+        const int old = pe_tool_overwritten(dest, mods[modifier]);
+        if (old && old != (mods[modifier] & 0x1F) && !pe_unlocked(dest_which, old)) {
+            s_cat.bits[dest_which] |= 1u << old;
+            kept_new = 1;
+        }
+        if (kept_new && (cpu->gpr[6] & 1u)) {
+            snprintf(msg, sizeof msg, "%s replaced: kept in the Mod Catalog",
+                     pe_effect_name(dest_which, old));
+            pe_toast(msg);
+        }
+    }
+    if (cpu->gpr[6] & 1u) return;             /* Super Tool: donor survives */
     int16_t bonus[3];
     for (uint32_t i = 0; i < 3; ++i) bonus[i] = (int16_t)psx_mod_read_half(src + REC_BONUS + i * 2u);
     if (modifier >= 0) {                      /* that mod leaves if it fits */
@@ -723,9 +751,8 @@ static void pe_on_tool_transfer(struct CPUState *cpu, uint32_t address) {
     pe_record_salvage(which, id, (uint8_t)psx_mod_read_byte(src + REC_MOD_COUNT),
                       bonus, mods, n, payout);
     pe_loot_give_junk(payout);
-    char msg[96];
     snprintf(msg, sizeof msg, "Salvaged %s: +%u Junk, %d new effect(s)",
-             pe_item_name(id), (unsigned)payout, unlocks);
+             pe_item_name(id), (unsigned)payout, unlocks + kept_new);
     pe_toast(msg);
 }
 
