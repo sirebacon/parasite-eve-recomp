@@ -166,23 +166,75 @@ static const uint32_t s_speed_factor[] = {
 static int s_run_choice = 2;  /* default 1.5x: the stock run felt too slow */
 static int s_walk_choice = 2; /* default 1.5x, to match */
 
-/* Battle start: before Aya's ready gauge fills (D_8009D288 = 0 until
- * Battle_Update sees it at 0x2328 and starts the fight), scripted moves walk
- * her into place at 5.0 * moveFactor (Entity_ComputeVelocity), walking
- * speed -- running is 22.5, so 4.5x is run speed. */
-#define PE_BATTLE_BEGUN_ADDR 0x8009D288u
-static const char *const s_intro_names[] = { "NORMAL", "2X", "3X", "4.5X (RUN)" };
-static const uint32_t s_intro_factor[] = { 0x10000u, 0x20000u, 0x30000u, 0x48000u };
-#define PE_INTRO_CHOICES 4u
-static int s_intro_choice = 2;
+/* Combat: Aya's own movement in battle uses the same moveFactor (live trace
+ * 2026-10-12: at 3x she covered ~1800 units/s against ~440 vanilla). Applied
+ * while the battle phase (D_8009D28C) is 0, the phase in which she can move;
+ * the walk to her starting spot as a fight opens is phase 7 and does not use
+ * moveFactor, so it is not sped up by this. Default normal: faster movement
+ * makes dodging easier. */
+#define PE_BATTLE_PHASE_ADDR 0x8009D28Cu
+static int s_combat_choice = 0;
+
+/* Battle start: as a fight opens (battle phase 7) Aya walks to her spot in
+ * action mode 5 with a fixed velocity the game steers toward the spot
+ * (BattleEntity +0x68 / +0x70, ~14.5 units per 30 Hz logic frame) -- it does
+ * not use moveFactor (live trace 2026-10-12). Each 60 Hz tick adds half of
+ * (factor - 1) x that velocity to her position, and her walk animation step
+ * (+0x1C) is raised to match. If the game's steering ever turns back (she
+ * passed the spot), the push stops for the rest of that walk. */
+#define PE_ENT_ACTION_MODE   0x0Eu
+#define PE_ENT_ANIM_STEP     0x1Cu
+#define PE_ENT_POS_X         0x28u
+#define PE_ENT_POS_Z         0x30u
+#define PE_ENT_MOTION_X      0x68u
+#define PE_ENT_MOTION_Z      0x70u
+#define PE_ENTRY_ACTION_MODE 5u
+#define PE_ANIM_STEP_STOCK   0x10000u
+static const char *const s_entry_names[] = { "NORMAL", "1.5X", "2X", "3X", "4X" };
+static const uint32_t s_entry_factor[] = { 0x10000u, 0x18000u, 0x20000u, 0x30000u, 0x40000u };
+#define PE_ENTRY_CHOICES 5u
+static int s_entry_choice = 3;   /* 3x */
+
+static void pe_entry_walk_tick(uint32_t player) {
+    static int s_pushing, s_passed;
+    static int32_t s_last_mx, s_last_mz;
+    static uint32_t s_our_step;
+    const uint32_t factor = s_entry_factor[(unsigned)s_entry_choice < PE_ENTRY_CHOICES ? (unsigned)s_entry_choice : 0];
+    const int walk = (psx_mod_read_word(PE_BATTLE_FLAGS_ADDR) & 0x2u) &&
+                     psx_mod_read_word(PE_BATTLE_PHASE_ADDR) == 7 &&
+                     psx_mod_read_byte(player + PE_ENT_ACTION_MODE) == PE_ENTRY_ACTION_MODE;
+    const uint32_t step_addr = player + PE_ENT_ANIM_STEP;
+    if (!walk || factor == 0x10000u) {
+        if (s_pushing && s_our_step && psx_mod_read_word(step_addr) == s_our_step)
+            psx_mod_write_word(step_addr, PE_ANIM_STEP_STOCK);
+        s_pushing = s_passed = 0;
+        s_our_step = 0;
+        return;
+    }
+    const int32_t mx = (int32_t)psx_mod_read_word(player + PE_ENT_MOTION_X);
+    const int32_t mz = (int32_t)psx_mod_read_word(player + PE_ENT_MOTION_Z);
+    if (!s_pushing) { s_pushing = 1; s_passed = 0; s_last_mx = mx; s_last_mz = mz; }
+    /* Steering turned back: she is at (or past) the spot. */
+    if ((int64_t)mx * s_last_mx + (int64_t)mz * s_last_mz < 0) s_passed = 1;
+    s_last_mx = mx; s_last_mz = mz;
+    if (s_passed || (!mx && !mz)) return;
+    const int64_t extra = (int64_t)factor - 0x10000;          /* 16.16 */
+    const int32_t dx = (int32_t)(((int64_t)mx * extra) >> 17);  /* half per 60 Hz tick */
+    const int32_t dz = (int32_t)(((int64_t)mz * extra) >> 17);
+    psx_mod_write_word(player + PE_ENT_POS_X, (uint32_t)((int32_t)psx_mod_read_word(player + PE_ENT_POS_X) + dx));
+    psx_mod_write_word(player + PE_ENT_POS_Z, (uint32_t)((int32_t)psx_mod_read_word(player + PE_ENT_POS_Z) + dz));
+    const uint32_t step = psx_mod_read_word(step_addr);
+    if (step == PE_ANIM_STEP_STOCK || (s_our_step && step == s_our_step)) {
+        s_our_step = factor;                  /* animation at the same speed */
+        if (step != s_our_step) psx_mod_write_word(step_addr, s_our_step);
+    }
+}
 static int s_always_run = 1;
 static uint32_t s_run_mask = 0x4000u; /* the run bit's own buttons (Circle) */
 
 static int pe_is_boost_value(uint32_t mf) {
     for (unsigned i = 1; i < PE_SPEED_CHOICES; i++)
         if (mf == s_speed_factor[i]) return 1;
-    for (unsigned i = 1; i < PE_INTRO_CHOICES; i++)
-        if (mf == s_intro_factor[i]) return 1;
     return 0;
 }
 
@@ -240,6 +292,7 @@ static void pe_move_tick(void) {
     /* Speed. */
     const uint32_t player = psx_mod_read_word(PE_PLAYER_PTR_ADDR);
     if (player < 0x80000000u || player >= 0x80200000u) return;
+    pe_entry_walk_tick(player);
     const uint32_t addr = player + PE_ACTOR_MOVE_FACTOR;
     const uint32_t mf = psx_mod_read_word(addr);
     const int moving = in_field && (dpad || stick);
@@ -247,11 +300,11 @@ static void pe_move_tick(void) {
     if (dpad) running = s_always_run ? !run_held : run_held;
     else      running = run_held || stick_full;
 
-    const int intro = (psx_mod_read_word(PE_BATTLE_FLAGS_ADDR) & 0x2u) &&
-                      !psx_mod_read_byte(PE_BATTLE_BEGUN_ADDR);
+    const int combat = (psx_mod_read_word(PE_BATTLE_FLAGS_ADDR) & 0x2u) &&
+                       psx_mod_read_word(PE_BATTLE_PHASE_ADDR) == 0;
     uint32_t want = mf;
-    if (intro && (mf == PE_MOVE_FACTOR_STOCK || pe_is_boost_value(mf)))
-        want = s_intro_factor[(unsigned)s_intro_choice < PE_INTRO_CHOICES ? (unsigned)s_intro_choice : 0];
+    if (combat && (mf == PE_MOVE_FACTOR_STOCK || pe_is_boost_value(mf)))
+        want = pe_speed(s_combat_choice);
     else if (moving && (mf == PE_MOVE_FACTOR_STOCK || pe_is_boost_value(mf)))
         want = pe_speed(running ? s_run_choice : s_walk_choice);
     else if (!moving && pe_is_boost_value(mf))
@@ -298,9 +351,12 @@ PSX_MOD_CONSTRUCTOR(pe_register_mod_menu_plugin) {
     (void)pe_menu_register_choice(0, "Walk speed",
         "How fast Aya walks in the field.",
         &s_walk_choice, s_speed_names, PE_SPEED_CHOICES);
+    (void)pe_menu_register_choice(0, "Combat speed",
+        "How fast Aya moves during battle.",
+        &s_combat_choice, s_speed_names, PE_SPEED_CHOICES);
     (void)pe_menu_register_choice(0, "Battle start speed",
-        "Aya's walk into place as a fight starts.",
-        &s_intro_choice, s_intro_names, PE_INTRO_CHOICES);
+        "Aya's walk to her spot as a fight opens.",
+        &s_entry_choice, s_entry_names, PE_ENTRY_CHOICES);
     (void)pe_menu_register_tick(pe_move_tick);
     pe_god_mode_menu_register();
     pe_cheats_menu_register();
