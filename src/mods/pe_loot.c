@@ -33,6 +33,10 @@
  *     items-found screen, its name drawn in gold (Draw_PrintRawText hook, rows
  *     drawn by Sfx_DrawSlotRow while the items-found list is active); a full
  *     list carries it to the next battle.
+ *   - Steal messages: when Aya steals an item, its name in the battle message
+ *     ("<item> obtained", built in D_800A1B50 by Inv_GetItemEffectData) is
+ *     wrapped in the textbox's own red highlight codes (0xFB 0x04 ... 0xFB
+ *     0x05); the textbox has no other color. User request, 2026-10-12.
  *   - Saved in the save's free tail (0x1C90 of the 8 KB block, covered by the
  *     game's CRC) and in save states (psx_mod_register_state "pe.loot").
  *     A new game resets it (Inv_DispatchCommand 1117).
@@ -84,6 +88,9 @@
 #define PE_RARE_COLOR         0x0030A8D0u  /* gold (0xBBGGRR, 0x80 = normal) */
 #define PE_STR_ORIGIN         0x800A8028u
 #define PE_STR_DIRECTORY_OFFSET 0x800A802Cu
+#define PE_STEAL_MSG_PTR      0x8009D1F8u  /* message the battle textbox shows */
+#define PE_ITEM_MSG_BUF       0x800A1B50u  /* Inv_GetItemEffectData's buffer */
+#define PE_ITEM_MSG_SIZE      0x40u        /* up to the next data at 0x800A1B90 */
 
 /* Save tail: the 8 KB block's CRC sits at 0x1C8C; 0x1C90..0x1FFF is free
  * (zero in every save checked) and still inside the CRC'd range. */
@@ -128,6 +135,8 @@ static uint16_t s_rare_shown[2];   /* rare drops to draw in gold this battle */
 static int s_rare_list_seen;       /* the items-found list has been shown */
 static int s_color_saved;
 static uint32_t s_saved_color, s_saved_color_shaded;
+static uint16_t s_steal_item;      /* Aya just stole this; highlight its name */
+static uint32_t s_steal_frame;
 
 static const char *const s_handin_names[] = { "Next gun", "All Junk" };
 
@@ -298,8 +307,12 @@ static void pe_on_print_raw_text(struct CPUState *cpu, uint32_t address) {
 /* ---- pickups and steals ---------------------------------------------------- */
 static void pe_on_inv_add_item(struct CPUState *cpu, uint32_t address) {
     (void)address;
-    if (!s_enabled || !pe_game_loaded() || cpu->gpr[4] != PE_ITEM_JUNK) return;
     const uint32_t ra = cpu->gpr[31];
+    if (ra >= PE_FN_RESOLVE_HIT_START && ra < PE_FN_RESOLVE_HIT_END && cpu->gpr[4]) {
+        s_steal_item = (uint16_t)cpu->gpr[4];     /* its message gets the red name */
+        s_steal_frame = s_frames;
+    }
+    if (!s_enabled || !pe_game_loaded() || cpu->gpr[4] != PE_ITEM_JUNK) return;
     cpu->gpr[4] = 0;   /* Inv_AddItem(0): adds nothing, returns success */
     if (ra >= PE_FN_RESOLVE_HIT_START && ra < PE_FN_RESOLVE_HIT_END) {
         if (s_st.steal_bank < 0xFFFFu) ++s_st.steal_bank;   /* paid on a win (41) */
@@ -447,8 +460,41 @@ static void pe_sweep(void) {
     psx_mod_osd_message(msg);
 }
 
+/* Wrap the stolen item's name in the steal message with the textbox's red
+ * highlight. The message is built right after the steal (Inv_GetItemEffectData
+ * into D_800A1B50: name + suffix, or suffix + name); "bag full" and "nothing"
+ * messages hold no name and are left alone. */
+static void pe_highlight_steal_message(void) {
+    if (!s_steal_item) return;
+    if (s_frames - s_steal_frame > 30u) { s_steal_item = 0; return; }
+    if (psx_mod_read_word(PE_STEAL_MSG_PTR) != PE_ITEM_MSG_BUF) return;
+    uint8_t msg[PE_ITEM_MSG_SIZE], name[PE_ITEM_MSG_SIZE];
+    uint32_t msg_len = 0, name_len = 0;
+    while (msg_len < PE_ITEM_MSG_SIZE &&
+           (msg[msg_len] = psx_mod_read_byte(PE_ITEM_MSG_BUF + msg_len)) != 0xFFu) ++msg_len;
+    const uint32_t name_ptr = pe_item_name_text(s_steal_item);
+    s_steal_item = 0;
+    if (msg_len >= PE_ITEM_MSG_SIZE || !name_ptr) return;
+    while (name_len < PE_ITEM_MSG_SIZE &&
+           (name[name_len] = psx_mod_read_byte(name_ptr + name_len)) != 0xFFu) ++name_len;
+    if (!name_len || name_len > msg_len || msg_len + 5u > PE_ITEM_MSG_SIZE) return;
+    for (uint32_t at = 0; at + name_len <= msg_len; ++at) {
+        if (memcmp(msg + at, name, name_len) != 0) continue;
+        /* rebuild: before, FB 04, name, FB 05, after, FF */
+        uint32_t o = PE_ITEM_MSG_BUF;
+        for (uint32_t i = 0; i < at; ++i) psx_mod_write_byte(o++, msg[i]);
+        psx_mod_write_byte(o++, 0xFBu); psx_mod_write_byte(o++, 0x04u);
+        for (uint32_t i = 0; i < name_len; ++i) psx_mod_write_byte(o++, name[i]);
+        psx_mod_write_byte(o++, 0xFBu); psx_mod_write_byte(o++, 0x05u);
+        for (uint32_t i = at + name_len; i < msg_len; ++i) psx_mod_write_byte(o++, msg[i]);
+        psx_mod_write_byte(o, 0xFFu);
+        return;
+    }
+}
+
 static void pe_loot_tick(void) {
     ++s_frames;
+    if (pe_game_loaded()) pe_highlight_steal_message();
     if (!s_enabled || !pe_game_loaded()) { s_in_battle = 0; return; }
 
     pe_restore_text_color();
