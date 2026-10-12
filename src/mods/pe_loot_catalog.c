@@ -104,6 +104,17 @@ static const char *const s_armor_mods[16] = {
 #define PE_GUN_EFFECTS   20
 #define PE_ARMOR_EFFECTS 15
 
+/* Mod Catalog board tiles: 7 characters fit one. */
+static const char *const s_gun_short[21] = {
+    "", "ROF 2", "ROF 3", "ROF 5", "ROF 7", "ROF 10", "RND ROF", "BURST", "ATK ALL",
+    "HEAT", "FROST", "CYANIDE", "ACID", "TRANQ", "COUNTER", "QUICK", "STEAL",
+    "STL ATK", "CRIT UP", "2 CMDS", "3 CMDS",
+};
+static const char *const s_armor_short[16] = {
+    "", "POISON", "STIFF", "DARK", "STL DN", "CONFUSE", "AUTOMED", "AUTOCUR",
+    "BAG +1", "BAG +2", "BAG +4", "MAX HP", "ATK UP", "SLOW AT", "PE BRDN", "ATK DN",
+};
+
 /* Price tier per effect: 0 common, 1 mid, 2 premium (Junk + a Tool) -- the
  * value ranking of the design doc 6.1b. */
 static const uint8_t s_gun_tier[21] = {
@@ -226,7 +237,11 @@ static int pe_take_tool(int dry_run) {
     return 0;
 }
 
-static void pe_toast(const char *text) { psx_mod_osd_message(text); }
+static char s_result[64] = "-";
+static void pe_toast(const char *text) {
+    psx_mod_osd_message(text);
+    snprintf(s_result, sizeof s_result, "%s", text);
+}
 
 static int pe_ready(void) {
     if (!pe_loaded()) { pe_toast("Load a game first"); return 0; }
@@ -367,11 +382,9 @@ static void pe_dismantle(void) {
 
 /* ---- Mod Catalog ---------------------------------------------------------------- */
 static int s_target;                      /* 0 = equipped gun, 1 = equipped armor */
-static int s_eff_choice, s_slot_choice;
-static int s_eff_ids[24];
-static int s_eff_locked[24];
-static unsigned s_eff_count;
-static char s_eff_names[24][32];
+static int s_grid;                        /* board cursor: effect s_grid + 1 */
+static int s_grid_armed = -1;             /* tile armed by the first accept */
+static int s_slot_choice;
 static char s_slot_names[PE_MAX_MODS][32];
 static char s_target_names[2][32];
 
@@ -405,33 +418,123 @@ static int pe_seen(int which, int e) {
     return 0;
 }
 
-static unsigned pe_eff_list_count(void) {
-    s_eff_count = 0;
-    const int max = s_target == PE_GUN ? PE_GUN_EFFECTS : PE_ARMOR_EFFECTS;
-    for (int e = 1; e <= max && s_eff_count < 24; ++e) {
-        const int unlocked = pe_unlocked(s_target, e);
-        if (!unlocked && !(pe_loaded() && pe_seen(s_target, e))) continue;
-        const int tier = pe_effect_tier(s_target, e);
-        if (!unlocked)
-            snprintf(s_eff_names[s_eff_count], sizeof s_eff_names[0], "%s LOCKED",
-                     pe_effect_name(s_target, e));
-        else if (tier == 2)
-            snprintf(s_eff_names[s_eff_count], sizeof s_eff_names[0], "%s %d+TOOL",
-                     pe_effect_name(s_target, e), s_price[2]);
-        else
-            snprintf(s_eff_names[s_eff_count], sizeof s_eff_names[0], "%s %d",
-                     pe_effect_name(s_target, e), s_price[tier]);
-        s_eff_ids[s_eff_count] = e;
-        s_eff_locked[s_eff_count] = !unlocked;
-        ++s_eff_count;
-    }
-    return s_eff_count ? s_eff_count : 1;
+static int pe_effect_count(int which) {
+    return which == PE_GUN ? PE_GUN_EFFECTS : PE_ARMOR_EFFECTS;
+}
+static int pe_grid_effect(void) { return s_grid + 1; }
+
+static unsigned pe_grid_count(void) {
+    const int n = pe_effect_count(s_target);
+    if (s_grid < 0 || s_grid >= n) s_grid = 0;
+    return (unsigned)n;
 }
 
-static const char *pe_eff_list_name(unsigned i) {
-    if (!s_eff_count) return "NONE YET: DISMANTLE GEAR";
-    return i < s_eff_count ? s_eff_names[i] : "";
+/* The equipped target already carries effect e. */
+static int pe_target_has(int e) {
+    const uint32_t rec = pe_target_record();
+    const int n = rec ? pe_mod_count(rec) : 0;
+    for (int m = 0; m < n; ++m)
+        if ((psx_mod_read_byte(rec + REC_MODS + (uint32_t)m) & 0x1F) == e) return 1;
+    return 0;
 }
+
+static int pe_grid_cell(int index, char *label, unsigned size, unsigned *flags) {
+    const int which = s_target;
+    if (index < 0) {                          /* header: unlocked / total */
+        int got = 0;
+        const int n = pe_effect_count(which);
+        for (int e = 1; e <= n; ++e) got += pe_unlocked(which, e);
+        snprintf(label, size, "%d/%d", got, n);
+        return 1;
+    }
+    const int e = index + 1;
+    if (e > pe_effect_count(which)) return 0;
+    unsigned f = 0;
+    if (pe_unlocked(which, e)) {
+        snprintf(label, size, "%s", which == PE_GUN ? s_gun_short[e] : s_armor_short[e]);
+    } else if (pe_loaded() && pe_seen(which, e)) {
+        snprintf(label, size, "%s", which == PE_GUN ? s_gun_short[e] : s_armor_short[e]);
+        f |= PE_CELL_DIM;
+    } else {
+        snprintf(label, size, "?");
+        f |= PE_CELL_EMPTY;
+    }
+    if (pe_effect_tier(which, e) == 2) f |= PE_CELL_HIGHLIGHT;
+    if (pe_target_has(e)) f |= PE_CELL_MARK;
+    *flags = f;
+    return 1;
+}
+
+/* Slot an install of effect e would use: the slot holding its group mate
+ * (the game allows one per group), else the chosen slot if it is free,
+ * else the first free slot, else the chosen slot. */
+static int pe_install_slot(int e) {
+    const uint32_t rec = pe_target_record();
+    const int n = rec ? pe_mod_count(rec) : 0;
+    if (n <= 0) return -1;
+    const int group = pe_mod_group(s_target, e);
+    for (int m = 0; group && m < n; ++m) {
+        const int b = psx_mod_read_byte(rec + REC_MODS + (uint32_t)m);
+        if ((b & 0x1F) && (b >> 5) == group) return m;
+    }
+    const int chosen = s_slot_choice >= 0 && s_slot_choice < n ? s_slot_choice : 0;
+    if (!(psx_mod_read_byte(rec + REC_MODS + (uint32_t)chosen) & 0x1F)) return chosen;
+    for (int m = 0; m < n; ++m)
+        if (!(psx_mod_read_byte(rec + REC_MODS + (uint32_t)m) & 0x1F)) return m;
+    return chosen;
+}
+
+static void pe_grid_moved(void) {
+    s_grid_armed = -1;
+    const int slot = pe_install_slot(pe_grid_effect());
+    if (slot >= 0) s_slot_choice = slot;
+}
+
+/* "Selected" row: the cursor tile's full name and what it costs. */
+static char s_sel_text[64];
+static unsigned pe_one(void) { return 1; }
+static const char *pe_sel_name(unsigned i) {
+    (void)i;
+    const int e = pe_grid_effect();
+    if (e > pe_effect_count(s_target)) return "";
+    if (pe_unlocked(s_target, e)) {
+        const int tier = pe_effect_tier(s_target, e);
+        snprintf(s_sel_text, sizeof s_sel_text, "%s %d%s", pe_effect_name(s_target, e),
+                 s_price[tier], tier == 2 ? "+TOOL" : "");
+    } else if (pe_loaded() && pe_seen(s_target, e)) {
+        snprintf(s_sel_text, sizeof s_sel_text, "%s: DISMANTLE", pe_effect_name(s_target, e));
+    } else {
+        snprintf(s_sel_text, sizeof s_sel_text, "NOT FOUND YET");
+    }
+    return s_sel_text;
+}
+
+/* "Replaces" row: what installing the cursor tile in the chosen slot removes. */
+static char s_repl_text[64];
+static const char *pe_repl_name(unsigned i) {
+    (void)i;
+    const uint32_t rec = pe_target_record();
+    const int n = rec ? pe_mod_count(rec) : 0;
+    if (!rec || n <= 0 || s_slot_choice < 0 || s_slot_choice >= n) return "-";
+    const int e = pe_grid_effect(), group = pe_mod_group(s_target, e);
+    const int cur = psx_mod_read_byte(rec + REC_MODS + (uint32_t)s_slot_choice) & 0x1F;
+    int other = 0;
+    for (int m = 0; group && m < n; ++m) {
+        const int b = psx_mod_read_byte(rec + REC_MODS + (uint32_t)m);
+        if (m != s_slot_choice && (b & 0x1F) && (b >> 5) == group) other = b & 0x1F;
+    }
+    if (cur == e) snprintf(s_repl_text, sizeof s_repl_text, "ALREADY THERE");
+    else if (cur && other)
+        snprintf(s_repl_text, sizeof s_repl_text, "%s, %s", pe_effect_name(s_target, cur),
+                 pe_effect_name(s_target, other));
+    else if (cur || other)
+        snprintf(s_repl_text, sizeof s_repl_text, "%s", pe_effect_name(s_target, cur ? cur : other));
+    else snprintf(s_repl_text, sizeof s_repl_text, "NOTHING (EMPTY SLOT)");
+    return s_repl_text;
+}
+
+static const char *pe_result_name(unsigned i) { (void)i; return s_result; }
+static int s_text_dummy[3];               /* storage for the read-only text rows */
 
 static unsigned pe_slot_list_count(void) {
     const uint32_t rec = pe_target_record();
@@ -456,13 +559,10 @@ static void pe_install(void) {
     const uint32_t rec = pe_target_record();
     if (!rec) { pe_toast(s_target == PE_GUN ? "Equip a gun first" : "Equip armor first"); return; }
     const int n = pe_mod_count(rec);
-    pe_eff_list_count();
-    if (!s_eff_count || s_eff_choice < 0 || (unsigned)s_eff_choice >= s_eff_count) {
-        pe_toast("No effect chosen"); return;
-    }
     if (n <= 0 || s_slot_choice < 0 || s_slot_choice >= n) { pe_toast("This item has no mod slots"); return; }
-    const int e = s_eff_ids[s_eff_choice];
-    if (s_eff_locked[s_eff_choice]) { pe_toast("Locked: dismantle an item with this effect"); return; }
+    pe_grid_count();
+    const int e = pe_grid_effect();
+    if (!pe_unlocked(s_target, e)) { pe_toast("Locked: dismantle an item with this effect"); return; }
 
     const uint32_t slot_addr = rec + REC_MODS + (uint32_t)s_slot_choice;
     const int current = psx_mod_read_byte(slot_addr) & 0x1F;
@@ -505,6 +605,24 @@ static void pe_install(void) {
     pe_toast(msg);
 }
 
+/* Accept on a board tile: the first press says what would happen, the second
+ * installs into the slot shown on the Slot row. */
+static void pe_grid_accept(void) {
+    char msg[64];
+    const int e = pe_grid_effect();
+    if (!pe_unlocked(s_target, e)) { pe_install(); return; }   /* explains why not */
+    if (s_grid_armed != s_grid) {
+        s_grid_armed = s_grid;
+        const int tier = pe_effect_tier(s_target, e);
+        snprintf(msg, sizeof msg, "Slot %d, %d Junk%s: press again", s_slot_choice + 1,
+                 s_price[tier], tier == 2 ? " + Tool" : "");
+        pe_toast(msg);
+        return;
+    }
+    s_grid_armed = -1;
+    pe_install();
+}
+
 static void pe_remove(void) {
     char msg[64];
     if (!pe_ready()) return;
@@ -522,12 +640,6 @@ static void pe_remove(void) {
     pe_toast(msg);
 }
 
-static int pe_get_unlocked(void) {
-    int n = 0;
-    for (int e = 1; e <= PE_GUN_EFFECTS; ++e) n += pe_unlocked(PE_GUN, e);
-    for (int e = 1; e <= PE_ARMOR_EFFECTS; ++e) n += pe_unlocked(PE_ARMOR, e);
-    return n;
-}
 static int pe_readonly(int value) { (void)value; return 0; }
 
 /* ---- Rebuild -------------------------------------------------------------------- */
@@ -623,13 +735,6 @@ static int pe_get_dismantle_unlocks(void) {
     const uint32_t rec = pe_selected_dismantle_record(&which);
     if (rec) pe_dismantle_preview(rec, which, &unlocks);
     return unlocks;
-}
-static int pe_get_install_cost(void) {
-    pe_eff_list_count();
-    if (!s_eff_count || s_eff_choice < 0 || (unsigned)s_eff_choice >= s_eff_count ||
-        s_eff_locked[s_eff_choice])
-        return 0;
-    return s_price[pe_effect_tier(s_target, s_eff_ids[s_eff_choice])];
 }
 static int pe_get_rebuild_cost(void) {
     if (!s_cat.rebuild_count || s_rb_choice < 0 || s_rb_choice >= s_cat.rebuild_count) return 0;
@@ -825,20 +930,22 @@ void pe_loot_catalog_menu_register(void) {
     (void)pe_menu_register_dynamic_choice(PE_CAT_PAGE, "Item",
         "Your equipped gun or armor.", &s_target, 2,
         pe_target_list_count, pe_target_list_name);
-    (void)pe_menu_register_dynamic_choice(PE_CAT_PAGE, "Effect",
-        "Price in Junk. LOCKED: dismantle first.", &s_eff_choice, 24,
-        pe_eff_list_count, pe_eff_list_name);
+    (void)pe_menu_register_grid(PE_CAT_PAGE, "Effects",
+        "Grey: dismantle to unlock. Gold: +Tool.", &s_grid, 24, 5,
+        pe_grid_count, pe_grid_cell, pe_grid_accept, pe_grid_moved);
+    (void)pe_menu_register_dynamic_choice(PE_CAT_PAGE, "Selected",
+        "The effect under the cursor.", &s_text_dummy[0], 1, pe_one, pe_sel_name);
     (void)pe_menu_register_dynamic_choice(PE_CAT_PAGE, "Slot",
         "Mod slot to fill or clear.", &s_slot_choice, PE_MAX_MODS,
         pe_slot_list_count, pe_slot_list_name);
-    (void)pe_menu_register_live_int(PE_CAT_PAGE, "Cost (Junk)",
-        "Price of this effect. +TOOL: a Tool too.", 0, 999, 1, pe_get_install_cost, pe_readonly);
+    (void)pe_menu_register_dynamic_choice(PE_CAT_PAGE, "Replaces",
+        "What installing removes.", &s_text_dummy[1], 1, pe_one, pe_repl_name);
     (void)pe_menu_register_action(PE_CAT_PAGE, "Install",
         "Put the effect in the slot.", pe_install);
     (void)pe_menu_register_action(PE_CAT_PAGE, "Remove",
         "Empty the slot. Stays unlocked.", pe_remove);
-    (void)pe_menu_register_live_int(PE_CAT_PAGE, "Unlocked effects",
-        "Effects you can install.", 0, 64, 1, pe_get_unlocked, pe_readonly);
+    (void)pe_menu_register_dynamic_choice(PE_CAT_PAGE, "Result",
+        "What the last action did.", &s_text_dummy[2], 1, pe_one, pe_result_name);
 
     (void)pe_menu_register_live_int(PE_RB_PAGE, "Your Junk",
         "Junk you have now.", 0, 99999, 1, pe_get_junk, pe_readonly);

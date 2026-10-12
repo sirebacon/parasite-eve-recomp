@@ -96,6 +96,18 @@ int pe_menu_register_dynamic_choice(const char *sub, const char *label,
         ? 0 : -1;
 }
 
+int pe_menu_register_grid(const char *sub, const char *label,
+                          const char *description, int *cursor,
+                          unsigned max_cells, unsigned columns,
+                          PeMenuChoiceCount count_fn, PeMenuCell cell_fn,
+                          PeMenuAction on_accept, PeMenuAction on_move) {
+    return psx_mod_menu_add_grid(pe_page(sub), label, description, cursor,
+                                 max_cells, columns,
+                                 (PSXModMenuChoiceCount)count_fn,
+                                 (PSXModMenuCell)cell_fn, on_accept, on_move)
+        ? 0 : -1;
+}
+
 static void pe_mod_menu_vblank(void) {
     if (!psx_mod_game_started()) return;
     for (int i = 0; i < s_tick_count; i++) s_ticks[i]();

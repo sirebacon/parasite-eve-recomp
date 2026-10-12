@@ -87,6 +87,25 @@ int pe_menu_register_dynamic_choice(const char *sub, const char *label,
                                     PeMenuChoiceCount count_fn,
                                     PeMenuChoiceName name_fn);
 
+/* A board of tiles, `columns` per row, up to max_cells. count_fn() says how
+ * many show; cell_fn(i, label, size, flags) fills tile i (i == -1: the header
+ * right of the label, e.g. "9/20"; return 0 for none). *cursor is the
+ * selected tile. Accept calls on_accept; on_move runs after the cursor moves
+ * (either may be 0). Flags: PE_CELL_*. */
+enum {
+    PE_CELL_DIM = 1u << 0,        /* greyed: known but not usable */
+    PE_CELL_EMPTY = 1u << 1,      /* faint: not discovered yet */
+    PE_CELL_HIGHLIGHT = 1u << 2,  /* gold frame */
+    PE_CELL_MARK = 1u << 3,       /* corner mark */
+};
+typedef int (*PeMenuCell)(int index, char *label, unsigned label_size,
+                          unsigned *flags);
+int pe_menu_register_grid(const char *sub, const char *label,
+                          const char *description, int *cursor,
+                          unsigned max_cells, unsigned columns,
+                          PeMenuChoiceCount count_fn, PeMenuCell cell_fn,
+                          PeMenuAction on_accept, PeMenuAction on_move);
+
 #ifdef __cplusplus
 }
 #endif
