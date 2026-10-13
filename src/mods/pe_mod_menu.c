@@ -180,8 +180,10 @@ static int s_combat_choice = 0;
  * (BattleEntity +0x68 / +0x70, ~14.5 units per 30 Hz logic frame) -- it does
  * not use moveFactor (live trace 2026-10-12). Each 60 Hz tick adds half of
  * (factor - 1) x that velocity to her position, and her walk animation step
- * (+0x1C) is raised to match. If the game's steering ever turns back (she
- * passed the spot), the push stops for the rest of that walk. */
+ * (+0x1C) is raised to match. The push stops for the rest of that walk as
+ * soon as her heading turns more than ~25 degrees from the one she set out on:
+ * the game steers her in gradually near the spot, and pushing along a turning
+ * heading made her orbit the spot at 3x (user report 2026-10-13). */
 #define PE_ENT_ACTION_MODE   0x0Eu
 #define PE_ENT_ANIM_STEP     0x1Cu
 #define PE_ENT_POS_X         0x28u
@@ -197,7 +199,7 @@ static int s_entry_choice = 3;   /* 3x */
 
 static void pe_entry_walk_tick(uint32_t player) {
     static int s_pushing, s_passed;
-    static int32_t s_last_mx, s_last_mz;
+    static int32_t s_first_mx, s_first_mz;   /* the heading she set out on */
     static uint32_t s_our_step;
     const uint32_t factor = s_entry_factor[(unsigned)s_entry_choice < PE_ENTRY_CHOICES ? (unsigned)s_entry_choice : 0];
     const int walk = (psx_mod_read_word(PE_BATTLE_FLAGS_ADDR) & 0x2u) &&
@@ -213,11 +215,17 @@ static void pe_entry_walk_tick(uint32_t player) {
     }
     const int32_t mx = (int32_t)psx_mod_read_word(player + PE_ENT_MOTION_X);
     const int32_t mz = (int32_t)psx_mod_read_word(player + PE_ENT_MOTION_Z);
-    if (!s_pushing) { s_pushing = 1; s_passed = 0; s_last_mx = mx; s_last_mz = mz; }
-    /* Steering turned back: she is at (or past) the spot. */
-    if ((int64_t)mx * s_last_mx + (int64_t)mz * s_last_mz < 0) s_passed = 1;
-    s_last_mx = mx; s_last_mz = mz;
-    if (s_passed || (!mx && !mz)) return;
+    if (!s_pushing) { s_pushing = 1; s_passed = 0; s_first_mx = s_first_mz = 0; }
+    if (!mx && !mz) return;
+    if (!s_first_mx && !s_first_mz) { s_first_mx = mx; s_first_mz = mz; }
+    /* Steering in (heading > ~25 degrees off the first one, cos^2 < 0.81) or
+     * turned back: she is near (or past) the spot -- the game finishes alone. */
+    {
+        const int64_t ax = mx >> 8, az = mz >> 8, bx = s_first_mx >> 8, bz = s_first_mz >> 8;
+        const int64_t dot = ax * bx + az * bz;
+        if (dot <= 0 || dot * dot * 100 < (ax * ax + az * az) * (bx * bx + bz * bz) * 81) s_passed = 1;
+    }
+    if (s_passed) return;
     const int64_t extra = (int64_t)factor - 0x10000;          /* 16.16 */
     const int32_t dx = (int32_t)(((int64_t)mx * extra) >> 17);  /* half per 60 Hz tick */
     const int32_t dz = (int32_t)(((int64_t)mz * extra) >> 17);
