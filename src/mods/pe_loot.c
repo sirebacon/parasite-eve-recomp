@@ -732,17 +732,18 @@ static void pe_loot_tick(void) {
 
     pe_restore_text_color();
     if (s_junk_shown) {                      /* the "Junk xN" line: already counted */
+        /* Taken into the bag? Take it straight back out, uncounted, so it reads
+         * as gone into the counter (a full bag can't take it: nothing lost). */
+        uint32_t extra = pe_bag_junk_count();
+        extra = extra > s_bag_junk_before ? extra - s_bag_junk_before : 0u;
+        for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT && extra; ++i) {
+            const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
+            if (psx_mod_read_half(a) == PE_ITEM_JUNK) { psx_mod_write_half(a, 0); --extra; }
+        }
         if (psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
             s_junk_list_seen = 1;
         } else if (s_junk_list_seen) {
-            /* Taken into the bag? Take it back out, uncounted. */
-            uint32_t extra = pe_bag_junk_count();
-            extra = extra > s_bag_junk_before ? extra - s_bag_junk_before : 0u;
-            for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT && extra; ++i) {
-                const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
-                if (psx_mod_read_half(a) == PE_ITEM_JUNK) { psx_mod_write_half(a, 0); --extra; }
-            }
-            s_junk_shown = 0;
+            s_junk_shown = 0;                /* the list closed */
             s_junk_list_seen = 0;
         }
     }
