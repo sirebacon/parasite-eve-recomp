@@ -180,10 +180,12 @@ static int s_combat_choice = 0;
  * (BattleEntity +0x68 / +0x70, ~14.5 units per 30 Hz logic frame) -- it does
  * not use moveFactor (live trace 2026-10-12). Each 60 Hz tick adds half of
  * (factor - 1) x that velocity to her position, and her walk animation step
- * (+0x1C) is raised to match. The push stops for the rest of that walk as
- * soon as her heading turns more than ~25 degrees from the one she set out on:
- * the game steers her in gradually near the spot, and pushing along a turning
- * heading made her orbit the spot at 3x (user report 2026-10-13). */
+ * (+0x1C) is raised to match -- but only while her heading holds steady. While
+ * the game turns her (the opening turn toward the spot, the turn-in at the
+ * end, a turn back after overshooting) she walks at the game's own pace and
+ * her animation goes back to normal: pushing along a turning heading made her
+ * orbit the spot at 3x, and stopping for good at the first turn left only the
+ * animation sped up (user reports 2026-10-13). */
 #define PE_ENT_ACTION_MODE   0x0Eu
 #define PE_ENT_ANIM_STEP     0x1Cu
 #define PE_ENT_POS_X         0x28u
@@ -198,40 +200,43 @@ static const uint32_t s_entry_factor[] = { 0x10000u, 0x18000u, 0x20000u, 0x30000
 static int s_entry_choice = 3;   /* 3x */
 
 static void pe_entry_walk_tick(uint32_t player) {
-    static int s_pushing, s_passed;
-    static int32_t s_first_mx, s_first_mz;   /* the heading she set out on */
+    static int s_walking, s_turning = 1;
+    static int32_t s_prev_mx, s_prev_mz;     /* the last heading that differed */
     static uint32_t s_our_step;
     const uint32_t factor = s_entry_factor[(unsigned)s_entry_choice < PE_ENTRY_CHOICES ? (unsigned)s_entry_choice : 0];
     const int walk = (psx_mod_read_word(PE_BATTLE_FLAGS_ADDR) & 0x2u) &&
                      psx_mod_read_word(PE_BATTLE_PHASE_ADDR) == 7 &&
                      psx_mod_read_byte(player + PE_ENT_ACTION_MODE) == PE_ENTRY_ACTION_MODE;
     const uint32_t step_addr = player + PE_ENT_ANIM_STEP;
+    const int32_t mx = walk ? (int32_t)psx_mod_read_word(player + PE_ENT_MOTION_X) : 0;
+    const int32_t mz = walk ? (int32_t)psx_mod_read_word(player + PE_ENT_MOTION_Z) : 0;
     if (!walk || factor == 0x10000u) {
-        if (s_pushing && s_our_step && psx_mod_read_word(step_addr) == s_our_step)
-            psx_mod_write_word(step_addr, PE_ANIM_STEP_STOCK);
-        s_pushing = s_passed = 0;
+        s_walking = 0;
+    } else if (!s_walking) {
+        s_walking = 1;
+        s_turning = 1;                       /* wait for a steady heading */
+        s_prev_mx = mx; s_prev_mz = mz;
+    } else if (mx != s_prev_mx || mz != s_prev_mz) {
+        /* The heading changed this logic frame: steady if within ~4 degrees
+         * (cos^2 >= 0.995) and not reversed. */
+        const int64_t ax = mx >> 8, az = mz >> 8, bx = s_prev_mx >> 8, bz = s_prev_mz >> 8;
+        const int64_t dot = ax * bx + az * bz;
+        s_turning = dot <= 0 || dot * dot * 1000 < (ax * ax + az * az) * (bx * bx + bz * bz) * 995;
+        s_prev_mx = mx; s_prev_mz = mz;
+    }
+    const int push = s_walking && !s_turning && (mx || mz);
+
+    const uint32_t step = walk ? psx_mod_read_word(step_addr) : 0;
+    if (!push) {                             /* her own pace and animation */
+        if (s_our_step && walk && step == s_our_step) psx_mod_write_word(step_addr, PE_ANIM_STEP_STOCK);
         s_our_step = 0;
         return;
     }
-    const int32_t mx = (int32_t)psx_mod_read_word(player + PE_ENT_MOTION_X);
-    const int32_t mz = (int32_t)psx_mod_read_word(player + PE_ENT_MOTION_Z);
-    if (!s_pushing) { s_pushing = 1; s_passed = 0; s_first_mx = s_first_mz = 0; }
-    if (!mx && !mz) return;
-    if (!s_first_mx && !s_first_mz) { s_first_mx = mx; s_first_mz = mz; }
-    /* Steering in (heading > ~25 degrees off the first one, cos^2 < 0.81) or
-     * turned back: she is near (or past) the spot -- the game finishes alone. */
-    {
-        const int64_t ax = mx >> 8, az = mz >> 8, bx = s_first_mx >> 8, bz = s_first_mz >> 8;
-        const int64_t dot = ax * bx + az * bz;
-        if (dot <= 0 || dot * dot * 100 < (ax * ax + az * az) * (bx * bx + bz * bz) * 81) s_passed = 1;
-    }
-    if (s_passed) return;
     const int64_t extra = (int64_t)factor - 0x10000;          /* 16.16 */
     const int32_t dx = (int32_t)(((int64_t)mx * extra) >> 17);  /* half per 60 Hz tick */
     const int32_t dz = (int32_t)(((int64_t)mz * extra) >> 17);
     psx_mod_write_word(player + PE_ENT_POS_X, (uint32_t)((int32_t)psx_mod_read_word(player + PE_ENT_POS_X) + dx));
     psx_mod_write_word(player + PE_ENT_POS_Z, (uint32_t)((int32_t)psx_mod_read_word(player + PE_ENT_POS_Z) + dz));
-    const uint32_t step = psx_mod_read_word(step_addr);
     if (step == PE_ANIM_STEP_STOCK || (s_our_step && step == s_our_step)) {
         s_our_step = factor;                  /* animation at the same speed */
         if (step != s_our_step) psx_mod_write_word(step_addr, s_our_step);
