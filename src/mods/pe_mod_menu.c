@@ -10,19 +10,381 @@
  *
  * State is plain C statics (not guest memory, not in any save structure), so it
  * resets on every launch. Persistence is an open question.
+ *
+ * Every change made through the menu goes to the play log (pe_log.h): rows
+ * bound to a plugin int (toggles, numbers, choices) are compared every frame
+ * and a change logs "tweak <page>/<label> old->new"; actions, grid accepts and
+ * the setters of live rows go through small trampolines that log "action" /
+ * "tweak" before calling the real one. The Stats page mirrors the game into
+ * its ints, so it logs its own edits (pe_stats_menu.c); dynamic choices and
+ * grid cursors are only selections and aren't logged.
  */
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "mod_plugins.h"
 #include "pe_mod_menu.h"
+#include "pe_log.h"
 
 /* ---- registry ------------------------------------------------------------ */
 #define PE_MENU_MAX_TICKS 16
 
 static PeMenuPerFrame s_ticks[PE_MENU_MAX_TICKS];
 static int            s_tick_count;
+
+/* ---- play log: what was changed from the menu --------------------------- */
+#define PE_WATCH_MAX 128
+#define PE_WRAP_MAX  64
+
+typedef struct {
+    const char *sub, *label;
+    int *value;
+    int last;
+    const char *const *names;
+    unsigned count;
+} PeWatch;
+static PeWatch s_watch[PE_WATCH_MAX];
+static int s_watch_count, s_watch_ready;
+
+static const char *pe_sub_name(const char *sub) { return sub && *sub ? sub : "PE"; }
+
+static void pe_watch(const char *sub, const char *label, int *value,
+                     const char *const *names, unsigned count) {
+    if (!value || s_watch_count >= PE_WATCH_MAX) return;
+    if (sub && strcmp(sub, "Stats") == 0) return;      /* mirrored; logs itself */
+    s_watch[s_watch_count++] = (PeWatch){ sub, label, value, *value, names, count };
+}
+
+static void pe_value_text(char *out, size_t size, int v, const char *const *names, unsigned count) {
+    if (names && v >= 0 && (unsigned)v < count) snprintf(out, size, "%s", names[v]);
+    else snprintf(out, size, "%d", v);
+}
+
+static void pe_watch_tick(void) {
+    for (int i = 0; i < s_watch_count; ++i) {
+        PeWatch *w = &s_watch[i];
+        const int v = *w->value;
+        if (s_watch_ready && v != w->last) {
+            char a[32], b[32];
+            pe_value_text(a, sizeof a, w->last, w->names, w->count);
+            pe_value_text(b, sizeof b, v, w->names, w->count);
+            pe_log("tweak", "%s/%s %s->%s", pe_sub_name(w->sub), w->label, a, b);
+        }
+        w->last = v;
+    }
+    s_watch_ready = 1;
+}
+
+typedef struct { const char *sub, *label; PeMenuAction fn; int accept; } PeWrapAction;
+static PeWrapAction s_wrap_action[PE_WRAP_MAX];
+static int s_wrap_action_count;
+
+static void pe_action_fire(int i) {
+    const PeWrapAction *w = &s_wrap_action[i];
+    pe_log("action", "%s/%s%s", pe_sub_name(w->sub), w->label, w->accept ? " (accept)" : "");
+    if (w->fn) w->fn();
+}
+
+typedef struct {
+    const char *sub, *label;
+    PeMenuGet get;
+    PeMenuSet set;
+    const char *const *names;
+    unsigned count;
+} PeWrapSetter;
+static PeWrapSetter s_wrap_setter[PE_WRAP_MAX];
+static int s_wrap_setter_count;
+
+static int pe_setter_fire(int i, int value) {
+    const PeWrapSetter *w = &s_wrap_setter[i];
+    const int old = w->get ? w->get() : 0;
+    const int ok = w->set ? w->set(value) : 0;
+    if (ok && value != old) {
+        char a[32], b[32];
+        pe_value_text(a, sizeof a, old, w->names, w->count);
+        pe_value_text(b, sizeof b, value, w->names, w->count);
+        pe_log("tweak", "%s/%s %s->%s", pe_sub_name(w->sub), w->label, a, b);
+    }
+    return ok;
+}
+
+static void pe_act_0(void) { pe_action_fire(0); }
+static void pe_act_1(void) { pe_action_fire(1); }
+static void pe_act_2(void) { pe_action_fire(2); }
+static void pe_act_3(void) { pe_action_fire(3); }
+static void pe_act_4(void) { pe_action_fire(4); }
+static void pe_act_5(void) { pe_action_fire(5); }
+static void pe_act_6(void) { pe_action_fire(6); }
+static void pe_act_7(void) { pe_action_fire(7); }
+static void pe_act_8(void) { pe_action_fire(8); }
+static void pe_act_9(void) { pe_action_fire(9); }
+static void pe_act_10(void) { pe_action_fire(10); }
+static void pe_act_11(void) { pe_action_fire(11); }
+static void pe_act_12(void) { pe_action_fire(12); }
+static void pe_act_13(void) { pe_action_fire(13); }
+static void pe_act_14(void) { pe_action_fire(14); }
+static void pe_act_15(void) { pe_action_fire(15); }
+static void pe_act_16(void) { pe_action_fire(16); }
+static void pe_act_17(void) { pe_action_fire(17); }
+static void pe_act_18(void) { pe_action_fire(18); }
+static void pe_act_19(void) { pe_action_fire(19); }
+static void pe_act_20(void) { pe_action_fire(20); }
+static void pe_act_21(void) { pe_action_fire(21); }
+static void pe_act_22(void) { pe_action_fire(22); }
+static void pe_act_23(void) { pe_action_fire(23); }
+static void pe_act_24(void) { pe_action_fire(24); }
+static void pe_act_25(void) { pe_action_fire(25); }
+static void pe_act_26(void) { pe_action_fire(26); }
+static void pe_act_27(void) { pe_action_fire(27); }
+static void pe_act_28(void) { pe_action_fire(28); }
+static void pe_act_29(void) { pe_action_fire(29); }
+static void pe_act_30(void) { pe_action_fire(30); }
+static void pe_act_31(void) { pe_action_fire(31); }
+static void pe_act_32(void) { pe_action_fire(32); }
+static void pe_act_33(void) { pe_action_fire(33); }
+static void pe_act_34(void) { pe_action_fire(34); }
+static void pe_act_35(void) { pe_action_fire(35); }
+static void pe_act_36(void) { pe_action_fire(36); }
+static void pe_act_37(void) { pe_action_fire(37); }
+static void pe_act_38(void) { pe_action_fire(38); }
+static void pe_act_39(void) { pe_action_fire(39); }
+static void pe_act_40(void) { pe_action_fire(40); }
+static void pe_act_41(void) { pe_action_fire(41); }
+static void pe_act_42(void) { pe_action_fire(42); }
+static void pe_act_43(void) { pe_action_fire(43); }
+static void pe_act_44(void) { pe_action_fire(44); }
+static void pe_act_45(void) { pe_action_fire(45); }
+static void pe_act_46(void) { pe_action_fire(46); }
+static void pe_act_47(void) { pe_action_fire(47); }
+static void pe_act_48(void) { pe_action_fire(48); }
+static void pe_act_49(void) { pe_action_fire(49); }
+static void pe_act_50(void) { pe_action_fire(50); }
+static void pe_act_51(void) { pe_action_fire(51); }
+static void pe_act_52(void) { pe_action_fire(52); }
+static void pe_act_53(void) { pe_action_fire(53); }
+static void pe_act_54(void) { pe_action_fire(54); }
+static void pe_act_55(void) { pe_action_fire(55); }
+static void pe_act_56(void) { pe_action_fire(56); }
+static void pe_act_57(void) { pe_action_fire(57); }
+static void pe_act_58(void) { pe_action_fire(58); }
+static void pe_act_59(void) { pe_action_fire(59); }
+static void pe_act_60(void) { pe_action_fire(60); }
+static void pe_act_61(void) { pe_action_fire(61); }
+static void pe_act_62(void) { pe_action_fire(62); }
+static void pe_act_63(void) { pe_action_fire(63); }
+
+static const PeMenuAction s_act_tramp[PE_WRAP_MAX] = {
+    pe_act_0,
+    pe_act_1,
+    pe_act_2,
+    pe_act_3,
+    pe_act_4,
+    pe_act_5,
+    pe_act_6,
+    pe_act_7,
+    pe_act_8,
+    pe_act_9,
+    pe_act_10,
+    pe_act_11,
+    pe_act_12,
+    pe_act_13,
+    pe_act_14,
+    pe_act_15,
+    pe_act_16,
+    pe_act_17,
+    pe_act_18,
+    pe_act_19,
+    pe_act_20,
+    pe_act_21,
+    pe_act_22,
+    pe_act_23,
+    pe_act_24,
+    pe_act_25,
+    pe_act_26,
+    pe_act_27,
+    pe_act_28,
+    pe_act_29,
+    pe_act_30,
+    pe_act_31,
+    pe_act_32,
+    pe_act_33,
+    pe_act_34,
+    pe_act_35,
+    pe_act_36,
+    pe_act_37,
+    pe_act_38,
+    pe_act_39,
+    pe_act_40,
+    pe_act_41,
+    pe_act_42,
+    pe_act_43,
+    pe_act_44,
+    pe_act_45,
+    pe_act_46,
+    pe_act_47,
+    pe_act_48,
+    pe_act_49,
+    pe_act_50,
+    pe_act_51,
+    pe_act_52,
+    pe_act_53,
+    pe_act_54,
+    pe_act_55,
+    pe_act_56,
+    pe_act_57,
+    pe_act_58,
+    pe_act_59,
+    pe_act_60,
+    pe_act_61,
+    pe_act_62,
+    pe_act_63,
+};
+static int pe_set_0(int v) { return pe_setter_fire(0, v); }
+static int pe_set_1(int v) { return pe_setter_fire(1, v); }
+static int pe_set_2(int v) { return pe_setter_fire(2, v); }
+static int pe_set_3(int v) { return pe_setter_fire(3, v); }
+static int pe_set_4(int v) { return pe_setter_fire(4, v); }
+static int pe_set_5(int v) { return pe_setter_fire(5, v); }
+static int pe_set_6(int v) { return pe_setter_fire(6, v); }
+static int pe_set_7(int v) { return pe_setter_fire(7, v); }
+static int pe_set_8(int v) { return pe_setter_fire(8, v); }
+static int pe_set_9(int v) { return pe_setter_fire(9, v); }
+static int pe_set_10(int v) { return pe_setter_fire(10, v); }
+static int pe_set_11(int v) { return pe_setter_fire(11, v); }
+static int pe_set_12(int v) { return pe_setter_fire(12, v); }
+static int pe_set_13(int v) { return pe_setter_fire(13, v); }
+static int pe_set_14(int v) { return pe_setter_fire(14, v); }
+static int pe_set_15(int v) { return pe_setter_fire(15, v); }
+static int pe_set_16(int v) { return pe_setter_fire(16, v); }
+static int pe_set_17(int v) { return pe_setter_fire(17, v); }
+static int pe_set_18(int v) { return pe_setter_fire(18, v); }
+static int pe_set_19(int v) { return pe_setter_fire(19, v); }
+static int pe_set_20(int v) { return pe_setter_fire(20, v); }
+static int pe_set_21(int v) { return pe_setter_fire(21, v); }
+static int pe_set_22(int v) { return pe_setter_fire(22, v); }
+static int pe_set_23(int v) { return pe_setter_fire(23, v); }
+static int pe_set_24(int v) { return pe_setter_fire(24, v); }
+static int pe_set_25(int v) { return pe_setter_fire(25, v); }
+static int pe_set_26(int v) { return pe_setter_fire(26, v); }
+static int pe_set_27(int v) { return pe_setter_fire(27, v); }
+static int pe_set_28(int v) { return pe_setter_fire(28, v); }
+static int pe_set_29(int v) { return pe_setter_fire(29, v); }
+static int pe_set_30(int v) { return pe_setter_fire(30, v); }
+static int pe_set_31(int v) { return pe_setter_fire(31, v); }
+static int pe_set_32(int v) { return pe_setter_fire(32, v); }
+static int pe_set_33(int v) { return pe_setter_fire(33, v); }
+static int pe_set_34(int v) { return pe_setter_fire(34, v); }
+static int pe_set_35(int v) { return pe_setter_fire(35, v); }
+static int pe_set_36(int v) { return pe_setter_fire(36, v); }
+static int pe_set_37(int v) { return pe_setter_fire(37, v); }
+static int pe_set_38(int v) { return pe_setter_fire(38, v); }
+static int pe_set_39(int v) { return pe_setter_fire(39, v); }
+static int pe_set_40(int v) { return pe_setter_fire(40, v); }
+static int pe_set_41(int v) { return pe_setter_fire(41, v); }
+static int pe_set_42(int v) { return pe_setter_fire(42, v); }
+static int pe_set_43(int v) { return pe_setter_fire(43, v); }
+static int pe_set_44(int v) { return pe_setter_fire(44, v); }
+static int pe_set_45(int v) { return pe_setter_fire(45, v); }
+static int pe_set_46(int v) { return pe_setter_fire(46, v); }
+static int pe_set_47(int v) { return pe_setter_fire(47, v); }
+static int pe_set_48(int v) { return pe_setter_fire(48, v); }
+static int pe_set_49(int v) { return pe_setter_fire(49, v); }
+static int pe_set_50(int v) { return pe_setter_fire(50, v); }
+static int pe_set_51(int v) { return pe_setter_fire(51, v); }
+static int pe_set_52(int v) { return pe_setter_fire(52, v); }
+static int pe_set_53(int v) { return pe_setter_fire(53, v); }
+static int pe_set_54(int v) { return pe_setter_fire(54, v); }
+static int pe_set_55(int v) { return pe_setter_fire(55, v); }
+static int pe_set_56(int v) { return pe_setter_fire(56, v); }
+static int pe_set_57(int v) { return pe_setter_fire(57, v); }
+static int pe_set_58(int v) { return pe_setter_fire(58, v); }
+static int pe_set_59(int v) { return pe_setter_fire(59, v); }
+static int pe_set_60(int v) { return pe_setter_fire(60, v); }
+static int pe_set_61(int v) { return pe_setter_fire(61, v); }
+static int pe_set_62(int v) { return pe_setter_fire(62, v); }
+static int pe_set_63(int v) { return pe_setter_fire(63, v); }
+
+static const PeMenuSet s_set_tramp[PE_WRAP_MAX] = {
+    pe_set_0,
+    pe_set_1,
+    pe_set_2,
+    pe_set_3,
+    pe_set_4,
+    pe_set_5,
+    pe_set_6,
+    pe_set_7,
+    pe_set_8,
+    pe_set_9,
+    pe_set_10,
+    pe_set_11,
+    pe_set_12,
+    pe_set_13,
+    pe_set_14,
+    pe_set_15,
+    pe_set_16,
+    pe_set_17,
+    pe_set_18,
+    pe_set_19,
+    pe_set_20,
+    pe_set_21,
+    pe_set_22,
+    pe_set_23,
+    pe_set_24,
+    pe_set_25,
+    pe_set_26,
+    pe_set_27,
+    pe_set_28,
+    pe_set_29,
+    pe_set_30,
+    pe_set_31,
+    pe_set_32,
+    pe_set_33,
+    pe_set_34,
+    pe_set_35,
+    pe_set_36,
+    pe_set_37,
+    pe_set_38,
+    pe_set_39,
+    pe_set_40,
+    pe_set_41,
+    pe_set_42,
+    pe_set_43,
+    pe_set_44,
+    pe_set_45,
+    pe_set_46,
+    pe_set_47,
+    pe_set_48,
+    pe_set_49,
+    pe_set_50,
+    pe_set_51,
+    pe_set_52,
+    pe_set_53,
+    pe_set_54,
+    pe_set_55,
+    pe_set_56,
+    pe_set_57,
+    pe_set_58,
+    pe_set_59,
+    pe_set_60,
+    pe_set_61,
+    pe_set_62,
+    pe_set_63,
+};
+
+static PeMenuAction pe_wrap_action(const char *sub, const char *label, PeMenuAction fn, int accept) {
+    if (!fn || s_wrap_action_count >= PE_WRAP_MAX) return fn;
+    s_wrap_action[s_wrap_action_count] = (PeWrapAction){ sub, label, fn, accept };
+    return s_act_tramp[s_wrap_action_count++];
+}
+
+static PeMenuSet pe_wrap_setter(const char *sub, const char *label, PeMenuGet get, PeMenuSet set,
+                                const char *const *names, unsigned count) {
+    if (!set || s_wrap_setter_count >= PE_WRAP_MAX) return set;
+    s_wrap_setter[s_wrap_setter_count] = (PeWrapSetter){ sub, label, get, set, names, count };
+    return s_set_tramp[s_wrap_setter_count++];
+}
 
 /* "PE Enhancements" or "PE Enhancements/<sub>". The runtime copies the
  * string, so one buffer serves every call. */
@@ -39,6 +401,7 @@ int pe_menu_register_toggle(const char *sub, const char *label,
     if (per_frame && s_tick_count >= PE_MENU_MAX_TICKS) return -1;
     if (!psx_mod_menu_add_bool(pe_page(sub), label, description, flag)) return -1;
     if (per_frame) s_ticks[s_tick_count++] = per_frame;
+    pe_watch(sub, label, flag, 0, 0);
     return 0;
 }
 
@@ -51,21 +414,25 @@ int pe_menu_register_tick(PeMenuPerFrame fn) {
 int pe_menu_register_int(const char *sub, const char *label,
                          const char *description, int *value,
                          int minimum, int maximum, int step) {
-    return psx_mod_menu_add_int(pe_page(sub), label, description, value,
-                                minimum, maximum, step) ? 0 : -1;
+    if (!psx_mod_menu_add_int(pe_page(sub), label, description, value,
+                              minimum, maximum, step)) return -1;
+    pe_watch(sub, label, value, 0, 0);
+    return 0;
 }
 
 int pe_menu_register_action(const char *sub, const char *label,
                             const char *description, PeMenuAction action) {
-    return psx_mod_menu_add_action(pe_page(sub), label, description, action)
-        ? 0 : -1;
+    return psx_mod_menu_add_action(pe_page(sub), label, description,
+                                   pe_wrap_action(sub, label, action, 0)) ? 0 : -1;
 }
 
 int pe_menu_register_choice(const char *sub, const char *label,
                             const char *description, int *index,
                             const char *const *names, unsigned count) {
-    return psx_mod_menu_add_choice(pe_page(sub), label, description, index,
-                                   names, count) ? 0 : -1;
+    if (!psx_mod_menu_add_choice(pe_page(sub), label, description, index,
+                                 names, count)) return -1;
+    pe_watch(sub, label, index, names, count);
+    return 0;
 }
 
 int pe_menu_register_live_int(const char *sub, const char *label,
@@ -73,7 +440,8 @@ int pe_menu_register_live_int(const char *sub, const char *label,
                               int maximum, int step, PeMenuGet get,
                               PeMenuSet set) {
     return psx_mod_menu_add_live_int(pe_page(sub), label, description, minimum,
-                                     maximum, step, get, set) ? 0 : -1;
+                                     maximum, step, get,
+                                     pe_wrap_setter(sub, label, get, set, 0, 0)) ? 0 : -1;
 }
 
 int pe_menu_register_live_choice(const char *sub, const char *label,
@@ -81,7 +449,8 @@ int pe_menu_register_live_choice(const char *sub, const char *label,
                                  const char *const *names, unsigned count,
                                  PeMenuGet get, PeMenuSet set) {
     return psx_mod_menu_add_live_choice(pe_page(sub), label, description,
-                                        names, count, get, set) ? 0 : -1;
+                                        names, count, get,
+                                        pe_wrap_setter(sub, label, get, set, names, count)) ? 0 : -1;
 }
 
 int pe_menu_register_dynamic_choice(const char *sub, const char *label,
@@ -104,12 +473,14 @@ int pe_menu_register_grid(const char *sub, const char *label,
     return psx_mod_menu_add_grid(pe_page(sub), label, description, cursor,
                                  max_cells, columns,
                                  (PSXModMenuChoiceCount)count_fn,
-                                 (PSXModMenuCell)cell_fn, on_accept, on_move)
+                                 (PSXModMenuCell)cell_fn,
+                                 pe_wrap_action(sub, label, on_accept, 1), on_move)
         ? 0 : -1;
 }
 
 static void pe_mod_menu_vblank(void) {
     if (!psx_mod_game_started()) return;
+    pe_watch_tick();
     for (int i = 0; i < s_tick_count; i++) s_ticks[i]();
 }
 

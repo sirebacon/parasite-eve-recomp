@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include "mod_plugins.h"
 #include "pe_mod_menu.h"
+#include "pe_log.h"
 
 #define PE_WAYNE_COUNTER   0x800A78B0u  /* u16 script variable, g_EntityWorkBuffer + 0xC0 */
 #define PE_ROOM_ADDR       0x8009D280u
@@ -67,6 +68,7 @@ static void pe_wayne_refund_tick(void) {
         if (pe_count_bad_rolls() > s_junk_before) {
             counter += PE_CRAFT_COST;
             psx_mod_write_half(PE_WAYNE_COUNTER, (uint16_t)counter);   /* his row shows it */
+            pe_log("wayne_refund", "back=%u", PE_CRAFT_COST);
         }
     }
     s_prev_counter = counter;

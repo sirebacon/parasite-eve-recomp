@@ -36,6 +36,7 @@
 #include "pe_mod_menu.h"
 #include "pe_item_table.h"
 #include "pe_loot.h"
+#include "pe_log.h"
 
 #define PE_FN_INV_DISPATCH      0x8005D2B4u
 #define PE_FN_SAVE_SERIALIZE    0x8003F800u
@@ -344,10 +345,16 @@ static uint32_t pe_dismantle_preview(uint32_t rec, int which, int *unlocks_out) 
 /* Unlock the effects in `mods` and put the item on the Rebuild list (newest first). */
 static void pe_record_salvage(int which, uint8_t id, uint8_t slots, const int16_t bonus[3],
                               const uint8_t *mods, int n, uint32_t payout) {
+    int fresh = 0, count = 0;
     for (int m = 0; m < n; ++m) {
         const int e = mods[m] & 0x1F;
-        if (e) s_cat.bits[which] |= 1u << e;
+        if (!e) continue;
+        ++count;
+        if (!(s_cat.bits[which] & (1u << e))) ++fresh;
+        s_cat.bits[which] |= 1u << e;
     }
+    pe_log("dismantle", "item=0x%02X %s plus=%d/%d/%d mods=%d new=%d payout=%u", id,
+           which ? "armor" : "gun", bonus[0], bonus[1], bonus[2], count, fresh, (unsigned)payout);
     if (s_cat.rebuild_count == PE_REBUILD_MAX) --s_cat.rebuild_count;   /* drop oldest */
     memmove(&s_cat.rebuild[1], &s_cat.rebuild[0], sizeof(PeRebuildEntry) * s_cat.rebuild_count);
     s_cat.rebuild[0].id = id;
@@ -639,6 +646,8 @@ static int pe_install_at(int which, int slot, int e, int dry_run) {
             if ((other & 0x1F) && (other >> 5) == group) psx_mod_write_byte(a, 0);
         }
     }
+    pe_log("install", "%s slot=%d effect=%d was=%d price=%u tool=%d", which ? "armor" : "gun",
+           slot, e, current, (unsigned)price, tier == 2);
     psx_mod_write_byte(slot_addr, (uint8_t)((group << 5) | e));
     pe_loot_spend_junk(price);
     if (tier == 2) pe_take_tool(0);
@@ -656,7 +665,10 @@ static int pe_remove_at(int which, int slot, int dry_run) {
     const int e = psx_mod_read_byte(a) & 0x1F;
     if (!e) return PE_CAT_EMPTY;
     if (pe_is_bag_mod(which, e)) return PE_CAT_BAG;
-    if (!dry_run) psx_mod_write_byte(a, 0);
+    if (!dry_run) {
+        psx_mod_write_byte(a, 0);
+        pe_log("remove", "%s slot=%d effect=%d", which ? "armor" : "gun", slot, e);
+    }
     return PE_CAT_OK;
 }
 
@@ -862,6 +874,7 @@ int pe_rebuild_index(int i, char *msg, size_t msg_size) {
         return 0;
     }
     pe_loot_spend_junk(price);
+    pe_log("rebuild", "item=0x%02X price=%u", r.id, (unsigned)price);
     memmove(&s_cat.rebuild[i], &s_cat.rebuild[i + 1],
             sizeof(PeRebuildEntry) * (size_t)(s_cat.rebuild_count - i - 1));
     --s_cat.rebuild_count;

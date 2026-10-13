@@ -35,6 +35,7 @@
 #include "mod_plugins.h"
 #include "pe_mod_menu.h"
 #include "pe_loot.h"
+#include "pe_log.h"
 
 #define PE_FN_INV_DISPATCH      0x8005D2B4u
 #define PE_FN_SAVE_SERIALIZE    0x8003F800u
@@ -374,6 +375,8 @@ int pe_shop_buy_index(int i, char *msg, size_t msg_size) {
         const uint32_t price = pe_econ_price();
         if (!pe_loot_spend_junk(price)) { snprintf(msg, msg_size, "Not enough Junk"); return 0; }
         pe_catalog_unlock_armor(s_econ[-1 - row].effect);
+        pe_log("buy", "item=%s price=%u", s_econ[-1 - row].name, (unsigned)price);
+        pe_log("econ_unlock", "mod=%s source=bought", s_econ[-1 - row].name);
         snprintf(msg, msg_size, "Bought %s: -%u Junk (total %u)", s_econ[-1 - row].name,
                  (unsigned)price, (unsigned)pe_loot_junk());
         return 1;
@@ -394,6 +397,7 @@ int pe_shop_buy_index(int i, char *msg, size_t msg_size) {
     }
     if (price) pe_loot_spend_junk(price);
     if (g->id == PE_ITEM_TOOL && s_shop.tools_bought < 0xFFFFu) ++s_shop.tools_bought;
+    pe_log("buy", "item=%s price=%u", g->name, (unsigned)price);
     snprintf(msg, msg_size, "Bought %s: -%u Junk (total %u)", g->name, (unsigned)price,
              (unsigned)pe_loot_junk());
     return 1;
@@ -421,6 +425,7 @@ static void pe_spare_club(void) {
     const uint32_t dst = PE_EQUIP_RECORDS_ADDR + rec_index * REC_SIZE;
     for (uint32_t o = 0; o < REC_SIZE; o += 4) psx_mod_write_word(dst + o, psx_mod_read_word(src + o));
     psx_mod_write_half(PE_AYA_SLOTS_ADDR + (uint32_t)slot * 2u, (uint16_t)(rec_index + 256u));
+    pe_log("spare_club", "%s", "");
     pe_toast("Spare Club issued at the Workshop");
 }
 

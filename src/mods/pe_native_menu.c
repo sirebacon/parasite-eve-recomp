@@ -42,6 +42,7 @@
 #include "mod_plugins.h"
 #include "pe_mod_menu.h"
 #include "pe_loot.h"
+#include "pe_log.h"
 
 #define PE_FN_APPEND_FF_TEXT     0x80052C08u   /* Util_AppendFFTerminatedBytes(dst, src) */
 #define PE_FN_DISCARD_CONFIRM    0x80045110u   /* Menu_OnItemDiscardConfirm(dialog, yes) */
@@ -343,6 +344,7 @@ static void pe_on_step_equip_screen(struct CPUState *cpu, uint32_t address) {
     const int slot = (int)psx_mod_read_word(PE_MENU_ACTIVE_SLOT);
     psx_mod_write_half(PE_AYA_SLOTS_ADDR + (uint32_t)slot * 2u, (uint16_t)(id + 1u));
     psx_mod_write_half(PE_AYA_SLOTS_ADDR + (uint32_t)other * 2u, 0);
+    pe_log("combine", "from=0x%02X into=0x%02X", (unsigned)id, (unsigned)(id + 1u));
     char msg[48];
     snprintf(msg, sizeof msg, "Combined into Medicine %u", (unsigned)(id - PE_ITEM_MEDICINE_1 + 2u));
     psx_mod_osd_message(msg);

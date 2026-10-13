@@ -77,6 +77,7 @@
 #include "mod_plugins.h"
 #include "pe_mod_menu.h"
 #include "pe_loot.h"
+#include "pe_log.h"
 
 #define PE_FN_SET_TOTAL_EXP     0x8004B70Cu  /* game.toml mod_function_entry_funcs */
 #define PE_FN_INV_DISPATCH      0x8005D2B4u
@@ -371,6 +372,7 @@ static void pe_charm_battle_won(void) {
         if (psx_mod_read_half(a) != PE_ITEM_LUCKY_CHARM) continue;
         psx_mod_write_half(a, 0);
         s_st.charm_left = PE_CHARM_BATTLES;      /* it leaves the bag; F1 shows the pity */
+        pe_log("charm_on", "battles=%u", (unsigned)PE_CHARM_BATTLES);
         return;
     }
 }
@@ -383,6 +385,9 @@ static uint32_t pe_bag_count_of(uint16_t v) {
 }
 
 static uint32_t pe_bag_junk_count(void) { return pe_bag_count_of(PE_ITEM_JUNK); }
+
+static uint32_t s_rare_before[2];          /* bag count of each shown rare (play log) */
+static int s_rare_is_econ[2];
 
 /* ---- battle end ------------------------------------------------------------ */
 static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
@@ -427,7 +432,12 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
         /* Rare drop (and one carried over from a full list) after the vanilla
          * items, as {id, extra = -1}. */
         pe_charm_battle_won();
+        const unsigned dry_before = s_st.rare_dry, carried = s_st.rare_carry;
         const uint16_t rolled = pe_roll_rare(exp);
+        pe_log("loot", "exp=%u junk=%u hits=%u vanilla=%u steal=%u shown=%u boss=%d preset=%u scav=%d rare_dry=%u rolled=0x%04X carried=0x%04X charm=%u",
+               (unsigned)exp, (unsigned)earned, (unsigned)hits, (unsigned)vanilla,
+               (unsigned)s_st.steal_bank, (unsigned)s_junk_shown, s_boss_battle, (unsigned)s_st.preset,
+               pe_loot_armor_has(PE_FX_SCAVENGER), dry_before, rolled, carried, (unsigned)s_st.charm_left);
         const uint16_t adds[2] = { s_st.rare_carry, rolled };
         s_st.rare_carry = 0;
         s_rare_shown[0] = s_rare_shown[1] = 0;
@@ -455,6 +465,8 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
             if (kept < PE_REWARD_SLOTS) {
                 keep[kept++] = 0xFFFF0000u | id;
                 s_rare_shown[a] = id;                /* drawn in gold */
+                s_rare_before[a] = pe_bag_count_of(id);
+                s_rare_is_econ[a] = id == PE_ITEM_MOD_PERMIT && s_econ_shown >= 0;
             } else {
                 s_st.rare_carry = id;                /* next battle (never an economy mod here) */
             }
@@ -570,6 +582,7 @@ static void pe_on_inv_add_item(struct CPUState *cpu, uint32_t address) {
     if (!s_enabled || !pe_game_loaded() || cpu->gpr[4] != PE_ITEM_JUNK) return;
     cpu->gpr[4] = 0;   /* Inv_AddItem(0): adds nothing, returns success */
     if (s_junk_shown && psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
+        pe_log("junk_take", "n=%u", (unsigned)s_junk_shown);
         pe_add_junk(s_junk_shown);           /* the "Junk xN" entry taken */
         s_junk_shown = 0;
         return;
@@ -818,12 +831,14 @@ static void pe_loot_tick(void) {
             if (psx_mod_read_half(a) == PE_ITEM_JUNK) { psx_mod_write_half(a, 0); --extra; taken = 1; }
         }
         if (taken) {
+            pe_log("junk_take", "n=%u", (unsigned)s_junk_shown);
             pe_add_junk(s_junk_shown);
             s_junk_shown = 0;
             s_junk_list_seen = 0;
         } else if (psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
             s_junk_list_seen = 1;
         } else if (s_junk_list_seen) {
+            pe_log("junk_left", "n=%u", (unsigned)s_junk_shown);
             s_junk_shown = 0;                /* the list closed with it left behind: lost */
             s_junk_list_seen = 0;
         }
@@ -835,17 +850,26 @@ static void pe_loot_tick(void) {
                 if (psx_mod_read_half(a) == PE_ITEM_MOD_PERMIT) { psx_mod_write_half(a, 0); break; }
             }
             pe_catalog_unlock_armor(s_econ_mods[s_econ_shown].effect);
+            pe_log("econ_unlock", "mod=%s source=drop", s_econ_mods[s_econ_shown].name);
             s_econ_shown = -1;
         } else if (psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
             s_econ_list_seen = 1;
         } else if (s_econ_list_seen) {
+            pe_log("econ_left", "mod=%s", s_econ_mods[s_econ_shown].name);
             s_econ_shown = -1;               /* left behind: lost (it can roll again) */
         }
     }
     if (s_rare_shown[0] || s_rare_shown[1]) {
         const int listed = psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0;
         if (listed) s_rare_list_seen = 1;
-        else if (s_rare_list_seen) s_rare_shown[0] = s_rare_shown[1] = 0;
+        else if (s_rare_list_seen) {
+            for (int a = 0; a < 2; ++a) {
+                if (!s_rare_shown[a] || s_rare_is_econ[a]) continue;
+                const int took = pe_bag_count_of(s_rare_shown[a]) > s_rare_before[a];
+                pe_log(took ? "rare_take" : "rare_left", "item=0x%02X", (unsigned)s_rare_shown[a]);
+            }
+            s_rare_shown[0] = s_rare_shown[1] = 0;
+        }
     }
 
     const int battle = pe_in_battle();

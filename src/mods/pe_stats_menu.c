@@ -26,6 +26,7 @@
 
 #include "mod_plugins.h"
 #include "pe_mod_menu.h"
+#include "pe_log.h"
 
 #define PE_TOTAL_EXP_ADDR      0x800C0E00u
 #define PE_MAX_HP_ADDR         0x800C0E06u
@@ -170,12 +171,19 @@ static void pe_stats_tick(void) {
         return;
     }
 
-    if (s_level != s_level_shadow) pe_apply_level(s_level);
+    if (s_level != s_level_shadow) {
+        pe_log("tweak", "Stats/Level %d->%d", s_level_shadow, s_level);
+        pe_apply_level(s_level);
+    }
     s_level = s_level_shadow = psx_mod_read_byte(PE_LEVEL_ADDR) + 1;
 
     for (int k = 0; k < PE_EDITABLE_STATS; k++) {
         PeStatRow *row = &s_stats[k];
         if (row->value != row->shadow) {
+            static const char *const names[PE_EDITABLE_STATS] = {
+                "HP", "Offense", "Defense", "PE", "Status recovery", "Active time",
+            };
+            pe_log("tweak", "Stats/%s level %d->%d", names[k], row->shadow, row->value);
             pe_apply_stat(k, row->value);
             row->raw = -1;
         }
