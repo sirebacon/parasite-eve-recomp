@@ -26,7 +26,12 @@
  * names), an effect panel (Remove, the unlocked effects with prices, the
  * locked ones as "Unknown") and an info panel (Junk, Tools, what the
  * highlighted effect costs or why it can't go in); the title bar shows the
- * highlighted effect's description from the game's own text. Each panel is a
+ * highlighted effect's description from the game's own text. Installing asks
+ * first: Cross on an effect turns the info panel into the question (the
+ * effect, its price, what it takes out of the gun or armor) and the title bar
+ * into "Cross: install, Circle: cancel"; Cross again installs, Circle or Left
+ * or moving the cursor drops it. Remove is free and the mod stays unlocked, so
+ * it doesn't ask. Each panel is a
  * mode-1 node with a mode-2 list child, written into the widget pool as
  * MenuWidget_CreateSimpleNode / MenuWidget_CreateNode would. The lists step
  * with Menu_StepScrollCursor (cursor, scrolling, the move sound) and draw with
@@ -178,6 +183,9 @@ static struct {
     int prev_slot_row;                        /* for skipping the name rows */
     uint32_t pending;                         /* buttons for next frame */
     int note_effects_row;                     /* the note belongs to this row */
+    int confirm;                              /* asking about an install */
+    int confirm_row;                          /* ... of the effect on this row */
+    int confirm_effect;
     char note[48];
     uint32_t hidden[PE_HIDDEN_MAX];           /* status panels we hid */
     uint32_t hidden_selected[PE_HIDDEN_MAX];
@@ -455,6 +463,25 @@ static void pe_row_text(int panel, int i, PeText *left, PeText *right, int *dim,
         case R_LOCKED: pe_t_str(left, "Unknown"); *dim = 1; break;
         default: break;
         }
+    } else if (s_cm.confirm) {                /* the question */
+        const Row r = pe_effect_row(s_cm.confirm_row);
+        if (i == 0) {
+            pe_t_str(left, "Install ");
+            pe_t_str(left, pe_fx_name(r.which, r.effect));
+            pe_t_num(right, (unsigned)pe_cat_price(r.which, r.effect));
+            pe_t_str(right, pe_cat_needs_tool(r.which, r.effect) ? " Junk, Tool" : " Junk");
+        } else {
+            int out[4];
+            const int k = pe_cat_replaces(r.which, r.slot, r.effect, out, 4);
+            if (!k) pe_t_str(left, "Into the empty slot");
+            else {
+                pe_t_str(left, "Replaces ");
+                for (int j = 0; j < k; ++j) {
+                    if (j) pe_t_str(left, ", ");
+                    pe_t_str(left, pe_fx_name(r.which, out[j]));
+                }
+            }
+        }
     } else if (i == 0) {
         int tools, kit;
         pe_count_tools(&tools, &kit);
@@ -680,6 +707,7 @@ static void pe_fit_list(int p) {
 
 static void pe_focus(int p) {
     s_cm.focus = p;
+    s_cm.confirm = 0;
     s_cm.note[0] = '\0';
     if (p == P_EFFECTS) {
         psx_mod_write_word(s_cm.list[P_EFFECTS] + N_CURSOR_X, 0);
@@ -796,6 +824,14 @@ static void pe_pick_effect(void) {
     if (r.kind == R_LOCKED) { pe_note("Dismantle gear that has it"); return; }
     if (r.kind != R_EFFECT) return;
     const char *blocked = pe_effect_blocker(r, why, sizeof why);
+    if (!blocked[0] && (!s_cm.confirm || s_cm.confirm_row != row || s_cm.confirm_effect != r.effect)) {
+        s_cm.confirm = 1;                     /* ask first; Cross again installs */
+        s_cm.confirm_row = row;
+        s_cm.confirm_effect = r.effect;
+        s_cm.note[0] = '\0';
+        return;
+    }
+    s_cm.confirm = 0;
     if (blocked[0] || pe_cat_install(r.which, r.slot, r.effect, 0) != PE_CAT_OK) {
         pe_note(blocked[0] ? blocked : "Can't install now");
         return;
@@ -826,7 +862,11 @@ static void pe_act(uint32_t buttons) {
             pe_fit_list(P_EFFECTS);
         }
     } else {
-        if (buttons & (IN_CANCEL | IN_LEFT)) { pe_focus(P_SLOTS); return; }
+        if (buttons & (IN_CANCEL | IN_LEFT)) {
+            if (s_cm.confirm) { s_cm.confirm = 0; return; }   /* "no": back to the list */
+            pe_focus(P_SLOTS);
+            return;
+        }
         if (buttons & IN_CONFIRM) pe_pick_effect();
     }
 }
@@ -874,6 +914,9 @@ static void pe_on_frame(struct CPUState *cpu, uint32_t address) {
     s_cm.pending = 0;
     if (buttons) pe_act(buttons);
     if (!s_cm.open) return;
+    if (s_cm.confirm && (s_cm.focus != P_EFFECTS ||
+                         (int)psx_mod_read_word(s_cm.list[P_EFFECTS] + N_CURSOR_Y) != s_cm.confirm_row))
+        s_cm.confirm = 0;
     pe_skip_names();
     pe_fit_list(P_EFFECTS);
 }
@@ -1010,7 +1053,9 @@ static void pe_on_help_text(struct CPUState *cpu, uint32_t address) {
 static uint32_t pe_description(void) {
     PeText t;
     memset(&t, 0, sizeof t);
-    if (s_cm.focus == P_EFFECTS) {
+    if (s_cm.confirm) {
+        pe_t_str(&t, "Cross: install    Circle: cancel");
+    } else if (s_cm.focus == P_EFFECTS) {
         const Row r = pe_effect_row((int)psx_mod_read_word(s_cm.list[P_EFFECTS] + N_CURSOR_Y));
         if (r.kind == R_EFFECT) return pe_fx_description(r.which, r.effect);
         if (r.kind == R_REMOVE) pe_t_str(&t, "Take the mod out of this slot");

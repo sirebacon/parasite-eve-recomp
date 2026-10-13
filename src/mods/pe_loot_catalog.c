@@ -747,6 +747,23 @@ int pe_cat_is_bag_mod(int which, int e) { return pe_is_bag_mod(which, e); }
 int pe_cat_install(int which, int slot, int e, int dry_run) { return pe_install_at(which, slot, e, dry_run); }
 int pe_cat_remove(int which, int slot, int dry_run) { return pe_remove_at(which, slot, dry_run); }
 
+/* Effects installing e into `slot` would take out (as pe_install_at): the
+ * slot's own mod and a same-group mod elsewhere. Returns how many (<= max). */
+int pe_cat_replaces(int which, int slot, int e, int *out, int max) {
+    const uint32_t rec = pe_loaded() ? pe_equipped_record(which) : 0;
+    const int n = rec ? pe_mod_count(rec) : 0;
+    int k = 0;
+    if (slot < 0 || slot >= n) return 0;
+    const int current = psx_mod_read_byte(rec + REC_MODS + (uint32_t)slot) & 0x1F;
+    if (current && current != e && k < max) out[k++] = current;
+    const int group = pe_mod_group(which, e);
+    for (int m = 0; group && m < n && k < max; ++m) {
+        const int other = psx_mod_read_byte(rec + REC_MODS + (uint32_t)m);
+        if (m != slot && (other & 0x1F) && (other >> 5) == group) out[k++] = other & 0x1F;
+    }
+    return k;
+}
+
 static int pe_readonly(int value) { (void)value; return 0; }
 
 /* ---- Rebuild -------------------------------------------------------------------- */

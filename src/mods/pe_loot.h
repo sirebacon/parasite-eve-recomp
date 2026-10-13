@@ -65,6 +65,7 @@ int pe_cat_needs_tool(int which, int e);
 int pe_cat_is_bag_mod(int which, int e);
 int pe_cat_install(int which, int slot, int e, int dry_run);  /* PE_CAT_* */
 int pe_cat_remove(int which, int slot, int dry_run);
+int pe_cat_replaces(int which, int slot, int e, int *out, int max);  /* effects an install takes out */
 
 #ifdef __cplusplus
 }
