@@ -1,22 +1,39 @@
 /*
- * Weapon power in the game's own menu.
+ * Weapon damage per second in the game's own menu.
  *
- * When a gun is highlighted, the game's menu title bar shows its name
+ * When a gun is highlighted, the game's menu title bar shows its line
  * (Menu_DrawContextHelpText 0x8004C608 -> Draw_PrintRawText(Str_LookupTableC(
  * itemId - 1))). A build-time function-entry hook on Draw_PrintRawText
  * (game.toml [recompiler] mod_function_entry_funcs) lets this plugin swap the
- * text pointer, only for calls coming from that function, for a copy of the
- * name with "  PWR n" appended. The copy lives in mod memory (Expansion 1),
- * which the game's own loads can read.
+ * text pointer, only for calls coming from that function, for a copy with
+ * "  DPS n" appended. The copy lives in mod memory (Expansion 1), which the
+ * game's own loads can read.
  *
- * Power per turn, from the battle damage code (Battle_StepEnemyMovement):
+ * Damage, from the battle damage code (Battle_StepEnemyMovement):
  *   per shot = (Aya attack / 5 + gun attack) * shotPercent[shots] / 100
- *   per turn = shots * per shot
+ *   per volley = shots * per shot; a turn is 1, 2 or 3 volleys (commands,
+ *   mod effects 19 / 20: Battle_Init)
  * before the enemy's defense (subtracted as defense / shots per shot) and
  * weaknesses. Aya attack = her Combatant stat1E (player -> core + 0x1E, kept
  * current in the field by Inv_RecalcSlotStats); gun attack = base[0] +
  * bonus[0] (max 999), halved by mod effect 16 (Inv_BuildWeaponList); shots =
  * 1, or D_800923D0[effect] for a group-1 mod (effects 1-5: 2/3/5/7/10).
+ *
+ * Reloads (Battle_StepCharacterAction): a volley spends one loaded round a
+ * shot (an empty chamber only clicks), and a command that starts on an empty
+ * magazine reloads (BattleCmd_CommitAmmoAndUpdate, action mode 0xC) and deals
+ * nothing. So with capacity C (base[2] + bonus[2]) a cycle is ceil(C / shots)
+ * firing commands plus one reload, and deals C rounds' damage: sustained
+ * damage a turn = commands * C * per shot / (ceil(C / shots) + 1). Melee
+ * (kind 8) never reloads.
+ *
+ * Time (Menu_MainUpdate): Aya's turn gauge fills 0..9000 by scaledOffense a
+ * battle frame, which an action sets to stat22 * scale[action] / 10
+ * (Battle_SetupEnemyAnims); a gun attack is action 6, scale 4, the same for
+ * every gun. stat22 = 50 + her Active Time row (Aya_LookupLevelStats). The
+ * battle runs at 30 frames a second (Draw_RenderFrame: VSync(2)), so a turn
+ * after attacking takes 9000 / (stat22 * 0.4) / 30 = 750 / stat22 seconds.
+ * Haste and Slow (battle-only) aren't counted.
  *
  * The gun's record: the equipped gun if the name matches it, else the first
  * matching gun in Aya's bag, else the item's base data.
@@ -42,11 +59,15 @@
 #define PE_EQUIP_RECORDS_ADDR    0x800C0EACu
 #define PE_PLAYER_PTR_ADDR       0x8009D254u
 #define COMBATANT_ATTACK         0x1Eu
+#define COMBATANT_STAT22         0x22u     /* 50 + Active Time row: the gauge speed */
+#define PE_TURN_SECONDS_X_STAT22 750u      /* 9000 / (stat22 * 4 / 10) / 30 fps */
 
 #define REC_ITEM_ID   0x04u
 #define REC_KIND      0x06u
 #define REC_BASE0     0x07u
+#define REC_BASE2     0x09u                  /* capacity (bullets) */
 #define REC_BONUS0    0x0Eu
+#define REC_BONUS2    0x12u
 #define REC_MOD_COUNT 0x14u
 #define REC_MODS      0x15u
 #define REC_MAX_MODS  11
@@ -117,29 +138,49 @@ static uint32_t pe_record_for_gun(unsigned id) {
     return pe_base_record(id);
 }
 
-static unsigned pe_power_per_turn(uint32_t rec) {
+/* Damage per second x10 (sustained: commands, reloads, Aya's turn speed). */
+static unsigned pe_dps_x10(uint32_t rec) {
     static const uint8_t shot_percent[11] = { 0, 100, 60, 41, 0, 25, 0, 18, 0, 0, 13 };
     int attack = psx_mod_read_byte(rec + REC_BASE0) +
                  (int16_t)psx_mod_read_half(rec + REC_BONUS0);
     if (attack > 999) attack = 999;
-    unsigned shots = 1;
+    int capacity = psx_mod_read_byte(rec + REC_BASE2) + (int16_t)psx_mod_read_half(rec + REC_BONUS2);
+    if (capacity > 999) capacity = 999;
+    unsigned shots = 1, commands = 1;
     int count = psx_mod_read_byte(rec + REC_MOD_COUNT);
     if (count > REC_MAX_MODS) count = REC_MAX_MODS;
     for (int i = 0; i < count; ++i) {
         const unsigned effect = psx_mod_read_byte(rec + REC_MODS + (uint32_t)i) & 31u;
         if (effect >= 1 && effect <= 5) shots = psx_mod_read_byte(PE_SHOTS_TABLE + effect);
         if (effect == 16) attack >>= 1;
+        if (effect == 19) commands = 2;
+        if (effect == 20) commands = 3;
     }
     if (shots > 10 || shot_percent[shots] == 0) shots = 1;
 
-    unsigned aya_attack = 0;
+    unsigned aya_attack = 0, stat22 = 50;
     const uint32_t player = psx_mod_read_word(PE_PLAYER_PTR_ADDR);
     if (pe_ram_pointer(player)) {
         const uint32_t core = psx_mod_read_word(player);
-        if (pe_ram_pointer(core)) aya_attack = psx_mod_read_half(core + COMBATANT_ATTACK);
+        if (pe_ram_pointer(core)) {
+            aya_attack = psx_mod_read_half(core + COMBATANT_ATTACK);
+            const unsigned s = psx_mod_read_half(core + COMBATANT_STAT22);
+            if (s >= 1 && s < 1000) stat22 = s;
+        }
     }
     const int per_shot = ((int)(aya_attack / 5u) + attack) * shot_percent[shots] / 100;
-    return per_shot > 0 ? (unsigned)per_shot * shots : 0u;
+    if (per_shot <= 0) return 0;
+
+    /* Damage a turn, x10, with reloads for guns. */
+    uint64_t turn_x10;
+    const unsigned kind = psx_mod_read_byte(rec + REC_KIND);
+    if (kind == 8 || capacity <= 0) {
+        turn_x10 = (uint64_t)commands * shots * (unsigned)per_shot * 10u;
+    } else {
+        const unsigned cycle = ((unsigned)capacity + shots - 1u) / shots + 1u;   /* + the reload */
+        turn_x10 = (uint64_t)commands * (unsigned)capacity * (unsigned)per_shot * 10u / cycle;
+    }
+    return (unsigned)(turn_x10 * stat22 / PE_TURN_SECONDS_X_STAT22);
 }
 
 /* ---- the hook --------------------------------------------------------------- */
@@ -160,9 +201,16 @@ static void pe_on_print_raw_text(struct CPUState *cpu, uint32_t address) {
     uint8_t out[PE_TEXT_MAX];
     unsigned n = 0;
     for (uint8_t c; n < PE_TEXT_MAX - 12 && (c = psx_mod_read_byte(text + n)) != 0xFF; ) out[n++] = c;
-    static const uint8_t label[] = { 0x0F, 0x0F, 0x1F, 0x26, 0x21, 0x0F }; /* "  PWR " */
+    static const uint8_t label[] = { 0x0F, 0x0F, 0x13, 0x1F, 0x22, 0x0F }; /* "  DPS " */
     for (unsigned i = 0; i < sizeof label; ++i) out[n++] = label[i];
-    n = pe_put_number(out, n, pe_power_per_turn(pe_record_for_gun(id)));
+    const unsigned dps = pe_dps_x10(pe_record_for_gun(id));
+    if (dps < 100u) {                         /* one decimal below 10: "2.7" */
+        n = pe_put_number(out, n, dps / 10u);
+        out[n++] = 0x2F;                      /* '.' */
+        n = pe_put_number(out, n, dps % 10u);
+    } else {
+        n = pe_put_number(out, n, (dps + 5u) / 10u);
+    }
     out[n++] = 0xFF;
     for (unsigned i = 0; i < n; ++i) psx_mod_write_byte(s_text_buf + i, out[i]);
     cpu->gpr[4] = s_text_buf;
@@ -171,7 +219,7 @@ static void pe_on_print_raw_text(struct CPUState *cpu, uint32_t address) {
 /* Called from pe_mod_menu.c, which fixes the order of the PE page. */
 void pe_weapon_power_menu_register(void) {
     (void)pe_menu_register_toggle(0, "Weapon power",
-        "Shows gun power per turn in menus.", &s_show_power, 0);
+        "Shows gun damage per second in menus.", &s_show_power, 0);
 }
 
 PSX_MOD_CONSTRUCTOR(pe_register_weapon_power_hook) {
