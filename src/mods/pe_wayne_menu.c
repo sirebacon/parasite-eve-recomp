@@ -12,7 +12,7 @@
  *
  * At the entry of Menu_DrawTextboxEntries (0x80037870), every frame:
  *   - a box showing Wayne's menu (a choice with "Discard junk") is pointed at
- *     our copy with "Workshop" above Cancel and "Discard junk  <your Junk>
+ *     our copy with "Workshop" above Cancel and "Discard junk <your Junk>,
  *     <his count>/300",
  *     one line taller;
  *   - confirm on Workshop is taken away from the game (the press is cleared)
@@ -131,9 +131,9 @@ static void pe_build_wayne(PeText *t) {
         for (unsigned k = start; k < i; ++k) pe_t_byte(t, s_orig[k]);
         if (pe_contains(s_orig + start, i - start, s_discard_junk)) {
             /* your Junk, then his count toward the next gun */
-            pe_t_str(t, "  ");
+            pe_t_str(t, " ");
             pe_t_num(t, (unsigned)pe_loot_junk());
-            pe_t_str(t, "  ");
+            pe_t_str(t, ", ");
             pe_t_num(t, psx_mod_read_half(PE_WAYNE_COUNTER));
             pe_t_str(t, "/300");
         }
