@@ -46,10 +46,16 @@
  *     ("<item> obtained", built in D_800A1B50 by Inv_GetItemEffectData) is
  *     wrapped in the textbox's own red highlight codes (0xFB 0x04 ... 0xFB
  *     0x05); the textbox has no other color. User request, 2026-10-12.
+ *   - Phase 7 (balance estimate 2026-10-13, section 9): battle Junk is capped
+ *     at 12 a fight, and boss fights (any enemy flagged "can't escape",
+ *     statusFlags2 & 0x40000, seen during the fight) use a cap of 25. With the
+ *     Tool Kit a rare Tool roll becomes a stat booster (Super Tool rolls too
+ *     with the Super Tool Kit).
  *   - Phase 6 (custom items doc C1-C7, decisions 19, 39): difficulty presets
  *     Relaxed / Normal / Grind scale battle Junk (x1.5 / x1 / x0.75), the
- *     rare guarantee (x0.7 / x1 / x1.3) and every price (-25% / 0 / +25%,
- *     caps still apply); the economy armor mods Scavenger (+50% battle Junk)
+ *     rare chance's base and step (x1.5 / x1 / x0.5 and x1.5 / x1 / x0.6:
+ *     one rare per ~7.6 / 9.8 / 13.8 battles) and guarantee (18 / 25 / 33),
+ *     and every price (-25% / 0 / +25%, caps still apply); the economy armor mods Scavenger (+50% battle Junk)
  *     and Lucky Find (pity builds twice as fast) are read from the equipped
  *     armor; a carried Lucky Charm is used up at the next won battle and
  *     doubles pity progress for 10 won battles; the rare table also unlocks
@@ -103,6 +109,7 @@
 #define PE_ENEMY_SLOT_STRIDE  0xDCu
 #define PE_ENEMY_SLOTS        7
 #define EN_HITS_ON_AYA        (4u + 0x9Cu)
+#define EN_STATUS_FLAGS2      (4u + 0xCCu)    /* & 0x40000: can't escape (bosses) */
 
 #define PE_REWARD_SLOTS       10u
 #define PE_INV_OVERRIDE_LIST  0x8009D04Cu  /* g_InvActiveListOverride (items found) */
@@ -145,7 +152,8 @@ static int s_enabled = 1;          /* "Junk economy", on by default (28) */
 static int s_handin_mode;          /* 0 = up to Wayne's next gun, 1 = all */
 static int s_tune_floor = 1;       /* decision 16 */
 static int s_tune_exp_per_junk = 8;/* decision 17 (placeholder until phase 7) */
-static int s_tune_battle_cap = 30;
+static int s_tune_battle_cap = 12;   /* phase 7: was 30 */
+static int s_tune_boss_cap = 25;     /* phase 7: boss fights */
 static int s_tune_nohit_bonus = 25;/* decision 32, percent */
 static int s_tune_rare_base = 4;   /* decision 18: soft pity, percent */
 static int s_tune_rare_step = 1;   /* + percent per dry battle */
@@ -155,7 +163,9 @@ static int s_tune_empty_steal = 2; /* decision 19: Junk for an empty steal */
 /* Presets (39): battle Junk %, rare guarantee %, price %. */
 static const char *const s_preset_names[] = { "Relaxed", "Normal", "Grind" };
 static const uint16_t s_preset_junk[3]  = { 150, 100, 75 };
-static const uint16_t s_preset_pity[3]  = { 70, 100, 130 };
+static const uint16_t s_preset_pity[3]  = { 72, 100, 132 };   /* guarantee: 18 / 25 / 33 */
+static const uint16_t s_preset_pity_base[3] = { 150, 100, 50 };  /* base chance % */
+static const uint16_t s_preset_pity_step[3] = { 150, 100, 60 };  /* step % */
 static const uint16_t s_preset_price[3] = { 75, 100, 125 };
 
 static int s_in_battle;
@@ -170,6 +180,7 @@ static uint16_t s_rare_shown[2];   /* rare drops to draw in gold this battle */
 static int s_rare_list_seen;       /* the items-found list has been shown */
 static int s_color_saved;
 static uint32_t s_saved_color, s_saved_color_shaded;
+static int s_boss_battle;          /* an enemy this fight can't be escaped from */
 static int s_wayne_waiting;        /* a hand-in reached 300 and he built nothing (before Day 4) */
 static uint16_t s_wayne_prev;      /* Wayne's count during a hand-in */
 static int s_wayne_dropped;        /* ... it went down: he made a gun */
@@ -275,6 +286,15 @@ static int pe_econ_missing(int *out) {
     return n;
 }
 
+/* Item value anywhere in the bag or Wayne's storage. */
+static int pe_carried(uint16_t v) {
+    for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT; ++i)
+        if (psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == v) return 1;
+    for (uint32_t i = 0; i < PE_STORAGE_COUNT; ++i)
+        if (psx_mod_read_half(PE_STORAGE_ADDR + i * 2u) == v) return 1;
+    return 0;
+}
+
 static uint16_t pe_pick_rare(uint32_t exp) {
     int missing[PE_ECON_COUNT];
     const int econ = pe_econ_missing(missing);
@@ -295,7 +315,12 @@ static uint16_t pe_pick_rare(uint32_t exp) {
                 psx_mod_osd_message(msg);
                 return 0;
             }
-            if (s_rare_table[i].item != PE_RARE_BOOSTER) return s_rare_table[i].item;
+            uint16_t item = s_rare_table[i].item;
+            /* A Tool is wasted with the Tool Kit (either kit makes Tools free),
+             * a Super Tool with the Super Tool Kit: a stat booster instead. */
+            if (item == 0x16u && (pe_carried(0x35u) || pe_carried(0x36u))) item = PE_RARE_BOOSTER;
+            if (item == 0x17u && pe_carried(0x36u)) item = PE_RARE_BOOSTER;
+            if (item != PE_RARE_BOOSTER) return item;
             const uint32_t tier = exp < 20u ? 0u : exp < 60u ? 1u : exp < 150u ? 2u : 3u;
             return (uint16_t)(s_booster_base[pe_rand() % 6u] + tier);
         }
@@ -321,9 +346,12 @@ static uint32_t pe_pity_step(void) {
 /* Soft pity: base + step per unit of progress, certain at the guarantee. */
 static uint16_t pe_roll_rare(uint32_t exp) {
     const uint32_t dry = s_st.rare_dry;
-    const uint32_t chance = (uint32_t)s_tune_rare_base + (uint32_t)s_tune_rare_step * dry;
+    const uint32_t preset = s_st.preset < 3 ? s_st.preset : 1u;
+    /* Per mille, so the presets can scale base and step (7). */
+    const uint32_t chance = (uint32_t)s_tune_rare_base * 10u * s_preset_pity_base[preset] / 100u +
+                            (uint32_t)s_tune_rare_step * 10u * s_preset_pity_step[preset] / 100u * dry;
     const int certain = dry + 1u >= pe_rare_guarantee();
-    if (certain || pe_rand() % 100u < chance) {
+    if (certain || pe_rand() % 1000u < chance) {
         s_st.rare_dry = 0;
         return pe_pick_rare(exp);
     }
@@ -361,7 +389,8 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
     /* Floor + EXP-scaled, capped, with the no-hit bonus (16, 17, 32). */
     const uint32_t per = s_tune_exp_per_junk > 0 ? (uint32_t)s_tune_exp_per_junk : 1u;
     uint32_t earned = (uint32_t)s_tune_floor + exp / per;
-    if (earned > (uint32_t)s_tune_battle_cap) earned = (uint32_t)s_tune_battle_cap;
+    const uint32_t cap = (uint32_t)(s_boss_battle ? s_tune_boss_cap : s_tune_battle_cap);
+    if (earned > cap) earned = cap;
     uint32_t hits = 0;
     for (int s = 0; s < PE_ENEMY_SLOTS; ++s) hits += s_st.hits[s];
     if (hits < 4) earned += earned * (uint32_t)s_tune_nohit_bonus * (4u - hits) / 400u;
@@ -765,6 +794,7 @@ static void pe_loot_tick(void) {
     if (battle && !s_in_battle) {            /* a battle starts */
         s_rare_shown[0] = s_rare_shown[1] = 0;
         s_junk_shown = 0;
+        s_boss_battle = 0;
         s_st.steal_bank = 0;
         memset(s_st.hits, 0, sizeof s_st.hits);
     } else if (!battle && s_in_battle) {     /* it ended; a win already paid out */
@@ -778,6 +808,7 @@ static void pe_loot_tick(void) {
             if (!psx_mod_read_byte(slot)) continue;
             const uint16_t h = psx_mod_read_half(slot + EN_HITS_ON_AYA);
             if (h > s_st.hits[s]) s_st.hits[s] = h;
+            if (psx_mod_read_word(slot + EN_STATUS_FLAGS2) & 0x40000u) s_boss_battle = 1;
         }
         return;
     }
@@ -945,6 +976,8 @@ void pe_loot_menu_register(void) {
         "Battle EXP for each extra Junk.", &s_tune_exp_per_junk, 1, 100, 1);
     (void)pe_menu_register_int(PE_TUNING_PAGE, "Battle Junk cap",
         "Most Junk from one battle.", &s_tune_battle_cap, 1, 200, 1);
+    (void)pe_menu_register_int(PE_TUNING_PAGE, "Boss Junk cap",
+        "Most Junk from a boss fight.", &s_tune_boss_cap, 1, 200, 1);
     (void)pe_menu_register_int(PE_TUNING_PAGE, "No-hit bonus %",
         "Extra Junk for a no-hit battle.", &s_tune_nohit_bonus, 0, 100, 5);
     (void)pe_menu_register_int(PE_TUNING_PAGE, "Rare base %",

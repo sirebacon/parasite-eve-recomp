@@ -321,7 +321,7 @@ static uint32_t pe_salvage_payout(int which, int bonus_sum, const uint8_t *mods,
         payout += 3u;
         if (pe_unlocked(which, e)) ++dupes; else ++unlocks;
     }
-    payout += 5u * (uint32_t)dupes;
+    payout += 2u * (uint32_t)dupes;           /* phase 7: was 5 (Chrysler leaned on it) */
     if (pe_loot_armor_has(PE_FX_SALVAGER)) payout += payout / 4u;   /* C3 */
     if (payout > PE_PAYOUT_CAP) payout = PE_PAYOUT_CAP;
     if (unlocks_out) *unlocks_out = unlocks;
@@ -753,7 +753,30 @@ static int pe_readonly(int value) { (void)value; return 0; }
 static int s_rb_choice;
 static char s_rb_names[PE_REBUILD_MAX][32];
 
+/* Wayne's 300-Junk guns, including the "Leave it to Wayne" ones. */
+static int pe_is_wayne_gun(uint8_t id) {
+    static const uint8_t ids[] = { 0x62, 0x63, 0x64, 0x65, 0x66, 0x6E, 0x78, 0x82, 0x8F, 0x92 };
+    for (size_t i = 0; i < sizeof ids; ++i) if (ids[i] == id) return 1;
+    return 0;
+}
+
+/* Top-tier: a Wayne gun, or base attack / defense of 100+ (the item table's
+ * first base stat, +0x07). Their dismantle payout counts only +bonuses and
+ * mods, so a 300-Junk gun would otherwise rebuild for ~25-70. */
+static int pe_top_tier(uint8_t id) {
+    if (pe_is_wayne_gun(id)) return 1;
+    const uint32_t base = psx_mod_read_word(PE_ITEM_TABLE_BASE_ADDR);
+    const uint32_t end = psx_mod_read_word(PE_ITEM_TABLE_END_ADDR);
+    const uint32_t index = (uint32_t)id - 1u;
+    if (!id || end <= base || index >= ((end - base) >> 5)) return 0;
+    return psx_mod_read_byte(PE_ITEM_TABLE_ORIGIN + base + index * REC_SIZE + 0x07u) >= 100u;
+}
+
 static uint32_t pe_rebuild_price(const PeRebuildEntry *r) {
+    if (pe_top_tier(r->id)) {                 /* phase 7: always the cap */
+        const uint32_t p = pe_loot_price(PE_REBUILD_CAP);
+        return p > PE_REBUILD_CAP ? PE_REBUILD_CAP : p;
+    }
     uint32_t p = pe_loot_price((uint32_t)r->payout * (uint32_t)s_rebuild_markup / 100u);
     if (p < r->payout) p = r->payout;         /* never below what dismantling paid */
     return p > PE_REBUILD_CAP ? PE_REBUILD_CAP : p;

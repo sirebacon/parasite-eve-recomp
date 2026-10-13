@@ -78,8 +78,8 @@ typedef struct {
 static const PeGood s_goods[] = {
     { 0x06, "MED 1",   "MEDICINE 1",   6 },
     { 0x07, "MED 2",   "MEDICINE 2",   12 },
-    { 0x08, "MED 3",   "MEDICINE 3",   25 },
-    { 0x09, "MED 4",   "MEDICINE 4",   50 },
+    { 0x08, "MED 3",   "MEDICINE 3",   35 },   /* phase 7: was 25 */
+    { 0x09, "MED 4",   "MEDICINE 4",   80 },   /* phase 7: was 50 */
     { 0x0D, "CURE-P",  "CURE-P",       5 },
     { 0x0E, "CURE-D",  "CURE-D",       5 },
     { 0x0F, "CURE-C",  "CURE-C",       5 },
@@ -89,7 +89,7 @@ static const PeGood s_goods[] = {
     { 0x03, "AMMO 30", "BULLETS X30",  9 },
     { 0x05, "ROCKET",  "ROCKET",       20 },
     { 0x18, "SMOKE",   "SMOKE GRENADE", 15 },  /* C6: ITEM24, pe_custom.c */
-    { PE_ITEM_TOOL, "TOOL", "TOOL",    0 },
+    { PE_ITEM_TOOL, "TOOL", "TOOL",    0 },    /* last: hidden while a Tool Kit is held */
 };
 #define PE_GOODS ((int)(sizeof s_goods / sizeof s_goods[0]))
 
@@ -188,6 +188,21 @@ static int pe_cannot_attack(void) {
     return 1;
 }
 
+/* Either kit makes Tools free (pe_take_tool in pe_loot_catalog.c): no Tools for sale. */
+static int pe_has_tool_kit(void) {
+    for (uint32_t i = 0; i < 50u; ++i) {
+        const uint16_t v = pe_bag(i);
+        if (v == 0x35u || v == 0x36u) return 1;
+    }
+    for (uint32_t i = 0; i < PE_STORAGE_COUNT; ++i) {
+        const uint16_t v = psx_mod_read_half(PE_STORAGE_ADDR + i * 2u);
+        if (v == 0x35u || v == 0x36u) return 1;
+    }
+    return 0;
+}
+
+static int pe_goods_on_sale(void) { return pe_loaded() && pe_has_tool_kit() ? PE_GOODS - 1 : PE_GOODS; }
+
 /* ---- prices ----------------------------------------------------------------- */
 /* Prices go through the preset and Bargain (pe_loot_price); the Tool cap
  * applies after them (decisions 14, 40). */
@@ -229,8 +244,8 @@ static void pe_toast(const char *text) {
 }
 
 static unsigned pe_goods_count(void) {
-    if (s_grid < 0 || s_grid >= PE_GOODS) s_grid = 0;
-    return (unsigned)PE_GOODS;
+    if (s_grid < 0 || s_grid >= pe_goods_on_sale()) s_grid = 0;
+    return (unsigned)pe_goods_on_sale();
 }
 
 static int pe_goods_cell(int index, char *label, unsigned size, unsigned *flags) {
@@ -242,7 +257,7 @@ static int pe_goods_cell(int index, char *label, unsigned size, unsigned *flags)
         snprintf(label, size, "BAG %d/%u", used, (unsigned)limit);
         return 1;
     }
-    if (index >= PE_GOODS) return 0;
+    if (index >= pe_goods_on_sale()) return 0;
     const PeGood *g = &s_goods[index];
     snprintf(label, size, "%s", g->tile);
     unsigned f = 0;
@@ -273,11 +288,11 @@ static const char *pe_sel_name(unsigned i) {
 static const char *pe_result_name(unsigned i) { (void)i; return s_result; }
 
 /* pe_loot.h, for Wayne's in-game Workshop (pe_wayne_menu.c) and the F1 page. */
-int pe_shop_count(void) { return PE_GOODS; }
+int pe_shop_count(void) { return pe_goods_on_sale(); }
 uint16_t pe_shop_item(int i) { return i >= 0 && i < PE_GOODS ? s_goods[i].id : 0; }
 uint32_t pe_shop_price_index(int i) { return i >= 0 && i < PE_GOODS ? pe_price(&s_goods[i]) : 0; }
 const char *pe_shop_blocked_index(int i) {
-    if (i < 0 || i >= PE_GOODS) return "No such goods";
+    if (i < 0 || i >= pe_goods_on_sale()) return "No such goods";
     if (!pe_loaded()) return "Load a game first";
     if (!pe_loot_enabled()) return "Junk economy is off";
     return pe_blocked(&s_goods[i]);
