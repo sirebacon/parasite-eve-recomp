@@ -36,6 +36,16 @@
  *        borrowed + anything else     -> gauge = 0 (no free actions)
  *        full bar + allowed action    -> gauge = 4500 (half cost)
  *   The bar is tinted gold while it's between half and full.
+ *   4. The fill rate. The gauge fills by scaledOffense (+0x24) a battle frame,
+ *      set from the queued action as stat22 (+0x22) * scale[action id] / 10
+ *      (Battle_SetupEnemyAnims; the scale table at 0x800106D4 is 0, 10, 8,
+ *      10, 8, 8, 4, 10, 20). Opening the battle menu leaves Aya with a blank
+ *      action, id 0, whose scale is 0: harmless on a full bar, but a borrowed
+ *      bar put back below full then never filled again (user report
+ *      2026-10-13: frozen at 7840 after backing out of the menu). The rate at
+ *      the borrow is saved and put back when the turn ends, and any free
+ *      moment with the gauge below full and a zero rate gets the last real
+ *      rate back.
  *   The turn bookkeeping rides in save states, so loading an F7 state saved
  *   mid-borrow refunds and restores the tabs exactly as if play had continued.
  */
@@ -63,6 +73,9 @@
 #define PE_ARMOR_SLOT_ADDR     0x800C0E22u
 
 #define COMBATANT_TURN_GAUGE   0x10u
+#define COMBATANT_STAT22       0x22u
+#define COMBATANT_FILL_RATE    0x24u               /* scaledOffense: gauge step a battle frame */
+#define COMBATANT_STATE_FLAGS  0x4Cu               /* 0x10000: battle ended */
 #define PE_GAUGE_FULL          9000u
 #define PE_GAUGE_HALF          4500u
 
@@ -81,10 +94,11 @@ static int s_allow[ACT_COUNT] = { 1, 0, 0, 0, 0 };
  * hidden tabs, the tinted bar). It is save-state data (psx_mod_register_state),
  * so an F7 state saved mid-turn loads with the bookkeeping that matches it.
  * Bump PE_ATB_STATE_VERSION when the layout changes. */
-#define PE_ATB_STATE_VERSION 1u
+#define PE_ATB_STATE_VERSION 2u
 static struct {
     int borrowed, borrow_pending, turn_active, track_full;
     unsigned saved_gauge;
+    unsigned saved_rate, last_rate;              /* fill rate at the borrow / last nonzero */
     int action;                                  /* most significant action this turn */
     int tab_saved;
     uint32_t saved_tabs;
@@ -211,6 +225,19 @@ static void pe_reset(void) {
     s_st.borrowed = s_st.borrow_pending = s_st.turn_active = s_st.track_full = 0;
 }
 
+/* A gauge below full must be filling: put back a zero rate (see 4. above). */
+static void pe_fix_rate(uint32_t core, unsigned preferred) {
+    const uint32_t rate_addr = core + COMBATANT_FILL_RATE;
+    const unsigned rate = psx_mod_read_half(rate_addr);
+    if (rate) { s_st.last_rate = rate; return; }
+    if (psx_mod_read_half(core + COMBATANT_TURN_GAUGE) >= PE_GAUGE_FULL) return;
+    if (psx_mod_read_word(core + COMBATANT_STATE_FLAGS) & 0x10000u) return;
+    unsigned fix = preferred ? preferred : s_st.last_rate;
+    if (!fix) fix = psx_mod_read_half(core + COMBATANT_STAT22) * 4u / 10u;   /* a gun's scale */
+    if (!fix) fix = 1;
+    psx_mod_write_half(rate_addr, (uint16_t)fix);
+}
+
 /* ---- the hook --------------------------------------------------------------- */
 static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
     (void)cpu; (void)address;
@@ -257,14 +284,17 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
         } else if (s_st.track_full && pe_action_allowed(s_st.action)) {
             psx_mod_write_half(gauge_addr, (uint16_t)PE_GAUGE_HALF);
         }
+        pe_fix_rate(core, s_st.borrowed && s_st.action == ACT_NONE ? s_st.saved_rate : 0);
         pe_reset();
         return;
     }
     if (s_st.borrow_pending) {                          /* the game didn't take it */
         psx_mod_write_half(gauge_addr, (uint16_t)s_st.saved_gauge);
+        pe_fix_rate(core, s_st.saved_rate);
         pe_reset();
         return;
     }
+    pe_fix_rate(core, 0);                               /* every free moment */
     if (!s_enabled || !pe_any_allowed()) return;
 
     const unsigned gauge = psx_mod_read_half(gauge_addr);
@@ -272,6 +302,7 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
     if ((pressed & PRESS_ITEM) && !(pressed & PRESS_ATTACK) &&
         gauge >= PE_GAUGE_HALF && gauge < PE_GAUGE_FULL) {
         s_st.saved_gauge = gauge;
+        s_st.saved_rate = psx_mod_read_half(core + COMBATANT_FILL_RATE);
         pe_snapshot();
         s_st.saved_tabs = psx_mod_read_word(PE_MENU_TAB_FLAGS);
         s_st.tab_saved = 1;
