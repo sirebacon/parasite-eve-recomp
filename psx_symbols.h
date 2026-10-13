@@ -9,64 +9,64 @@
 #define func_8001220C Pe_main  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_RelocBlock 0x80012574u
-#define func_80012574 Task_RelocBlock  /* alias */
+#define PSX_FN_Script_RelocBlock 0x80012574u
+#define func_80012574 Script_RelocBlock  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_AllocNode 0x80012700u
-#define func_80012700 Task_AllocNode  /* alias */
+#define PSX_FN_Script_AllocNode 0x80012700u
+#define func_80012700 Script_AllocNode  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_EvalExpr 0x80012850u
-#define func_80012850 Task_EvalExpr  /* alias */
+#define PSX_FN_Script_EvalExpr 0x80012850u
+#define func_80012850 Script_EvalExpr  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Field_LoadMap 0x80012A90u
 #define func_80012A90 Field_LoadMap  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityVec3 0x80012C20u
-#define func_80012C20 Task_SetEntityVec3  /* alias */
+#define PSX_FN_Script_SetEntityVec3 0x80012C20u
+#define func_80012C20 Script_SetEntityVec3  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetEntityVec3 0x80012E7Cu
-#define func_80012E7C Task_GetEntityVec3  /* alias */
+#define PSX_FN_Script_GetEntityVec3 0x80012E7Cu
+#define func_80012E7C Script_GetEntityVec3  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_DispatchCmd 0x800130B4u
-#define func_800130B4 Task_DispatchCmd  /* alias */
+#define PSX_FN_Script_DispatchCmd 0x800130B4u
+#define func_800130B4 Script_DispatchCmd  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SpawnChildNode 0x800131E8u
-#define func_800131E8 Task_SpawnChildNode  /* alias */
+#define PSX_FN_Script_SpawnChildNode 0x800131E8u
+#define func_800131E8 Script_SpawnChildNode  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityActionAndWait 0x80013300u
-#define func_80013300 Task_SetEntityActionAndWait  /* alias */
+#define PSX_FN_Script_SetEntityActionAndWait 0x80013300u
+#define func_80013300 Script_SetEntityActionAndWait  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_WaitAnimRange 0x800133E8u
-#define func_800133E8 Task_WaitAnimRange  /* alias */
+#define PSX_FN_Script_WaitAnimRange 0x800133E8u
+#define func_800133E8 Script_WaitAnimRange  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_TurnTowardPointStep 0x80013514u
-#define func_80013514 Task_TurnTowardPointStep  /* alias */
+#define PSX_FN_Script_TurnTowardPointStep 0x80013514u
+#define func_80013514 Script_TurnTowardPointStep  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_MoveTowardPoint 0x800136C0u
-#define func_800136C0 Task_MoveTowardPoint  /* alias */
+#define PSX_FN_Script_MoveTowardPoint 0x800136C0u
+#define func_800136C0 Script_MoveTowardPoint  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Camera_TrackEntityAngle 0x80013988u
-#define func_80013988 Camera_TrackEntityAngle  /* alias */
+#define PSX_FN_Render_CameraTrackEntityAngle 0x80013988u
+#define func_80013988 Render_CameraTrackEntityAngle  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Camera_SnapToEntity 0x80013C34u
-#define func_80013C34 Camera_SnapToEntity  /* alias */
+#define PSX_FN_Render_CameraSnapToEntity 0x80013C34u
+#define func_80013C34 Render_CameraSnapToEntity  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Camera_TrackEntityZoom 0x80013E84u
-#define func_80013E84 Camera_TrackEntityZoom  /* alias */
+#define PSX_FN_Render_CameraTrackEntityZoom 0x80013E84u
+#define func_80013E84 Render_CameraTrackEntityZoom  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_QueryField 0x80014228u
@@ -85,100 +85,100 @@
 #define func_80014694 Entity_GetPositionByType  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Camera_TrackRelativeOffset 0x800148E0u
-#define func_800148E0 Camera_TrackRelativeOffset  /* alias */
+#define PSX_FN_Render_CameraTrackRelativeOffset 0x800148E0u
+#define func_800148E0 Render_CameraTrackRelativeOffset  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Camera_StepAngleFade 0x80014BA0u
-#define func_80014BA0 Camera_StepAngleFade  /* alias */
+#define PSX_FN_Render_CameraStepAngleFade 0x80014BA0u
+#define func_80014BA0 Render_CameraStepAngleFade  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_PointInPoly 0x80014DA0u
-#define func_80014DA0 Task_PointInPoly  /* alias */
+#define PSX_FN_Script_PointInPoly 0x80014DA0u
+#define func_80014DA0 Script_PointInPoly  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_LoadSceneData 0x80014E30u
-#define func_80014E30 Task_LoadSceneData  /* alias */
+#define PSX_FN_Script_LoadSceneData 0x80014E30u
+#define func_80014E30 Script_LoadSceneData  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_PlayEntityAnim 0x80014FD8u
-#define func_80014FD8 Task_PlayEntityAnim  /* alias */
+#define PSX_FN_Script_PlayEntityAnim 0x80014FD8u
+#define func_80014FD8 Script_PlayEntityAnim  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_CopyEntityRenderObject 0x80015108u
-#define func_80015108 Task_CopyEntityRenderObject  /* alias */
+#define PSX_FN_Script_CopyEntityRenderObject 0x80015108u
+#define func_80015108 Script_CopyEntityRenderObject  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetGteMatrix 0x80015240u
-#define func_80015240 Task_SetGteMatrix  /* alias */
+#define PSX_FN_Script_SetGteMatrix 0x80015240u
+#define func_80015240 Script_SetGteMatrix  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Boot_CheckModeSwitch 0x800155FCu
 #define func_800155FC Boot_CheckModeSwitch  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetAngleToEntity 0x80015648u
-#define func_80015648 Task_GetAngleToEntity  /* alias */
+#define PSX_FN_Script_GetAngleToEntity 0x80015648u
+#define func_80015648 Script_GetAngleToEntity  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Scene_SelectMapById 0x80015790u
 #define func_80015790 Scene_SelectMapById  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetFloorByEntityRoll 0x80015964u
-#define func_80015964 Task_SetFloorByEntityRoll  /* alias */
+#define PSX_FN_Script_SetFloorByEntityRoll 0x80015964u
+#define func_80015964 Script_SetFloorByEntityRoll  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetActorScreenPos 0x80015AB8u
-#define func_80015AB8 Task_SetActorScreenPos  /* alias */
+#define PSX_FN_Script_SetActorScreenPos 0x80015AB8u
+#define func_80015AB8 Script_SetActorScreenPos  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_OpenMemCardDialog 0x80015AF0u
-#define func_80015AF0 Task_OpenMemCardDialog  /* alias */
+#define PSX_FN_Script_OpenMemCardDialog 0x80015AF0u
+#define func_80015AF0 Script_OpenMemCardDialog  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ShowReceivedItem 0x80015BACu
-#define func_80015BAC Task_ShowReceivedItem  /* alias */
+#define PSX_FN_Script_ShowReceivedItem 0x80015BACu
+#define func_80015BAC Script_ShowReceivedItem  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_RunInvCommand 0x80015C7Cu
-#define func_80015C7C Task_RunInvCommand  /* alias */
+#define PSX_FN_Script_RunInvCommand 0x80015C7Cu
+#define func_80015C7C Script_RunInvCommand  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Akao_ProcessCommand 0x80015DACu
 #define func_80015DAC Akao_ProcessCommand  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_DispatchScriptCmd 0x80016910u
-#define func_80016910 Task_DispatchScriptCmd  /* alias */
+#define PSX_FN_Script_DispatchScriptCmd 0x80016910u
+#define func_80016910 Script_DispatchScriptCmd  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityShadowFlag 0x80016DF8u
-#define func_80016DF8 Task_SetEntityShadowFlag  /* alias */
+#define PSX_FN_Script_SetEntityShadowFlag 0x80016DF8u
+#define func_80016DF8 Script_SetEntityShadowFlag  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClearEntityShadowFlag 0x80016E1Cu
-#define func_80016E1C Task_ClearEntityShadowFlag  /* alias */
+#define PSX_FN_Script_ClearEntityShadowFlag 0x80016E1Cu
+#define func_80016E1C Script_ClearEntityShadowFlag  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_BeginSceneTransition 0x80016E40u
-#define func_80016E40 Task_BeginSceneTransition  /* alias */
+#define PSX_FN_Script_BeginSceneTransition 0x80016E40u
+#define func_80016E40 Script_BeginSceneTransition  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_OpenSaveLoadMenu 0x80016F10u
-#define func_80016F10 Task_OpenSaveLoadMenu  /* alias */
+#define PSX_FN_Script_OpenSaveLoadMenu 0x80016F10u
+#define func_80016F10 Script_OpenSaveLoadMenu  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetPlayerInputFlag 0x80016FE0u
-#define func_80016FE0 Task_GetPlayerInputFlag  /* alias */
+#define PSX_FN_Script_GetPlayerInputFlag 0x80016FE0u
+#define func_80016FE0 Script_GetPlayerInputFlag  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_RunQueue 0x80017018u
-#define func_80017018 Task_RunQueue  /* alias */
+#define PSX_FN_Script_RunQueue 0x80017018u
+#define func_80017018 Script_RunQueue  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_JumpToEntityOffset 0x80017294u
-#define func_80017294 Task_JumpToEntityOffset  /* alias */
+#define PSX_FN_Script_JumpToEntityOffset 0x80017294u
+#define func_80017294 Script_JumpToEntityOffset  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_MarkCurrentDead 0x800172BCu
@@ -193,20 +193,20 @@
 #define func_800172FC Entity_MarkCurrentNodeFree  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_JumpIfZero 0x8001731Cu
-#define func_8001731C Task_JumpIfZero  /* alias */
+#define PSX_FN_Script_JumpIfZero 0x8001731Cu
+#define func_8001731C Script_JumpIfZero  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SpawnEntityAt 0x8001735Cu
-#define func_8001735C Task_SpawnEntityAt  /* alias */
+#define PSX_FN_Script_SpawnEntityAt 0x8001735Cu
+#define func_8001735C Script_SpawnEntityAt  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_AssignValue 0x800173F4u
-#define func_800173F4 Task_AssignValue  /* alias */
+#define PSX_FN_Script_AssignValue 0x800173F4u
+#define func_800173F4 Script_AssignValue  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_StopEntityAnim 0x80017410u
-#define func_80017410 Task_StopEntityAnim  /* alias */
+#define PSX_FN_Script_StopEntityAnim 0x80017410u
+#define func_80017410 Script_StopEntityAnim  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_ComputeVelocityToTarget 0x80017444u
@@ -229,60 +229,60 @@
 #define func_800176E0 Entity_GetCurrentNodeId  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_Random 0x800176FCu
-#define func_800176FC Task_Random  /* alias */
+#define PSX_FN_Script_Random 0x800176FCu
+#define func_800176FC Script_Random  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_PlayFieldSfx 0x80017764u
-#define func_80017764 Task_PlayFieldSfx  /* alias */
+#define PSX_FN_Script_PlayFieldSfx 0x80017764u
+#define func_80017764 Script_PlayFieldSfx  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetNodeTarget14 0x800177ACu
-#define func_800177AC Task_GetNodeTarget14  /* alias */
+#define PSX_FN_Script_GetNodeTarget14 0x800177ACu
+#define func_800177AC Script_GetNodeTarget14  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_YieldWhileTableEntrySet 0x800177C8u
-#define func_800177C8 Task_YieldWhileTableEntrySet  /* alias */
+#define PSX_FN_Script_YieldWhileTableEntrySet 0x800177C8u
+#define func_800177C8 Script_YieldWhileTableEntrySet  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClearTableEntry 0x80017820u
-#define func_80017820 Task_ClearTableEntry  /* alias */
+#define PSX_FN_Script_ClearTableEntry 0x80017820u
+#define func_80017820 Script_ClearTableEntry  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetNodeTargets18_1C 0x8001784Cu
-#define func_8001784C Task_GetNodeTargets18_1C  /* alias */
+#define PSX_FN_Script_GetNodeTargets18_1C 0x8001784Cu
+#define func_8001784C Script_GetNodeTargets18_1C  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_FindNodeById 0x8001787Cu
 #define func_8001787C Entity_FindNodeById  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_80017928 0x80017928u
-#define func_80017928 func_80017928  /* alias */
+#define PSX_FN_Script_GetCurrentEntityFieldD 0x80017928u
+#define func_80017928 Script_GetCurrentEntityFieldD  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_80017948 0x80017948u
-#define func_80017948 func_80017948  /* alias */
+#define PSX_FN_Script_SetCurrentEntityFieldD 0x80017948u
+#define func_80017948 Script_SetCurrentEntityFieldD  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_80017968 0x80017968u
-#define func_80017968 func_80017968  /* alias */
+#define PSX_FN_Script_GetCurrentEntityField24 0x80017968u
+#define func_80017968 Script_GetCurrentEntityField24  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_MarkNodeFree 0x80017988u
 #define func_80017988 Entity_MarkNodeFree  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClearBit 0x800179F8u
-#define func_800179F8 Task_ClearBit  /* alias */
+#define PSX_FN_Script_ClearBit 0x800179F8u
+#define func_800179F8 Script_ClearBit  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_TestBit 0x80017A24u
-#define func_80017A24 Task_TestBit  /* alias */
+#define PSX_FN_Script_TestBit 0x80017A24u
+#define func_80017A24 Script_TestBit  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetBit 0x80017A50u
-#define func_80017A50 Task_SetBit  /* alias */
+#define PSX_FN_Script_SetBit 0x80017A50u
+#define func_80017A50 Script_SetBit  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_ClearGlobalFlags 0x80017A78u
@@ -301,40 +301,40 @@
 #define func_80017AE8 Entity_SetCurrentActionMode  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityAnimFrame 0x80017B34u
-#define func_80017B34 Task_SetEntityAnimFrame  /* alias */
+#define PSX_FN_Script_SetEntityAnimFrame 0x80017B34u
+#define func_80017B34 Script_SetEntityAnimFrame  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_WaitAnimFrameMatch 0x80017B74u
-#define func_80017B74 Task_WaitAnimFrameMatch  /* alias */
+#define PSX_FN_Script_WaitAnimFrameMatch 0x80017B74u
+#define func_80017B74 Script_WaitAnimFrameMatch  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_EncodeBarcode 0x80017BB4u
-#define func_80017BB4 Task_EncodeBarcode  /* alias */
+#define PSX_FN_Script_EncodeBarcode 0x80017BB4u
+#define func_80017BB4 Script_EncodeBarcode  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetFogParams 0x80017C54u
-#define func_80017C54 Task_SetFogParams  /* alias */
+#define PSX_FN_Script_SetFogParams 0x80017C54u
+#define func_80017C54 Script_SetFogParams  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetFogParamsAlt 0x80017C8Cu
-#define func_80017C8C Task_SetFogParamsAlt  /* alias */
+#define PSX_FN_Script_SetFogParamsAlt 0x80017C8Cu
+#define func_80017C8C Script_SetFogParamsAlt  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_IsBattlePhase4 0x80017CC4u
-#define func_80017CC4 Task_IsBattlePhase4  /* alias */
+#define PSX_FN_Script_IsBattlePhase4 0x80017CC4u
+#define func_80017CC4 Script_IsBattlePhase4  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ResetPlayerCameraPos 0x80017CE8u
-#define func_80017CE8 Task_ResetPlayerCameraPos  /* alias */
+#define PSX_FN_Script_ResetPlayerCameraPos 0x80017CE8u
+#define func_80017CE8 Script_ResetPlayerCameraPos  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetBattleStateMode 0x80017D18u
-#define func_80017D18 Task_SetBattleStateMode  /* alias */
+#define PSX_FN_Script_SetBattleStateMode 0x80017D18u
+#define func_80017D18 Script_SetBattleStateMode  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityField224 0x80017D3Cu
-#define func_80017D3C Task_SetEntityField224  /* alias */
+#define PSX_FN_Script_SetEntityField224 0x80017D3Cu
+#define func_80017D3C Script_SetEntityField224  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_ClearGlobalFlag1 0x80017D5Cu
@@ -353,28 +353,28 @@
 #define func_80017DC0 Entity_ClearCurrentFlag40  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetMenuChoice 0x80017DE4u
-#define func_80017DE4 Task_GetMenuChoice  /* alias */
+#define PSX_FN_Script_GetMenuChoice 0x80017DE4u
+#define func_80017DE4 Script_GetMenuChoice  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_CondBranch 0x80017E20u
-#define func_80017E20 Task_CondBranch  /* alias */
+#define PSX_FN_Script_CondBranch 0x80017E20u
+#define func_80017E20 Script_CondBranch  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_TestCurrentFlags 0x80017E68u
 #define func_80017E68 Entity_TestCurrentFlags  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_Noop 0x80017E9Cu
-#define func_80017E9C Task_Noop  /* alias */
+#define PSX_FN_Script_Noop 0x80017E9Cu
+#define func_80017E9C Script_Noop  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityField1C 0x80017EA4u
-#define func_80017EA4 Task_SetEntityField1C  /* alias */
+#define PSX_FN_Script_SetEntityField1C 0x80017EA4u
+#define func_80017EA4 Script_SetEntityField1C  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityAnimSpeed 0x80017EC4u
-#define func_80017EC4 Task_SetEntityAnimSpeed  /* alias */
+#define PSX_FN_Script_SetEntityAnimSpeed 0x80017EC4u
+#define func_80017EC4 Script_SetEntityAnimSpeed  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_SetCurrentFlag100 0x80017EFCu
@@ -421,16 +421,16 @@
 #define func_800181CC Entity_SetFieldByTypeId  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClearBattleFlags 0x800182A0u
-#define func_800182A0 Task_ClearBattleFlags  /* alias */
+#define PSX_FN_Script_ClearBattleFlags 0x800182A0u
+#define func_800182A0 Script_ClearBattleFlags  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetBattleFlags 0x800182C0u
-#define func_800182C0 Task_SetBattleFlags  /* alias */
+#define PSX_FN_Script_SetBattleFlags 0x800182C0u
+#define func_800182C0 Script_SetBattleFlags  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_800182E0 0x800182E0u
-#define func_800182E0 func_800182E0  /* alias */
+#define PSX_FN_Script_SetCurrentEntityField20 0x800182E0u
+#define func_800182E0 Script_SetCurrentEntityField20  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_MarkAnimPending 0x80018300u
@@ -449,8 +449,8 @@
 #define func_80018460 Entity_AdvanceNodeById  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_RunEntityCommand 0x800184ECu
-#define func_800184EC Task_RunEntityCommand  /* alias */
+#define PSX_FN_Script_RunEntityCommand 0x800184ECu
+#define func_800184EC Script_RunEntityCommand  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_ClearMotionVectors 0x8001856Cu
@@ -461,20 +461,20 @@
 #define func_80018598 Entity_ComputeVelocity  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Sys_ComputeAudioTimer 0x80018660u
-#define func_80018660 Sys_ComputeAudioTimer  /* alias */
+#define PSX_FN_Script_ComputeAudioTimer 0x80018660u
+#define func_80018660 Script_ComputeAudioTimer  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetCombatModeFlag 0x80018718u
-#define func_80018718 Task_GetCombatModeFlag  /* alias */
+#define PSX_FN_Script_GetCombatModeFlag 0x80018718u
+#define func_80018718 Script_GetCombatModeFlag  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetCombatModeFlag 0x80018754u
-#define func_80018754 Task_SetCombatModeFlag  /* alias */
+#define PSX_FN_Script_SetCombatModeFlag 0x80018754u
+#define func_80018754 Script_SetCombatModeFlag  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetEntityEffect 0x80018774u
-#define func_80018774 Task_GetEntityEffect  /* alias */
+#define PSX_FN_Script_GetEntityEffect 0x80018774u
+#define func_80018774 Script_GetEntityEffect  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Pm_ScriptSendCommand0 0x800187C0u
@@ -493,40 +493,40 @@
 #define func_80018894 Pm_ScriptGetState  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_PlayerPointInPoly 0x800188C4u
-#define func_800188C4 Task_PlayerPointInPoly  /* alias */
+#define PSX_FN_Script_PlayerPointInPoly 0x800188C4u
+#define func_800188C4 Script_PlayerPointInPoly  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_InitEntityMoveState 0x80018954u
-#define func_80018954 Task_InitEntityMoveState  /* alias */
+#define PSX_FN_Script_InitEntityMoveState 0x80018954u
+#define func_80018954 Script_InitEntityMoveState  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityAnim12Args 0x8001897Cu
-#define func_8001897C Task_SetEntityAnim12Args  /* alias */
+#define PSX_FN_Script_SetEntityAnim12Args 0x8001897Cu
+#define func_8001897C Script_SetEntityAnim12Args  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityAnim5Args 0x80018A48u
-#define func_80018A48 Task_SetEntityAnim5Args  /* alias */
+#define PSX_FN_Script_SetEntityAnim5Args 0x80018A48u
+#define func_80018A48 Script_SetEntityAnim5Args  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetSceneEntryAnim 0x80018A9Cu
-#define func_80018A9C Task_SetSceneEntryAnim  /* alias */
+#define PSX_FN_Script_SetSceneEntryAnim 0x80018A9Cu
+#define func_80018A9C Script_SetSceneEntryAnim  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetRenderEntryEnabled 0x80018B00u
-#define func_80018B00 Task_SetRenderEntryEnabled  /* alias */
+#define PSX_FN_Script_SetRenderEntryEnabled 0x80018B00u
+#define func_80018B00 Script_SetRenderEntryEnabled  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetRenderEntryPos 0x80018B30u
-#define func_80018B30 Task_SetRenderEntryPos  /* alias */
+#define PSX_FN_Script_SetRenderEntryPos 0x80018B30u
+#define func_80018B30 Script_SetRenderEntryPos  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetObjEntryLimit 0x80018B68u
-#define func_80018B68 Task_SetObjEntryLimit  /* alias */
+#define PSX_FN_Script_SetObjEntryLimit 0x80018B68u
+#define func_80018B68 Script_SetObjEntryLimit  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetFlagSlot 0x80018B98u
-#define func_80018B98 Task_SetFlagSlot  /* alias */
+#define PSX_FN_Script_SetFlagSlot 0x80018B98u
+#define func_80018B98 Script_SetFlagSlot  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_ClearCurrentFlag20 0x80018BC8u
@@ -537,92 +537,92 @@
 #define func_80018BEC Entity_SetCurrentFlag20  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetObjEntryField6 0x80018C10u
-#define func_80018C10 Task_GetObjEntryField6  /* alias */
+#define PSX_FN_Script_GetObjEntryField6 0x80018C10u
+#define func_80018C10 Script_GetObjEntryField6  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetObjEntryField8 0x80018C58u
-#define func_80018C58 Task_SetObjEntryField8  /* alias */
+#define PSX_FN_Script_SetObjEntryField8 0x80018C58u
+#define func_80018C58 Script_SetObjEntryField8  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_FillObjEntrySlotValues 0x80018C88u
-#define func_80018C88 Task_FillObjEntrySlotValues  /* alias */
+#define PSX_FN_Script_FillObjEntrySlotValues 0x80018C88u
+#define func_80018C88 Script_FillObjEntrySlotValues  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetObjEntrySlotValue 0x80018CB8u
-#define func_80018CB8 Task_SetObjEntrySlotValue  /* alias */
+#define PSX_FN_Script_SetObjEntrySlotValue 0x80018CB8u
+#define func_80018CB8 Script_SetObjEntrySlotValue  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetObjEntryFlags 0x80018CF0u
-#define func_80018CF0 Task_SetObjEntryFlags  /* alias */
+#define PSX_FN_Script_SetObjEntryFlags 0x80018CF0u
+#define func_80018CF0 Script_SetObjEntryFlags  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClearObjEntryFlags 0x80018D20u
-#define func_80018D20 Task_ClearObjEntryFlags  /* alias */
+#define PSX_FN_Script_ClearObjEntryFlags 0x80018D20u
+#define func_80018D20 Script_ClearObjEntryFlags  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetObjEntryFlag80 0x80018D50u
-#define func_80018D50 Task_SetObjEntryFlag80  /* alias */
+#define PSX_FN_Script_SetObjEntryFlag80 0x80018D50u
+#define func_80018D50 Script_SetObjEntryFlag80  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClearObjEntryFlag80 0x80018DD4u
-#define func_80018DD4 Task_ClearObjEntryFlag80  /* alias */
+#define PSX_FN_Script_ClearObjEntryFlag80 0x80018DD4u
+#define func_80018DD4 Script_ClearObjEntryFlag80  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_LoadGeomState 0x80018E58u
-#define func_80018E58 Task_LoadGeomState  /* alias */
+#define PSX_FN_Script_LoadGeomState 0x80018E58u
+#define func_80018E58 Script_LoadGeomState  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetScreenScrollPos 0x80018E84u
-#define func_80018E84 Task_SetScreenScrollPos  /* alias */
+#define PSX_FN_Script_SetScreenScrollPos 0x80018E84u
+#define func_80018E84 Script_SetScreenScrollPos  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetCdRomSeekPos 0x80018EB4u
-#define func_80018EB4 Task_SetCdRomSeekPos  /* alias */
+#define PSX_FN_Script_SetCdRomSeekPos 0x80018EB4u
+#define func_80018EB4 Script_SetCdRomSeekPos  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetFogColor 0x80018EE0u
-#define func_80018EE0 Task_SetFogColor  /* alias */
+#define PSX_FN_Script_SetFogColor 0x80018EE0u
+#define func_80018EE0 Script_SetFogColor  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetCdRomScreenPos 0x80018F0Cu
-#define func_80018F0C Task_SetCdRomScreenPos  /* alias */
+#define PSX_FN_Script_SetCdRomScreenPos 0x80018F0Cu
+#define func_80018F0C Script_SetCdRomScreenPos  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClearEntityFlag40 0x80018F54u
-#define func_80018F54 Task_ClearEntityFlag40  /* alias */
+#define PSX_FN_Script_ClearEntityFlag40 0x80018F54u
+#define func_80018F54 Script_ClearEntityFlag40  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityMoveSpeed 0x80018F74u
-#define func_80018F74 Task_SetEntityMoveSpeed  /* alias */
+#define PSX_FN_Script_SetEntityMoveSpeed 0x80018F74u
+#define func_80018F74 Script_SetEntityMoveSpeed  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_WaitFrameOrDraw 0x80018FDCu
-#define func_80018FDC Task_WaitFrameOrDraw  /* alias */
+#define PSX_FN_Script_WaitFrameOrDraw 0x80018FDCu
+#define func_80018FDC Script_WaitFrameOrDraw  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_Noop1 0x80019050u
-#define func_80019050 Task_Noop1  /* alias */
+#define PSX_FN_Script_Noop1 0x80019050u
+#define func_80019050 Script_Noop1  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_Noop2 0x80019058u
-#define func_80019058 Task_Noop2  /* alias */
+#define PSX_FN_Script_Noop2 0x80019058u
+#define func_80019058 Script_Noop2  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_YieldOnDrawBusy 0x80019060u
 #define func_80019060 Entity_YieldOnDrawBusy  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_Noop3 0x800190ACu
-#define func_800190AC Task_Noop3  /* alias */
+#define PSX_FN_Script_Noop3 0x800190ACu
+#define func_800190AC Script_Noop3  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_Noop4 0x800190B4u
-#define func_800190B4 Task_Noop4  /* alias */
+#define PSX_FN_Script_Noop4 0x800190B4u
+#define func_800190B4 Script_Noop4  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetAnimInterpRate 0x800190BCu
-#define func_800190BC Task_SetAnimInterpRate  /* alias */
+#define PSX_FN_Script_SetAnimInterpRate 0x800190BCu
+#define func_800190BC Script_SetAnimInterpRate  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_GetModeState 0x80019154u
@@ -633,12 +633,12 @@
 #define func_80019170 Entity_CopyAttachmentData  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ResetEntityRenderObj 0x80019260u
-#define func_80019260 Task_ResetEntityRenderObj  /* alias */
+#define PSX_FN_Script_ResetEntityRenderObj 0x80019260u
+#define func_80019260 Script_ResetEntityRenderObj  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityField1E6 0x80019298u
-#define func_80019298 Task_SetEntityField1E6  /* alias */
+#define PSX_FN_Script_SetEntityField1E6 0x80019298u
+#define func_80019298 Script_SetEntityField1E6  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_ClearModeState 0x800192B8u
@@ -653,48 +653,48 @@
 #define func_800192DC Pm_ScriptStopCurrentEntity  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityTarget 0x8001930Cu
-#define func_8001930C Task_SetEntityTarget  /* alias */
+#define PSX_FN_Script_SetEntityTarget 0x8001930Cu
+#define func_8001930C Script_SetEntityTarget  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ResetRenderState 0x800193B8u
-#define func_800193B8 Task_ResetRenderState  /* alias */
+#define PSX_FN_Script_ResetRenderState 0x800193B8u
+#define func_800193B8 Script_ResetRenderState  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetMenuSlotEntry 0x800193D8u
-#define func_800193D8 Task_SetMenuSlotEntry  /* alias */
+#define PSX_FN_Script_SetMenuSlotEntry 0x800193D8u
+#define func_800193D8 Script_SetMenuSlotEntry  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_YieldOnLoading 0x80019410u
 #define func_80019410 Entity_YieldOnLoading  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ScaleAnimValue 0x80019450u
-#define func_80019450 Task_ScaleAnimValue  /* alias */
+#define PSX_FN_Script_ScaleAnimValue 0x80019450u
+#define func_80019450 Script_ScaleAnimValue  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClampMenuRange 0x80019484u
-#define func_80019484 Task_ClampMenuRange  /* alias */
+#define PSX_FN_Script_ClampMenuRange 0x80019484u
+#define func_80019484 Script_ClampMenuRange  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GiveItem 0x800194B0u
-#define func_800194B0 Task_GiveItem  /* alias */
+#define PSX_FN_Script_GiveItem 0x800194B0u
+#define func_800194B0 Script_GiveItem  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_CountItemsByValue 0x800194F8u
-#define func_800194F8 Task_CountItemsByValue  /* alias */
+#define PSX_FN_Script_CountItemsByValue 0x800194F8u
+#define func_800194F8 Script_CountItemsByValue  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_InitWithTimeout 0x80019540u
 #define func_80019540 Entity_InitWithTimeout  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetSceneFlag2000 0x80019618u
-#define func_80019618 Task_SetSceneFlag2000  /* alias */
+#define PSX_FN_Script_SetSceneFlag2000 0x80019618u
+#define func_80019618 Script_SetSceneFlag2000  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClearSceneFlag2000 0x80019638u
-#define func_80019638 Task_ClearSceneFlag2000  /* alias */
+#define PSX_FN_Script_ClearSceneFlag2000 0x80019638u
+#define func_80019638 Script_ClearSceneFlag2000  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_SetCurrentFlag80 0x80019658u
@@ -713,120 +713,160 @@
 #define func_800196C4 Entity_ClearCurrentFlag4000  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetAnimSlotPointer 0x800196E8u
-#define func_800196E8 Task_SetAnimSlotPointer  /* alias */
+#define PSX_FN_Script_SetAnimSlotPointer 0x800196E8u
+#define func_800196E8 Script_SetAnimSlotPointer  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetInputFlagBit2 0x80019728u
-#define func_80019728 Task_SetInputFlagBit2  /* alias */
+#define PSX_FN_Script_SetInputFlagBit2 0x80019728u
+#define func_80019728 Script_SetInputFlagBit2  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClearInputFlagBit2 0x80019748u
-#define func_80019748 Task_ClearInputFlagBit2  /* alias */
+#define PSX_FN_Script_ClearInputFlagBit2 0x80019748u
+#define func_80019748 Script_ClearInputFlagBit2  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_ResolveCurrentPosition 0x80019768u
 #define func_80019768 Entity_ResolveCurrentPosition  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetFloorNumber 0x80019798u
-#define func_80019798 Task_GetFloorNumber  /* alias */
+#define PSX_FN_Script_GetFloorNumber 0x80019798u
+#define func_80019798 Script_GetFloorNumber  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetMoveFlag 0x800197D0u
-#define func_800197D0 Task_SetMoveFlag  /* alias */
+#define PSX_FN_Script_SetMoveFlag 0x800197D0u
+#define func_800197D0 Script_SetMoveFlag  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClearMoveFlag 0x800197F0u
-#define func_800197F0 Task_ClearMoveFlag  /* alias */
+#define PSX_FN_Script_ClearMoveFlag 0x800197F0u
+#define func_800197F0 Script_ClearMoveFlag  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_PolarToPosition2 0x80019810u
 #define func_80019810 Entity_PolarToPosition2  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetBattleEntryCoords 0x800198C4u
-#define func_800198C4 Task_SetBattleEntryCoords  /* alias */
+#define PSX_FN_Script_SetBattleEntryCoords 0x800198C4u
+#define func_800198C4 Script_SetBattleEntryCoords  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_WaitEntityFlags8 0x80019B08u
-#define func_80019B08 Task_WaitEntityFlags8  /* alias */
+#define PSX_FN_Script_ClearEntityFlag1 0x80019904u
+#define func_80019904 Script_ClearEntityFlag1  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_RotateEntityAngle 0x80019B78u
-#define func_80019B78 Task_RotateEntityAngle  /* alias */
+#define PSX_FN_Script_SetEntityFlag1 0x80019928u
+#define func_80019928 Script_SetEntityFlag1  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetNodeFlag80 0x80019BE4u
-#define func_80019BE4 Task_SetNodeFlag80  /* alias */
+#define PSX_FN_Script_SetEntryScrolled 0x8001994Cu
+#define func_8001994C Script_SetEntryScrolled  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClearEntityRoamFlag 0x80019C04u
-#define func_80019C04 Task_ClearEntityRoamFlag  /* alias */
+#define PSX_FN_Script_SetEntryMirrored 0x8001998Cu
+#define func_8001998C Script_SetEntryMirrored  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityRoamFlag 0x80019C28u
-#define func_80019C28 Task_SetEntityRoamFlag  /* alias */
+#define PSX_FN_Script_SetRenderFlag10Value 0x800199CCu
+#define func_800199CC Script_SetRenderFlag10Value  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetAngleToPoint 0x80019C4Cu
-#define func_80019C4C Task_GetAngleToPoint  /* alias */
+#define PSX_FN_Script_ClearRenderFlag10 0x800199F8u
+#define func_800199F8 Script_ClearRenderFlag10  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SnapPosToSpawnPos 0x80019CECu
-#define func_80019CEC Task_SnapPosToSpawnPos  /* alias */
+#define PSX_FN_Script_SetRenderFlag8Params 0x80019A1Cu
+#define func_80019A1C Script_SetRenderFlag8Params  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SignalSceneExit 0x80019D24u
-#define func_80019D24 Task_SignalSceneExit  /* alias */
+#define PSX_FN_Script_ClearRenderFlag8 0x80019A9Cu
+#define func_80019A9C Script_ClearRenderFlag8  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_DrawSaveOverlay 0x80019D44u
-#define func_80019D44 Task_DrawSaveOverlay  /* alias */
+#define PSX_FN_Script_SetEntityFlag400 0x80019AC0u
+#define func_80019AC0 Script_SetEntityFlag400  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ResetEntityAnimSlot 0x80019D84u
-#define func_80019D84 Task_ResetEntityAnimSlot  /* alias */
+#define PSX_FN_Script_ClearEntityFlag400 0x80019AE4u
+#define func_80019AE4 Script_ClearEntityFlag400  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetFloorTableValue 0x80019DB8u
-#define func_80019DB8 Task_GetFloorTableValue  /* alias */
+#define PSX_FN_Script_WaitEntityFlags8 0x80019B08u
+#define func_80019B08 Script_WaitEntityFlags8  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ConvertSecondsToHMS 0x80019DF4u
-#define func_80019DF4 Task_ConvertSecondsToHMS  /* alias */
+#define PSX_FN_Script_RotateEntityAngle 0x80019B78u
+#define func_80019B78 Script_RotateEntityAngle  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityParentLink 0x80019F04u
-#define func_80019F04 Task_SetEntityParentLink  /* alias */
+#define PSX_FN_Script_SetNodeFlag80 0x80019BE4u
+#define func_80019BE4 Script_SetNodeFlag80  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_ClearEntityParentLink 0x80019FE0u
-#define func_80019FE0 Task_ClearEntityParentLink  /* alias */
+#define PSX_FN_Script_ClearEntityRoamFlag 0x80019C04u
+#define func_80019C04 Script_ClearEntityRoamFlag  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Script_SetEntityRoamFlag 0x80019C28u
+#define func_80019C28 Script_SetEntityRoamFlag  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Script_GetAngleToPoint 0x80019C4Cu
+#define func_80019C4C Script_GetAngleToPoint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Script_SnapPosToSpawnPos 0x80019CECu
+#define func_80019CEC Script_SnapPosToSpawnPos  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Script_SignalSceneExit 0x80019D24u
+#define func_80019D24 Script_SignalSceneExit  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Script_DrawSaveOverlay 0x80019D44u
+#define func_80019D44 Script_DrawSaveOverlay  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Script_ResetEntityAnimSlot 0x80019D84u
+#define func_80019D84 Script_ResetEntityAnimSlot  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Script_GetFloorTableValue 0x80019DB8u
+#define func_80019DB8 Script_GetFloorTableValue  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GameTime_ConvertSecondsToHMS 0x80019DF4u
+#define func_80019DF4 GameTime_ConvertSecondsToHMS  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Script_SetEntityParentLink 0x80019F04u
+#define func_80019F04 Script_SetEntityParentLink  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Script_ClearEntityParentLink 0x80019FE0u
+#define func_80019FE0 Script_ClearEntityParentLink  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_ClearParentLink 0x8001A064u
 #define func_8001A064 Entity_ClearParentLink  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetSin 0x8001A0CCu
-#define func_8001A0CC Task_GetSin  /* alias */
+#define PSX_FN_Script_GetSin 0x8001A0CCu
+#define func_8001A0CC Script_GetSin  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetCos 0x8001A114u
-#define func_8001A114 Task_GetCos  /* alias */
+#define PSX_FN_Script_GetCos 0x8001A114u
+#define func_8001A114 Script_GetCos  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetAtan2 0x8001A15Cu
-#define func_8001A15C Task_GetAtan2  /* alias */
+#define PSX_FN_Script_GetAtan2 0x8001A15Cu
+#define func_8001A15C Script_GetAtan2  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetSqrt 0x8001A1A8u
-#define func_8001A1A8 Task_GetSqrt  /* alias */
+#define PSX_FN_Script_GetSqrt 0x8001A1A8u
+#define func_8001A1A8 Script_GetSqrt  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetEntityFlag1000000 0x8001A1F0u
-#define func_8001A1F0 Task_SetEntityFlag1000000  /* alias */
+#define PSX_FN_Script_SetEntityFlag1000000 0x8001A1F0u
+#define func_8001A1F0 Script_SetEntityFlag1000000  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_PolarToPosition 0x8001A214u
@@ -837,20 +877,32 @@
 #define func_8001A2F0 Entity_PopCount  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Script_EnableEntityGravity 0x8001A32Cu
+#define func_8001A32C Script_EnableEntityGravity  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Script_DisableEntityGravity 0x8001A350u
+#define func_8001A350 Script_DisableEntityGravity  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Script_SetMeshFadeLevel 0x8001A374u
+#define func_8001A374 Script_SetMeshFadeLevel  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_CallAction 0x8001A390u
 #define func_8001A390 Entity_CallAction  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetInventorySlotPointer 0x8001A3FCu
-#define func_8001A3FC Task_SetInventorySlotPointer  /* alias */
+#define PSX_FN_Script_SetInventorySlotPointer 0x8001A3FCu
+#define func_8001A3FC Script_SetInventorySlotPointer  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetInventoryTotal 0x8001A43Cu
-#define func_8001A43C Task_GetInventoryTotal  /* alias */
+#define PSX_FN_Script_GetInventoryTotal 0x8001A43Cu
+#define func_8001A43C Script_GetInventoryTotal  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GetInventorySlotLimit 0x8001A474u
-#define func_8001A474 Task_GetInventorySlotLimit  /* alias */
+#define PSX_FN_Script_GetInventorySlotLimit 0x8001A474u
+#define func_8001A474 Script_GetInventorySlotLimit  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Entity_AdvanceAnim 0x8001A4ACu
@@ -1157,8 +1209,8 @@
 #define func_8002F300 Battle_StartDeathAnim  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_8002F658 0x8002F658u
-#define func_8002F658 func_8002F658  /* alias */
+#define PSX_FN_Battle_SaveAyaState 0x8002F658u
+#define func_8002F658 Battle_SaveAyaState  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Battle_InitEquipLists 0x8002F76Cu
@@ -1257,20 +1309,20 @@
 #define func_80032B0C Battle_DrawStatusPanel  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_SetupSprites 0x8003335Cu
-#define func_8003335C Gpu_SetupSprites  /* alias */
+#define PSX_FN_Draw_SetupSprites 0x8003335Cu
+#define func_8003335C Draw_SetupSprites  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_QueuePrimitive 0x80033430u
-#define func_80033430 Gpu_QueuePrimitive  /* alias */
+#define PSX_FN_Draw_QueuePrimitive 0x80033430u
+#define func_80033430 Draw_QueuePrimitive  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_DrawStatusIcons 0x800334ACu
-#define func_800334AC Gpu_DrawStatusIcons  /* alias */
+#define PSX_FN_Draw_StatusIcons 0x800334ACu
+#define func_800334AC Draw_StatusIcons  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Window_SetBoundsByMode 0x800339A0u
-#define func_800339A0 Window_SetBoundsByMode  /* alias */
+#define PSX_FN_Battle_SetWindowBoundsByMode 0x800339A0u
+#define func_800339A0 Battle_SetWindowBoundsByMode  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Battle_DrawActiveStatus 0x80033A40u
@@ -1337,8 +1389,8 @@
 #define func_80036448 Scene_UpdateEntityPositions  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Util_PackTime 0x80036E7Cu
-#define func_80036E7C Util_PackTime  /* alias */
+#define PSX_FN_GameTime_PackTime 0x80036E7Cu
+#define func_80036E7C GameTime_PackTime  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Scene_TickTimers 0x80036F7Cu
@@ -1353,12 +1405,12 @@
 #define func_800370A8 Math_FixedDivide  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_InitDrawModeSprtPacket 0x800370DCu
-#define func_800370DC Gpu_InitDrawModeSprtPacket  /* alias */
+#define PSX_FN_Draw_InitDrawModeSprtPacket 0x800370DCu
+#define func_800370DC Draw_InitDrawModeSprtPacket  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_InitDrawModeTilePacket 0x80037140u
-#define func_80037140 Gpu_InitDrawModeTilePacket  /* alias */
+#define PSX_FN_Draw_InitDrawModeTilePacket 0x80037140u
+#define func_80037140 Draw_InitDrawModeTilePacket  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_SetEquipSlotIndex 0x800371A4u
@@ -1373,20 +1425,20 @@
 #define func_80037454 Menu_SetTextCursorRect  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Tbl_ResetAll 0x800374E8u
-#define func_800374E8 Tbl_ResetAll  /* alias */
+#define PSX_FN_Draw_ResetTextboxes 0x800374E8u
+#define func_800374E8 Draw_ResetTextboxes  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_EnableMovement 0x800375B4u
-#define func_800375B4 Task_EnableMovement  /* alias */
+#define PSX_FN_Script_EnableMovement 0x800375B4u
+#define func_800375B4 Script_EnableMovement  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_DisableMovement 0x800375C4u
-#define func_800375C4 Task_DisableMovement  /* alias */
+#define PSX_FN_Script_DisableMovement 0x800375C4u
+#define func_800375C4 Script_DisableMovement  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_SetCollisionFlag 0x800375D0u
-#define func_800375D0 Task_SetCollisionFlag  /* alias */
+#define PSX_FN_Script_SetCollisionFlag 0x800375D0u
+#define func_800375D0 Script_SetCollisionFlag  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Render_SetupColorTable 0x800375E0u
@@ -1401,8 +1453,8 @@
 #define func_80037870 Menu_DrawTextboxEntries  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_SetLightingParams 0x80038910u
-#define func_80038910 Gpu_SetLightingParams  /* alias */
+#define PSX_FN_Draw_SetLightingParams 0x80038910u
+#define func_80038910 Draw_SetLightingParams  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Render_LoadFontGlyph 0x800389DCu
@@ -1521,8 +1573,8 @@
 #define func_8003CCB0 Render_SetEntityBlendMode  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Field_GetMapEntry 0x8003CEF8u
-#define func_8003CEF8 Field_GetMapEntry  /* alias */
+#define PSX_FN_Render_SetObjectTexturePage 0x8003CEF8u
+#define func_8003CEF8 Render_SetObjectTexturePage  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Render_SetupEntityPrims 0x8003D050u
@@ -1573,28 +1625,28 @@
 #define func_8003E974 Boot_BuildRenderFlagTable  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gte_StoreTableEntry 0x8003EAC8u
-#define func_8003EAC8 Gte_StoreTableEntry  /* alias */
+#define PSX_FN_Boot_StoreTableEntry 0x8003EAC8u
+#define func_8003EAC8 Boot_StoreTableEntry  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Field_HandleStateTransition 0x8003EB04u
 #define func_8003EB04 Field_HandleStateTransition  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_InitPipeline 0x8003F074u
-#define func_8003F074 Gpu_InitPipeline  /* alias */
+#define PSX_FN_Draw_InitPipeline 0x8003F074u
+#define func_8003F074 Draw_InitPipeline  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Boot_RunFrame 0x8003F3C4u
 #define func_8003F3C4 Boot_RunFrame  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gte_SetBackColor 0x8003F758u
-#define func_8003F758 Gte_SetBackColor  /* alias */
+#define PSX_FN_Boot_SetBackColor 0x8003F758u
+#define func_8003F758 Boot_SetBackColor  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gte_SetLightColor 0x8003F798u
-#define func_8003F798 Gte_SetLightColor  /* alias */
+#define PSX_FN_Boot_SetLightColor 0x8003F798u
+#define func_8003F798 Boot_SetLightColor  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Save_SerializeTail 0x8003F800u
@@ -2045,8 +2097,8 @@
 #define func_8004A6CC Menu_DrawBonusPointSpendPanel  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Spend_BonusPoints 0x8004A9A0u
-#define func_8004A9A0 Spend_BonusPoints  /* alias */
+#define PSX_FN_Menu_SpendBonusPoints 0x8004A9A0u
+#define func_8004A9A0 Menu_SpendBonusPoints  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_CreateMainMenuView 0x8004AD9Cu
@@ -2317,8 +2369,8 @@
 #define func_80050804 Menu_DrawSelectableEquipSlotRow  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Sfx_ContextPick 0x80050878u
-#define func_80050878 Sfx_ContextPick  /* alias */
+#define PSX_FN_Menu_ContextPick 0x80050878u
+#define func_80050878 Menu_ContextPick  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_SoundTestSelect 0x800509E0u
@@ -2339,6 +2391,10 @@
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_BattleCmd_ResetTableCursor 0x80051244u
 #define func_80051244 BattleCmd_ResetTableCursor  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BattleCmd_UndoAllPending 0x80051258u
+#define func_80051258 BattleCmd_UndoAllPending  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Inv_SetActiveList 0x800512ACu
@@ -2465,8 +2521,8 @@
 #define func_80052790 Menu_SetActionSubmenuSelection  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_BoundsCheck_AssertStub 0x800527C0u
-#define func_800527C0 BoundsCheck_AssertStub  /* alias */
+#define PSX_FN_Inv_BoundsCheckAssertStub 0x800527C0u
+#define func_800527C0 Inv_BoundsCheckAssertStub  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_GameTime_GetCounterSeconds 0x80052894u
@@ -2477,12 +2533,16 @@
 #define func_800528F0 Inv_SetDefaultItemId  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Util_CopyFFTerminatedBytes 0x80052BCCu
-#define func_80052BCC Util_CopyFFTerminatedBytes  /* alias */
+#define PSX_FN_Inv_ScrambleGrid 0x80052B2Cu
+#define func_80052B2C Inv_ScrambleGrid  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Util_AppendFFTerminatedBytes 0x80052C08u
-#define func_80052C08 Util_AppendFFTerminatedBytes  /* alias */
+#define PSX_FN_Text_CopyFFTerminatedBytes 0x80052BCCu
+#define func_80052BCC Text_CopyFFTerminatedBytes  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Text_AppendFFTerminatedBytes 0x80052C08u
+#define func_80052C08 Text_AppendFFTerminatedBytes  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Inv_BuildItemGridFromCategory 0x80052C6Cu
@@ -2529,12 +2589,12 @@
 #define func_800533D4 Inv_FindIndexByData  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Sfx_DrawSlotRow 0x800534E4u
-#define func_800534E4 Sfx_DrawSlotRow  /* alias */
+#define PSX_FN_Menu_DrawSlotRow 0x800534E4u
+#define func_800534E4 Menu_DrawSlotRow  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Sfx_DrawActiveListSlot 0x800536B8u
-#define func_800536B8 Sfx_DrawActiveListSlot  /* alias */
+#define PSX_FN_Menu_DrawActiveListSlot 0x800536B8u
+#define func_800536B8 Menu_DrawActiveListSlot  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Inv_FindFirstEmptySlot 0x8005382Cu
@@ -2561,8 +2621,8 @@
 #define func_80053F20 Inv_CountByCategory  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_WayneStorage_CountItemType 0x80053F90u
-#define func_80053F90 WayneStorage_CountItemType  /* alias */
+#define PSX_FN_Inv_CountWayneStorageItemType 0x80053F90u
+#define func_80053F90 Inv_CountWayneStorageItemType  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Inv_CountTotal 0x8005401Cu
@@ -2657,8 +2717,8 @@
 #define func_800562A4 Inv_BuildCompatibleWeaponBitset  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Spend_Ammo 0x80056B24u
-#define func_80056B24 Spend_Ammo  /* alias */
+#define PSX_FN_Inv_SpendAmmo 0x80056B24u
+#define func_80056B24 Inv_SpendAmmo  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Inv_GetWeaponCategoryAmmoBase 0x80056C14u
@@ -2797,12 +2857,12 @@
 #define func_8005B124 Inv_CompareItemsByStatForSort  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Sort_ContainerItems 0x8005B71Cu
-#define func_8005B71C Sort_ContainerItems  /* alias */
+#define PSX_FN_Inv_SortContainerItems 0x8005B71Cu
+#define func_8005B71C Inv_SortContainerItems  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Sort_InventoryItems 0x8005B7D0u
-#define func_8005B7D0 Sort_InventoryItems  /* alias */
+#define PSX_FN_Inv_SortInventoryItems 0x8005B7D0u
+#define func_8005B7D0 Inv_SortInventoryItems  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_SetBattleEquipMode 0x8005B890u
@@ -2813,20 +2873,20 @@
 #define func_8005B89C Menu_GetBattleEquipMode  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Stat_BinarySearch 0x8005B8A8u
-#define func_8005B8A8 Stat_BinarySearch  /* alias */
+#define PSX_FN_Aya_StatBinarySearch 0x8005B8A8u
+#define func_8005B8A8 Aya_StatBinarySearch  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Stat_QueryLevelAndSubLevel 0x8005B91Cu
-#define func_8005B91C Stat_QueryLevelAndSubLevel  /* alias */
+#define PSX_FN_Aya_StatQueryLevelAndSubLevel 0x8005B91Cu
+#define func_8005B91C Aya_StatQueryLevelAndSubLevel  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Stat_QueryDistanceAndSubLevel 0x8005BA78u
-#define func_8005BA78 Stat_QueryDistanceAndSubLevel  /* alias */
+#define PSX_FN_Aya_StatQueryDistanceAndSubLevel 0x8005BA78u
+#define func_8005BA78 Aya_StatQueryDistanceAndSubLevel  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Stat_OverflowQuery 0x8005BBE4u
-#define func_8005BBE4 Stat_OverflowQuery  /* alias */
+#define PSX_FN_Aya_StatOverflowQuery 0x8005BBE4u
+#define func_8005BBE4 Aya_StatOverflowQuery  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Save_GetMetadataWindowIndex 0x8005BCB0u
@@ -2861,16 +2921,16 @@
 #define func_8005BF08 Save_GetMetadataRemainingChars  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Inv_FindItem 0x8005BF44u
-#define func_8005BF44 Inv_FindItem  /* alias */
+#define PSX_FN_Inv_EquipItemById 0x8005BF44u
+#define func_8005BF44 Inv_EquipItemById  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_ResetInputState 0x8005C144u
 #define func_8005C144 Menu_ResetInputState  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Inventory_OpenAyaItemList 0x8005C174u
-#define func_8005C174 Inventory_OpenAyaItemList  /* alias */
+#define PSX_FN_Inv_OpenAyaItemList 0x8005C174u
+#define func_8005C174 Inv_OpenAyaItemList  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_MemCard_SetDialogActive 0x8005C1ECu
@@ -2933,8 +2993,8 @@
 #define func_8005DB44 Item_LookupBaseData  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Stat_GetGrowthTable 0x8005DB8Cu
-#define func_8005DB8C Stat_GetGrowthTable  /* alias */
+#define PSX_FN_Aya_GetStatGrowthTable 0x8005DB8Cu
+#define func_8005DB8C Aya_GetStatGrowthTable  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Aya_LookupLevelStats 0x8005DBACu
@@ -2953,36 +3013,36 @@
 #define func_8005DC28 Draw_LookupGlyphMetrics  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Str_LookupTable4 0x8005DC4Cu
-#define func_8005DC4C Str_LookupTable4  /* alias */
+#define PSX_FN_Text_LookupTable4 0x8005DC4Cu
+#define func_8005DC4C Text_LookupTable4  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Str_LookupTable8 0x8005DC9Cu
-#define func_8005DC9C Str_LookupTable8  /* alias */
+#define PSX_FN_Text_LookupTable8 0x8005DC9Cu
+#define func_8005DC9C Text_LookupTable8  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Str_LookupTableC 0x8005DCECu
-#define func_8005DCEC Str_LookupTableC  /* alias */
+#define PSX_FN_Text_LookupTableC 0x8005DCECu
+#define func_8005DCEC Text_LookupTableC  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Str_LookupTable10 0x8005DD3Cu
-#define func_8005DD3C Str_LookupTable10  /* alias */
+#define PSX_FN_Text_LookupTable10 0x8005DD3Cu
+#define func_8005DD3C Text_LookupTable10  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Str_LookupTableEntry 0x8005DD8Cu
-#define func_8005DD8C Str_LookupTableEntry  /* alias */
+#define PSX_FN_Text_LookupMapLocationText 0x8005DD8Cu
+#define func_8005DD8C Text_LookupMapLocationText  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Tbl_FindNthNonEmpty 0x8005DE08u
-#define func_8005DE08 Tbl_FindNthNonEmpty  /* alias */
+#define PSX_FN_Text_GetMapLocationName 0x8005DE08u
+#define func_8005DE08 Text_GetMapLocationName  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Str_ResolveDataPtr 0x8005DE70u
-#define func_8005DE70 Str_ResolveDataPtr  /* alias */
+#define PSX_FN_Text_GetSaveIconData 0x8005DE70u
+#define func_8005DE70 Text_GetSaveIconData  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Queue_Init 0x8005DE88u
-#define func_8005DE88 Queue_Init  /* alias */
+#define PSX_FN_MenuInput_InitQueue 0x8005DE88u
+#define func_8005DE88 MenuInput_InitQueue  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Draw_RemapStatusFlags 0x8005E038u
@@ -3073,6 +3133,10 @@
 #define func_8005F698 Draw_PrintTextWrapped  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Draw_SetFontVariant 0x8005F844u
+#define func_8005F844 Draw_SetFontVariant  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Draw_EmitDigitSprite 0x8005F874u
 #define func_8005F874 Draw_EmitDigitSprite  /* alias */
 
@@ -3115,6 +3179,10 @@
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Draw_PrintNumberWidth4 0x80060590u
 #define func_80060590 Draw_PrintNumberWidth4  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Draw_PrintNumberWidth3 0x800605C4u
+#define func_800605C4 Draw_PrintNumberWidth3  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Draw_PrintNumberWidth2 0x800605F8u
@@ -3325,12 +3393,12 @@
 #define func_80065400 Scene_UpdateEntityList  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_800655D4 0x800655D4u
-#define func_800655D4 func_800655D4  /* alias */
+#define PSX_FN_Render_ResetAllEntries 0x800655D4u
+#define func_800655D4 Render_ResetAllEntries  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Scene_CheckBattleFlag 0x80065674u
-#define func_80065674 Scene_CheckBattleFlag  /* alias */
+#define PSX_FN_Render_StepGroupAnimations 0x80065674u
+#define func_80065674 Render_StepGroupAnimations  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_SetSlotEntry 0x80065AD4u
@@ -3357,16 +3425,16 @@
 #define func_800661EC Render_SetScrollMode  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Scene_IsNotBattleMode 0x80066268u
-#define func_80066268 Scene_IsNotBattleMode  /* alias */
+#define PSX_FN_Render_StepCameraTransition 0x80066268u
+#define func_80066268 Render_StepCameraTransition  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Render_UpdateScrollPosition 0x800665A0u
 #define func_800665A0 Render_UpdateScrollPosition  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_LoadGeomState 0x80066800u
-#define func_80066800 Gpu_LoadGeomState  /* alias */
+#define PSX_FN_Render_LoadGeomState 0x80066800u
+#define func_80066800 Render_LoadGeomState  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Render_InitRoomPrimState 0x8006698Cu
@@ -3389,24 +3457,24 @@
 #define func_80066CE8 Render_DrawSprite  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Geo_LoadMeshEntry 0x80066F60u
-#define func_80066F60 Geo_LoadMeshEntry  /* alias */
+#define PSX_FN_Render_LoadMeshEntry 0x80066F60u
+#define func_80066F60 Render_LoadMeshEntry  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Geo_TransformPoint 0x800671C8u
-#define func_800671C8 Geo_TransformPoint  /* alias */
+#define PSX_FN_Render_TransformPoint 0x800671C8u
+#define func_800671C8 Render_TransformPoint  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Render_DrawSpriteEntry 0x80067294u
 #define func_80067294 Render_DrawSpriteEntry  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Geo_RenderMeshList 0x800677FCu
-#define func_800677FC Geo_RenderMeshList  /* alias */
+#define PSX_FN_Render_DrawMeshList 0x800677FCu
+#define func_800677FC Render_DrawMeshList  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Geo_ClipPoint 0x800679C4u
-#define func_800679C4 Geo_ClipPoint  /* alias */
+#define PSX_FN_Render_ClipPoint 0x800679C4u
+#define func_800679C4 Render_ClipPoint  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Render_StartFadeIn 0x80067B40u
@@ -3425,16 +3493,16 @@
 #define func_80067D18 Render_ApplyScreenTint  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Scene_IsBattleMode 0x80067E1Cu
-#define func_80067E1C Scene_IsBattleMode  /* alias */
+#define PSX_FN_Render_ScrollEntries 0x80067E1Cu
+#define func_80067E1C Render_ScrollEntries  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Render_DrawRoom 0x80068014u
-#define func_80068014 Render_DrawRoom  /* alias */
+#define PSX_FN_Render_DrawActorShadow 0x80068014u
+#define func_80068014 Render_DrawActorShadow  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Render_SortOt 0x80068710u
-#define func_80068710 Render_SortOt  /* alias */
+#define PSX_FN_Render_MoveGridCursor 0x80068710u
+#define func_80068710 Render_MoveGridCursor  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Render_PrepareFrame 0x80068B94u
@@ -3453,36 +3521,36 @@
 #define func_8006914C Asset_LoadTimTextures  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_80069594 0x80069594u
-#define func_80069594 func_80069594  /* alias */
+#define PSX_FN_Pm_RunPrimary 0x80069594u
+#define func_80069594 Pm_RunPrimary  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Asset_UnloadTableEntries 0x800696F0u
 #define func_800696F0 Asset_UnloadTableEntries  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_OpenPeImage 0x800698D4u
-#define func_800698D4 OpenPeImage  /* alias */
+#define PSX_FN_Asset_OpenPeImage 0x800698D4u
+#define func_800698D4 Asset_OpenPeImage  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Render_InitDisplayLists 0x80069B08u
 #define func_80069B08 Render_InitDisplayLists  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Akao_StepVoiceTable 0x8006A0E8u
-#define func_8006A0E8 Akao_StepVoiceTable  /* alias */
+#define PSX_FN_Boot_FinishFrame 0x8006A0E8u
+#define func_8006A0E8 Boot_FinishFrame  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Sys_Shutdown 0x8006A25Cu
-#define func_8006A25C Sys_Shutdown  /* alias */
+#define PSX_FN_Boot_Shutdown 0x8006A25Cu
+#define func_8006A25C Boot_Shutdown  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Akao_LoadVoiceBank 0x8006A318u
 #define func_8006A318 Akao_LoadVoiceBank  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Akao_ClearVoiceBank 0x8006A674u
-#define func_8006A674 Akao_ClearVoiceBank  /* alias */
+#define PSX_FN_Asset_ResetGameState 0x8006A674u
+#define func_8006A674 Asset_ResetGameState  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Scene_LoadFieldBg 0x8006AD40u
@@ -3517,36 +3585,36 @@
 #define func_8006CC68 Scene_UpdateBgDraw  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_CD_ReadSectors 0x8006CDA4u
-#define func_8006CDA4 CD_ReadSectors  /* alias */
+#define PSX_FN_CdRom_ReadAssetSectors 0x8006CDA4u
+#define func_8006CDA4 CdRom_ReadAssetSectors  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_CD_FindNextDataSector 0x8006D078u
-#define func_8006D078 CD_FindNextDataSector  /* alias */
+#define PSX_FN_CdRom_FindNextDataSector 0x8006D078u
+#define func_8006D078 CdRom_FindNextDataSector  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Akao_ResetPositionalState 0x8006D24Cu
 #define func_8006D24C Akao_ResetPositionalState  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_CD_SeekToTrack 0x8006D2B8u
-#define func_8006D2B8 CD_SeekToTrack  /* alias */
+#define PSX_FN_CdRom_SeekToTrack 0x8006D2B8u
+#define func_8006D2B8 CdRom_SeekToTrack  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_CD_StepReadState 0x8006D60Cu
-#define func_8006D60C CD_StepReadState  /* alias */
+#define PSX_FN_CdRom_StepReadState 0x8006D60Cu
+#define func_8006D60C CdRom_StepReadState  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Overlay_RegisterAudioSlot 0x8006DB48u
-#define func_8006DB48 Overlay_RegisterAudioSlot  /* alias */
+#define PSX_FN_CdRom_RegisterAudioSlot 0x8006DB48u
+#define func_8006DB48 CdRom_RegisterAudioSlot  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Overlay_GetAudioSlotByKey 0x8006DB9Cu
-#define func_8006DB9C Overlay_GetAudioSlotByKey  /* alias */
+#define PSX_FN_CdRom_GetAudioSlotByKey 0x8006DB9Cu
+#define func_8006DB9C CdRom_GetAudioSlotByKey  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Overlay_FindAudioSlotIndex 0x8006DBE0u
-#define func_8006DBE0 Overlay_FindAudioSlotIndex  /* alias */
+#define PSX_FN_CdRom_FindAudioSlotIndex 0x8006DBE0u
+#define func_8006DBE0 CdRom_FindAudioSlotIndex  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Asset_SearchByKeyType 0x8006DC18u
@@ -3581,24 +3649,24 @@
 #define func_8006DFA8 Akao_Calc3DPan  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_LoadTimAsset 0x8006E1C0u
-#define func_8006E1C0 Gpu_LoadTimAsset  /* alias */
+#define PSX_FN_Draw_LoadTimAsset 0x8006E1C0u
+#define func_8006E1C0 Draw_LoadTimAsset  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Str_EncodeBase32 0x8006E2D0u
-#define func_8006E2D0 Str_EncodeBase32  /* alias */
+#define PSX_FN_Text_EncodeBase32 0x8006E2D0u
+#define func_8006E2D0 Text_EncodeBase32  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Str_DecodeBase32 0x8006E338u
-#define func_8006E338 Str_DecodeBase32  /* alias */
+#define PSX_FN_Text_DecodeBase32 0x8006E338u
+#define func_8006E338 Text_DecodeBase32  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Str_ParseBase32Id 0x8006E3D4u
-#define func_8006E3D4 Str_ParseBase32Id  /* alias */
+#define PSX_FN_Text_ParseBase32Id 0x8006E3D4u
+#define func_8006E3D4 Text_ParseBase32Id  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Str_ParseMapNumber 0x8006E454u
-#define func_8006E454 Str_ParseMapNumber  /* alias */
+#define PSX_FN_Text_ParseMapNumber 0x8006E454u
+#define func_8006E454 Text_ParseMapNumber  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Asset_FindTable08ByU32Key 0x8006E498u
@@ -3613,8 +3681,8 @@
 #define func_8006E590 Asset_FindTable30ByU16Key  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_ClearOnFlag 0x8006E60Cu
-#define func_8006E60C Gpu_ClearOnFlag  /* alias */
+#define PSX_FN_Draw_ClearOnFlag 0x8006E60Cu
+#define func_8006E60C Draw_ClearOnFlag  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_CdRom_ReadSectorsFromLba 0x8006E6A8u
@@ -3633,32 +3701,32 @@
 #define func_8006E834 func_8006E834  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_InitDisplay 0x8006E9A0u
-#define func_8006E9A0 Gpu_InitDisplay  /* alias */
+#define PSX_FN_Draw_InitDisplay 0x8006E9A0u
+#define func_8006E9A0 Draw_InitDisplay  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Seq_GetElapsed 0x8006EBE4u
 #define func_8006EBE4 Seq_GetElapsed  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_CheckDrawStatus 0x8006EC08u
-#define func_8006EC08 Gpu_CheckDrawStatus  /* alias */
+#define PSX_FN_Draw_CheckDrawStatus 0x8006EC08u
+#define func_8006EC08 Draw_CheckDrawStatus  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_GetTimTableEntry 0x8006EC6Cu
-#define func_8006EC6C Gpu_GetTimTableEntry  /* alias */
+#define PSX_FN_Draw_GetTimTableEntry 0x8006EC6Cu
+#define func_8006EC6C Draw_GetTimTableEntry  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_LoadTimTable 0x8006EC84u
-#define func_8006EC84 Gpu_LoadTimTable  /* alias */
+#define PSX_FN_Draw_LoadTimTable 0x8006EC84u
+#define func_8006EC84 Draw_LoadTimTable  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Overlay_LoadTables 0x8006ECECu
-#define func_8006ECEC Overlay_LoadTables  /* alias */
+#define PSX_FN_Boot_LoadOverlayTables 0x8006ECECu
+#define func_8006ECEC Boot_LoadOverlayTables  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_CD_LoadBootAudio 0x8006F044u
-#define func_8006F044 CD_LoadBootAudio  /* alias */
+#define PSX_FN_CdRom_LoadBootAudio 0x8006F044u
+#define func_8006F044 CdRom_LoadBootAudio  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Pm_AllocSlot 0x8006F224u
@@ -3713,24 +3781,24 @@
 #define func_800703F4 Pm_StopAllBoth  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Render_DecompressAnimFrame 0x8007041Cu
-#define func_8007041C Render_DecompressAnimFrame  /* alias */
+#define PSX_FN_Render_DrawWireframeModel 0x8007041Cu
+#define func_8007041C Render_DrawWireframeModel  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_InitGpuHwRegs 0x80070D10u
-#define func_80070D10 Task_InitGpuHwRegs  /* alias */
+#define PSX_FN_Draw_InitGpuHwRegs 0x80070D10u
+#define func_80070D10 Draw_InitGpuHwRegs  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GpuFlushPrimQueue 0x80070D6Cu
-#define func_80070D6C Task_GpuFlushPrimQueue  /* alias */
+#define PSX_FN_Draw_FlushPrimQueue 0x80070D6Cu
+#define func_80070D6C Draw_FlushPrimQueue  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Task_GpuPackPrimColor 0x80070DD0u
-#define func_80070DD0 Task_GpuPackPrimColor  /* alias */
+#define PSX_FN_Draw_PackPrimColor 0x80070DD0u
+#define func_80070DD0 Draw_PackPrimColor  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Gpu_RenderFrame 0x80070E54u
-#define func_80070E54 Gpu_RenderFrame  /* alias */
+#define PSX_FN_Draw_RenderFrame 0x80070E54u
+#define func_80070E54 Draw_RenderFrame  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Scene_Init 0x80071034u
@@ -6269,12 +6337,12 @@
 #define func_8008D7D0 Seq_ApplyGlobalPitch  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_Util_CopyWords 0x8008D820u
-#define func_8008D820 Util_CopyWords  /* alias */
+#define PSX_FN_Akao_CopyWords 0x8008D820u
+#define func_8008D820 Akao_CopyWords  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_SPU_StepReverbLoad 0x8008D844u
-#define func_8008D844 SPU_StepReverbLoad  /* alias */
+#define PSX_FN_Spu_StepReverbLoad 0x8008D844u
+#define func_8008D844 Spu_StepReverbLoad  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Akao_Tick 0x8008DB7Cu
@@ -6321,20 +6389,20 @@
 #define func_8008F37C SeqOp_SetVolumeSlideTarget  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackJumpRelative 0x8008F430u
-#define func_8008F430 sndTrackJumpRelative  /* alias */
+#define PSX_FN_SeqOp_JumpRelative 0x8008F430u
+#define func_8008F430 SeqOp_JumpRelative  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_SeqOp_BranchIfLoopLimitReached 0x8008F470u
 #define func_8008F470 SeqOp_BranchIfLoopLimitReached  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReadVolume 0x8008F4E8u
-#define func_8008F4E8 sndTrackReadVolume  /* alias */
+#define PSX_FN_SeqOp_ReadVolume 0x8008F4E8u
+#define func_8008F4E8 SeqOp_ReadVolume  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackSlideVolume 0x8008F514u
-#define func_8008F514 sndTrackSlideVolume  /* alias */
+#define PSX_FN_SeqOp_SlideVolume 0x8008F514u
+#define func_8008F514 SeqOp_SlideVolume  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_SeqOp_SetVolumeOrExpression 0x8008F59Cu
@@ -6345,12 +6413,12 @@
 #define func_8008F608 Akao_SetExpressionSlide  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackSkip2 0x8008F694u
-#define func_8008F694 sndTrackSkip2  /* alias */
+#define PSX_FN_SeqOp_Skip2 0x8008F694u
+#define func_8008F694 SeqOp_Skip2  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackNoop 0x8008F6A8u
-#define func_8008F6A8 sndTrackNoop  /* alias */
+#define PSX_FN_SeqOp_Ignore 0x8008F6A8u
+#define func_8008F6A8 SeqOp_Ignore  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Akao_SetPanTarget 0x8008F6B0u
@@ -6369,16 +6437,16 @@
 #define func_8008F7BC Akao_SetPanSlide  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReadPanpot 0x8008F84Cu
-#define func_8008F84C sndTrackReadPanpot  /* alias */
+#define PSX_FN_SeqOp_ReadPanpot 0x8008F84Cu
+#define func_8008F84C SeqOp_ReadPanpot  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackIncPanpot 0x8008F868u
-#define func_8008F868 sndTrackIncPanpot  /* alias */
+#define PSX_FN_SeqOp_IncPanpot 0x8008F868u
+#define func_8008F868 SeqOp_IncPanpot  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackDecPanpot 0x8008F880u
-#define func_8008F880 sndTrackDecPanpot  /* alias */
+#define PSX_FN_SeqOp_DecPanpot 0x8008F880u
+#define func_8008F880 SeqOp_DecPanpot  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Akao_PlayNote 0x8008F898u
@@ -6397,12 +6465,12 @@
 #define func_8008FB54 SeqOp_LoadInstrumentFromIndex  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReadExpression 0x8008FBD4u
-#define func_8008FBD4 sndTrackReadExpression  /* alias */
+#define PSX_FN_SeqOp_ReadExpression 0x8008FBD4u
+#define func_8008FBD4 SeqOp_ReadExpression  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackAdjustExpression 0x8008FBFCu
-#define func_8008FBFC sndTrackAdjustExpression  /* alias */
+#define PSX_FN_SeqOp_AdjustExpression 0x8008FBFCu
+#define func_8008FBFC SeqOp_AdjustExpression  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_SeqOp_SetVibratoParams 0x8008FC28u
@@ -6417,12 +6485,12 @@
 #define func_8008FCB4 SeqOp_StopTremolo  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReadDetune 0x8008FCBCu
-#define func_8008FCBC sndTrackReadDetune  /* alias */
+#define PSX_FN_SeqOp_ReadDetune 0x8008FCBCu
+#define func_8008FCBC SeqOp_ReadDetune  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackAdjustDetune 0x8008FCE4u
-#define func_8008FCE4 sndTrackAdjustDetune  /* alias */
+#define PSX_FN_SeqOp_AdjustDetune 0x8008FCE4u
+#define func_8008FCE4 SeqOp_AdjustDetune  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_SeqOp_SetPitchLFO 0x8008FD10u
@@ -6517,36 +6585,36 @@
 #define func_800904C4 SeqOp_SetTrack5AValue  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReadAdsrAttackRate 0x80090574u
-#define func_80090574 sndTrackReadAdsrAttackRate  /* alias */
+#define PSX_FN_SeqOp_ReadAdsrAttackRate 0x80090574u
+#define func_80090574 SeqOp_ReadAdsrAttackRate  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReadAdsrDecayRate 0x8009059Cu
-#define func_8009059C sndTrackReadAdsrDecayRate  /* alias */
+#define PSX_FN_SeqOp_ReadAdsrDecayRate 0x8009059Cu
+#define func_8009059C SeqOp_ReadAdsrDecayRate  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReadAdsrSustainLevel 0x800905C4u
-#define func_800905C4 sndTrackReadAdsrSustainLevel  /* alias */
+#define PSX_FN_SeqOp_ReadAdsrSustainLevel 0x800905C4u
+#define func_800905C4 SeqOp_ReadAdsrSustainLevel  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReadAdsrSustainRate 0x800905ECu
-#define func_800905EC sndTrackReadAdsrSustainRate  /* alias */
+#define PSX_FN_SeqOp_ReadAdsrSustainRate 0x800905ECu
+#define func_800905EC SeqOp_ReadAdsrSustainRate  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReadAdsrReleaseRate 0x80090614u
-#define func_80090614 sndTrackReadAdsrReleaseRate  /* alias */
+#define PSX_FN_SeqOp_ReadAdsrReleaseRate 0x80090614u
+#define func_80090614 SeqOp_ReadAdsrReleaseRate  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReadAdsrAttack 0x8009063Cu
-#define func_8009063C sndTrackReadAdsrAttack  /* alias */
+#define PSX_FN_SeqOp_ReadAdsrAttack 0x8009063Cu
+#define func_8009063C SeqOp_ReadAdsrAttack  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReadAdsrSustain 0x80090664u
-#define func_80090664 sndTrackReadAdsrSustain  /* alias */
+#define PSX_FN_SeqOp_ReadAdsrSustain 0x80090664u
+#define func_80090664 SeqOp_ReadAdsrSustain  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReadAdsrRelease 0x8009068Cu
-#define func_8009068C sndTrackReadAdsrRelease  /* alias */
+#define PSX_FN_SeqOp_ReadAdsrRelease 0x8009068Cu
+#define func_8009068C SeqOp_ReadAdsrRelease  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Akao_SetReleaseRate 0x800906B4u
@@ -6573,8 +6641,8 @@
 #define func_8009086C SeqOp_JumpIfLoopCountPop  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_sndTrackReturn 0x8009090Cu
-#define func_8009090C sndTrackReturn  /* alias */
+#define PSX_FN_SeqOp_Return 0x8009090Cu
+#define func_8009090C SeqOp_Return  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_SeqOp_SetVolume 0x80090948u
@@ -6657,73 +6725,401 @@
 #define func_80090F54 SeqOp_SetSustainFlag  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_SeqOp_StopVoice 0x80090F68u
+#define func_80090F68 SeqOp_StopVoice  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_SeqOp_Noop 0x80091080u
 #define func_80091080 SeqOp_Noop  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_GetSlot 0x800C22F8u
-#define func_800C22F8 FieldEng_GetSlot  /* alias */
+#define PSX_FN_FieldFx_GetSlot 0x800C22F8u
+#define func_800C22F8 FieldFx_GetSlot  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_Register 0x800C2414u
-#define func_800C2414 FieldEng_Register  /* alias */
+#define PSX_FN_FieldFx_Register 0x800C2414u
+#define func_800C2414 FieldFx_Register  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_Spawn6 0x800C2AF0u
-#define func_800C2AF0 FieldEng_Spawn6  /* alias */
+#define PSX_FN_FieldFx_UpdateSlots 0x800C251Cu
+#define func_800C251C FieldFx_UpdateSlots  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_GetStatus 0x800C6CE0u
-#define func_800C6CE0 FieldEng_GetStatus  /* alias */
+#define PSX_FN_FieldFx_RunScript 0x800C2758u
+#define func_800C2758 FieldFx_RunScript  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_GsSetOrign 0x800C6EC0u
-#define func_800C6EC0 GsSetOrign  /* alias */
+#define PSX_FN_FieldFx_Spawn6 0x800C2AF0u
+#define func_800C2AF0 FieldFx_Spawn6  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_TransformPackedVertex 0x800C7AE0u
-#define func_800C7AE0 FieldEng_TransformPackedVertex  /* alias */
+#define PSX_FN_FieldFx_RegPtr 0x800C2B10u
+#define func_800C2B10 FieldFx_RegPtr  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_TransformMatrixPoint 0x800CE8F0u
-#define func_800CE8F0 FieldEng_TransformMatrixPoint  /* alias */
+#define PSX_FN_FieldFx_VarPtr 0x800C2B28u
+#define func_800C2B28 FieldFx_VarPtr  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_RotateVector 0x800CEAE8u
-#define func_800CEAE8 FieldEng_RotateVector  /* alias */
+#define PSX_FN_FieldFx_SetScriptContext 0x800C2B40u
+#define func_800C2B40 FieldFx_SetScriptContext  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_TransformTranslation 0x800CF5B0u
-#define func_800CF5B0 FieldEng_TransformTranslation  /* alias */
+#define PSX_FN_FieldFx_GetScriptContext 0x800C2B50u
+#define func_800C2B50 FieldFx_GetScriptContext  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_CalculateLookAngles 0x800CFAA8u
-#define func_800CFAA8 FieldEng_CalculateLookAngles  /* alias */
+#define PSX_FN_FieldFx_IsLastSlotHalted 0x800C2B68u
+#define func_800C2B68 FieldFx_IsLastSlotHalted  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_UpdatePointHistory 0x800D3AFCu
-#define func_800D3AFC FieldEng_UpdatePointHistory  /* alias */
+#define PSX_FN_FieldFx_StartSlot 0x800C2B90u
+#define func_800C2B90 FieldFx_StartSlot  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_CosineEffect 0x800DAB98u
-#define func_800DAB98 FieldEng_CosineEffect  /* alias */
+#define PSX_FN_FieldFx_ActivateSlot 0x800C2D0Cu
+#define func_800C2D0C FieldFx_ActivateSlot  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_DriftingEffect 0x800DC910u
-#define func_800DC910 FieldEng_DriftingEffect  /* alias */
+#define PSX_FN_FieldFx_FreeSlot 0x800C2DA0u
+#define func_800C2DA0 FieldFx_FreeSlot  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_RotatingEffect 0x800DF87Cu
-#define func_800DF87C FieldEng_RotatingEffect  /* alias */
+#define PSX_FN_FieldFx_FreeAllSlots 0x800C2E08u
+#define func_800C2E08 FieldFx_FreeAllSlots  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_PointEmitter 0x800DF9B0u
-#define func_800DF9B0 FieldEng_PointEmitter  /* alias */
+#define PSX_FN_FieldFx_GetStatus 0x800C6CE0u
+#define func_800C6CE0 FieldFx_GetStatus  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_VecToAngle 0x800DFF80u
-#define func_800DFF80 FieldEng_VecToAngle  /* alias */
+#define PSX_FN_FieldFx_ModelScrollUv 0x800C6D5Cu
+#define func_800C6D5C FieldFx_ModelScrollUv  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_FieldEng_TurnToward 0x800DFFB8u
-#define func_800DFFB8 FieldEng_TurnToward  /* alias */
+#define PSX_FN_FieldFx_ModelSetTexture 0x800C6EC0u
+#define func_800C6EC0 FieldFx_ModelSetTexture  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ModelSetSemiTrans 0x800C6ED8u
+#define func_800C6ED8 FieldFx_ModelSetSemiTrans  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ModelSetDepthBias 0x800C6EE8u
+#define func_800C6EE8 FieldFx_ModelSetDepthBias  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ModelSaveColors 0x800C6EF8u
+#define func_800C6EF8 FieldFx_ModelSaveColors  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ModelRestoreColors 0x800C6F4Cu
+#define func_800C6F4C FieldFx_ModelRestoreColors  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ModelScaleColors 0x800C6FA0u
+#define func_800C6FA0 FieldFx_ModelScaleColors  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ModelSetColors 0x800C7098u
+#define func_800C7098 FieldFx_ModelSetColors  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ModelShiftColors 0x800C70ECu
+#define func_800C70EC FieldFx_ModelShiftColors  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ModelDraw 0x800C71E4u
+#define func_800C71E4 FieldFx_ModelDraw  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_TransformPackedVertex 0x800C7AE0u
+#define func_800C7AE0 FieldFx_TransformPackedVertex  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_PlantScript 0x800C7BA0u
+#define func_800C7BA0 GlowEffect_PlantScript  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_Spawn6 0x800C7D00u
+#define func_800C7D00 GlowEffect_Spawn6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_RegisterDrawList 0x800C7D2Cu
+#define func_800C7D2C GlowEffect_RegisterDrawList  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_RegisterPairedTables 0x800C7D54u
+#define func_800C7D54 GlowEffect_RegisterPairedTables  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_CloseTarget 0x800C7DC4u
+#define func_800C7DC4 GlowEffect_CloseTarget  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_ClassNop6 0x800C7DD4u
+#define func_800C7DD4 GlowEffect_ClassNop6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_ClassNop0 0x800C7DDCu
+#define func_800C7DDC GlowEffect_ClassNop0  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_PlantScript 0x800C8D34u
+#define func_800C8D34 GlowEffectB_PlantScript  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_Spawn6 0x800C8E44u
+#define func_800C8E44 GlowEffectB_Spawn6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_RegisterDrawList 0x800C8E70u
+#define func_800C8E70 GlowEffectB_RegisterDrawList  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_RegisterPairedTables 0x800C8E98u
+#define func_800C8E98 GlowEffectB_RegisterPairedTables  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_CloseTarget 0x800C8F08u
+#define func_800C8F08 GlowEffectB_CloseTarget  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_ClassNop6 0x800C8F18u
+#define func_800C8F18 GlowEffectB_ClassNop6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_ClassNop0 0x800C8F20u
+#define func_800C8F20 GlowEffectB_ClassNop0  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_PlantScript 0x800C9A70u
+#define func_800C9A70 GlowEffectC_PlantScript  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_Spawn6 0x800C9B3Cu
+#define func_800C9B3C GlowEffectC_Spawn6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_RegisterDrawList 0x800C9B68u
+#define func_800C9B68 GlowEffectC_RegisterDrawList  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_RegisterPairedTables 0x800C9B90u
+#define func_800C9B90 GlowEffectC_RegisterPairedTables  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_CloseTarget 0x800C9C00u
+#define func_800C9C00 GlowEffectC_CloseTarget  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_ClassNop6 0x800C9C10u
+#define func_800C9C10 GlowEffectC_ClassNop6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_ClassNop0 0x800C9C18u
+#define func_800C9C18 GlowEffectC_ClassNop0  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_PlantScript 0x800CA574u
+#define func_800CA574 FourLayerGlow_PlantScript  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_Spawn6 0x800CA6D4u
+#define func_800CA6D4 FourLayerGlow_Spawn6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_RegisterDrawList 0x800CA700u
+#define func_800CA700 FourLayerGlow_RegisterDrawList  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_RegisterPairedTables 0x800CA728u
+#define func_800CA728 FourLayerGlow_RegisterPairedTables  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_CloseTarget 0x800CA798u
+#define func_800CA798 FourLayerGlow_CloseTarget  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_ClassNop6 0x800CA7A8u
+#define func_800CA7A8 FourLayerGlow_ClassNop6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_ClassNop0 0x800CA7B0u
+#define func_800CA7B0 FourLayerGlow_ClassNop0  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_PlantScript 0x800CBCA4u
+#define func_800CBCA4 PointSprite_PlantScript  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_Spawn6 0x800CBEE0u
+#define func_800CBEE0 PointSprite_Spawn6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_RegisterDrawList 0x800CBF0Cu
+#define func_800CBF0C PointSprite_RegisterDrawList  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_RegisterPairedTables 0x800CBF34u
+#define func_800CBF34 PointSprite_RegisterPairedTables  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_CloseTarget 0x800CBFA4u
+#define func_800CBFA4 PointSprite_CloseTarget  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_ClassNop6 0x800CBFB4u
+#define func_800CBFB4 PointSprite_ClassNop6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_ClassNop0 0x800CBFBCu
+#define func_800CBFBC PointSprite_ClassNop0  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_InitRadialEntries 0x800CC0E0u
+#define func_800CC0E0 FieldFx_InitRadialEntries  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ProcessInterleavedPoints 0x800CC55Cu
+#define func_800CC55C FieldFx_ProcessInterleavedPoints  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ProcessPointTriples 0x800CC7ACu
+#define func_800CC7AC FieldFx_ProcessPointTriples  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_Spawn6 0x800CCEBCu
+#define func_800CCEBC BurstEffect_Spawn6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_RegisterDrawList 0x800CCEE8u
+#define func_800CCEE8 BurstEffect_RegisterDrawList  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_RegisterPairedTables 0x800CCF10u
+#define func_800CCF10 BurstEffect_RegisterPairedTables  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_CloseTarget 0x800CCF80u
+#define func_800CCF80 BurstEffect_CloseTarget  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_ClassNop6 0x800CCF90u
+#define func_800CCF90 BurstEffect_ClassNop6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_ClassNop0 0x800CCF98u
+#define func_800CCF98 BurstEffect_ClassNop0  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_InitRandomOffsetPairs 0x800CD0BCu
+#define func_800CD0BC FieldFx_InitRandomOffsetPairs  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_PlantScript 0x800CD728u
+#define func_800CD728 BurstEffectB_PlantScript  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_Spawn6 0x800CD89Cu
+#define func_800CD89C BurstEffectB_Spawn6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_RegisterDrawList 0x800CD8C8u
+#define func_800CD8C8 BurstEffectB_RegisterDrawList  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_RegisterPairedTables 0x800CD8F0u
+#define func_800CD8F0 BurstEffectB_RegisterPairedTables  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_CloseTarget 0x800CD960u
+#define func_800CD960 BurstEffectB_CloseTarget  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_ClassNop6 0x800CD970u
+#define func_800CD970 BurstEffectB_ClassNop6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_ClassNop0 0x800CD978u
+#define func_800CD978 BurstEffectB_ClassNop0  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_PlantScript 0x800CE084u
+#define func_800CE084 BurstEffectC_PlantScript  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_Spawn6 0x800CE118u
+#define func_800CE118 BurstEffectC_Spawn6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_RegisterDrawList 0x800CE144u
+#define func_800CE144 BurstEffectC_RegisterDrawList  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_RegisterPairedTables 0x800CE16Cu
+#define func_800CE16C BurstEffectC_RegisterPairedTables  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_CloseTarget 0x800CE1DCu
+#define func_800CE1DC BurstEffectC_CloseTarget  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_ClassNop6 0x800CE1ECu
+#define func_800CE1EC BurstEffectC_ClassNop6  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_ClassNop0 0x800CE1F4u
+#define func_800CE1F4 BurstEffectC_ClassNop0  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_GetEffectResource 0x800CE4F8u
+#define func_800CE4F8 FieldFx_GetEffectResource  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_TransformMatrixPoint 0x800CE8F0u
+#define func_800CE8F0 FieldFx_TransformMatrixPoint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RotateVector 0x800CEAE8u
+#define func_800CEAE8 FieldFx_RotateVector  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_TransformTranslation 0x800CF5B0u
+#define func_800CF5B0 FieldFx_TransformTranslation  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_CalculateLookAngles 0x800CFAA8u
+#define func_800CFAA8 FieldFx_CalculateLookAngles  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_UpdatePointHistory 0x800D3AFCu
+#define func_800D3AFC FieldFx_UpdatePointHistory  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_CosineEffect 0x800DAB98u
+#define func_800DAB98 FieldFx_CosineEffect  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DriftingEffect 0x800DC910u
+#define func_800DC910 FieldFx_DriftingEffect  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RotatingEffect 0x800DF87Cu
+#define func_800DF87C FieldFx_RotatingEffect  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_PointEmitter 0x800DF9B0u
+#define func_800DF9B0 FieldFx_PointEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_VecToAngle 0x800DFF80u
+#define func_800DFF80 FieldFx_VecToAngle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_TurnToward 0x800DFFB8u
+#define func_800DFFB8 FieldFx_TurnToward  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_AngleDistance 0x800E0024u
+#define func_800E0024 FieldFx_AngleDistance  /* alias */
