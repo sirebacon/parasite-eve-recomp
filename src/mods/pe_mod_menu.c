@@ -529,8 +529,19 @@ static void pe_mod_menu_vblank(void) {
  * header's FIELD_PAD_RUN) or bit 10, also mapped to Circle, changed nothing.
  * With Always run on, in free field movement entry 0 maps to the d-pad, so
  * moving means running, and to nothing while the run button is held, so holding
- * it walks. Menus and battle get the original mapping back. Analog mode rebuilds
- * bit 0 from the stick alone (full tilt runs), so Always run is d-pad only.
+ * it walks. Menus and battle get the original mapping back.
+ *
+ * ANALOG: in analog mode the game drops the mapping's run bit and sets it only
+ * when one stick axis is past full tilt (< 0x14 or >= 0xE7, its pad read
+ * Field_HandleStateTransition 0x8003EB04); directions start at < 0x5A /
+ * >= 0xA1. A round stick gate never gets an axis that far on a diagonal, so
+ * sweeping through a turn dropped Aya to a walk (user report 2026-10-13). At
+ * that function's entry, in free field movement, the stick bytes it is about to
+ * read are reshaped (the pad buffer is refilled every frame): to run, the
+ * larger axis is pushed to its edge (the other axis, and so the direction,
+ * stays); to walk, both axes are kept inside full tilt. Run = Always run and
+ * not holding the run button, or, with Always run off, the stick at least
+ * ~80% out in any direction (round, not per axis).
  *
  * Walk/run is decided from the raw pad (refreshed every frame) rather than the
  * field input word, whose value between frames is not reliable. */
@@ -542,6 +553,9 @@ static void pe_mod_menu_vblank(void) {
 #define PE_PAD_STICK_Y        0x800BE9A7u
 #define PE_RUN_MAP_ADDR       0x800A76F0u   /* D_800A76F0[0]: buttons that make Aya run */
 #define PE_RUN_MAP_DPAD       0x00F0u       /* up/right/down/left, internal pad bits */
+#define PE_FN_FIELD_PAD       0x8003EB04u   /* Field_HandleStateTransition: builds the field input */
+#define PE_STICK_CENTER       0x80
+#define PE_STICK_FULL_R2      (100 * 100)   /* ~80% of a full push, any direction */
 #define PE_ACTOR_MOVE_FACTOR  0x20u
 #define PE_MOVE_FACTOR_STOCK  0x10000u
 
@@ -650,36 +664,75 @@ static uint32_t pe_speed(int choice) {
 #define PE_OLD_MOVE_ADDR   0x800185C0u
 #define PE_OLD_MOVE_RETAIL 0x3C040005u
 
+/* The raw pad as the game's internal button bits (Circle/Cross swapped, as in
+ * the game's own pad read) and the left stick. The buffer is all zero before
+ * the game sets it up, which would read as every button held, so a valid
+ * header is required. */
+typedef struct { uint32_t bits; int analog, x, y, stick; } PePad;
+
+static PePad pe_read_pad(void) {
+    PePad p = { 0, 0, PE_STICK_CENTER, PE_STICK_CENTER, 0 };
+    const uint32_t pad = psx_mod_read_word(PE_PAD_ADDR);
+    const uint32_t id = (pad >> 8) & 0xFFu;
+    if ((pad & 0xFFu) != 0 || id == 0 || id == 0xFFu) return p;
+    const uint32_t inv = ~(pad >> 16) & 0xFFFFu;
+    p.bits = inv & 0x9FFFu;
+    if (inv & 0x2000u) p.bits |= 0x4000u;
+    if (inv & 0x4000u) p.bits |= 0x2000u;
+    if ((pad & 0xF000u) == 0x7000u) {
+        p.analog = 1;
+        p.x = psx_mod_read_byte(PE_PAD_STICK_X);
+        p.y = psx_mod_read_byte(PE_PAD_STICK_Y);
+        p.stick = p.x < 0x5A || p.x >= 0xA1 || p.y < 0x5A || p.y >= 0xA1;
+    }
+    return p;
+}
+
+static int pe_in_free_field(void) {
+    /* No battle (block 2), no menu (block 4, state 0x9000, set by
+     * Entity_FrameUpdate when the item menu opens) and none of the states the
+     * game itself requires clear before opening that menu (state 0x3400, block
+     * 0x2000); 0x200/0x400 also gate the pad read for menus. */
+    return !(psx_mod_read_word(PE_BATTLE_FLAGS_ADDR) & 0x2006u) &&
+           !(psx_mod_read_word(PE_GAME_STATE_FLAGS) & 0xB600u);
+}
+
+/* Should a stick push run? (Always run: unless the run button is held.) */
+static int pe_stick_runs(const PePad *p) {
+    if (s_always_run) return !(p->bits & s_run_mask);
+    const int dx = p->x - PE_STICK_CENTER, dy = p->y - PE_STICK_CENTER;
+    return dx * dx + dy * dy >= PE_STICK_FULL_R2;
+}
+
+/* Field_HandleStateTransition entry: reshape the stick it is about to read. */
+static void pe_on_field_pad(struct CPUState *cpu, uint32_t address) {
+    (void)cpu; (void)address;
+    if (!psx_mod_game_started() || !pe_in_free_field()) return;
+    const PePad p = pe_read_pad();
+    if (!p.analog || !p.stick) return;
+    int x = p.x, y = p.y;
+    if (pe_stick_runs(&p)) {
+        const int dx = x - PE_STICK_CENTER, dy = y - PE_STICK_CENTER;
+        if ((dx < 0 ? -dx : dx) >= (dy < 0 ? -dy : dy)) x = dx < 0 ? 0x00 : 0xFF;
+        else y = dy < 0 ? 0x00 : 0xFF;
+    } else {
+        if (x < 0x14) x = 0x14; else if (x > 0xE6) x = 0xE6;
+        if (y < 0x14) y = 0x14; else if (y > 0xE6) y = 0xE6;
+    }
+    if (x != p.x) psx_mod_write_byte(PE_PAD_STICK_X, (uint8_t)x);
+    if (y != p.y) psx_mod_write_byte(PE_PAD_STICK_Y, (uint8_t)y);
+}
+
 static void pe_move_tick(void) {
     const uint32_t old = psx_mod_read_word(PE_OLD_MOVE_ADDR);
     if (old == 0x3C040008u || old == 0x3C040014u)
         psx_mod_write_code_word(PE_OLD_MOVE_ADDR, PE_OLD_MOVE_RETAIL);
 
-    /* Raw pad -> the game's internal button bits (Circle/Cross swapped, as in
-     * the game's own pad read). The buffer is all zero before the game sets it
-     * up, which would read as every button held, so require a valid header. */
-    const uint32_t pad = psx_mod_read_word(PE_PAD_ADDR);
-    const uint32_t id = (pad >> 8) & 0xFFu;
-    const int pad_ok = (pad & 0xFFu) == 0 && id != 0 && id != 0xFFu;
-    const uint32_t inv = pad_ok ? (~(pad >> 16) & 0xFFFFu) : 0;
-    uint32_t bits = inv & 0x9FFFu;
-    if (inv & 0x2000u) bits |= 0x4000u;
-    if (inv & 0x4000u) bits |= 0x2000u;
+    const PePad p = pe_read_pad();
+    const uint32_t bits = p.bits;
     const int dpad = (bits & PE_RUN_MAP_DPAD) != 0;
-    int stick = 0, stick_full = 0;
-    if (pad_ok && (pad & 0xF000u) == 0x7000u) {
-        const uint32_t x = psx_mod_read_byte(PE_PAD_STICK_X);
-        const uint32_t y = psx_mod_read_byte(PE_PAD_STICK_Y);
-        stick = x < 0x5Au || x >= 0xA1u || y < 0x5Au || y >= 0xA1u;
-        stick_full = x < 0x14u || x >= 0xE7u || y < 0x14u || y >= 0xE7u;
-    }
-
-    /* Free field movement: no battle (block 2), no menu (block 4, state 0x9000,
-     * set by Entity_FrameUpdate when the item menu opens) and none of the
-     * states the game itself requires clear before opening that menu (state
-     * 0x3400, block 0x2000); 0x200/0x400 also gate the pad read for menus. */
-    const int in_field = !(psx_mod_read_word(PE_BATTLE_FLAGS_ADDR) & 0x2006u) &&
-                         !(psx_mod_read_word(PE_GAME_STATE_FLAGS) & 0xB600u);
+    const int stick = p.stick;
+    const int in_field = pe_in_free_field();
 
     /* Always run: retarget the run entry of the mapping table. Any value that
      * is not one of ours is the game's (or the player's button config) and is
@@ -700,7 +753,7 @@ static void pe_move_tick(void) {
     const int moving = in_field && (dpad || stick);
     int running;
     if (dpad) running = s_always_run ? !run_held : run_held;
-    else      running = run_held || stick_full;
+    else      running = pe_stick_runs(&p);   /* what pe_on_field_pad makes the game do */
 
     const int combat = (psx_mod_read_word(PE_BATTLE_FLAGS_ADDR) & 0x2u) &&
                        psx_mod_read_word(PE_BATTLE_PHASE_ADDR) == 0;
@@ -746,8 +799,9 @@ void pe_custom_register(void);           /* pe_custom.c, after the loot hooks */
 
 PSX_MOD_CONSTRUCTOR(pe_register_mod_menu_plugin) {
     (void)psx_mod_register_vblank_plugin("pe.mod-menu", pe_mod_menu_vblank);
+    (void)psx_mod_register_function_entry_plugin("pe.analog-run", PE_FN_FIELD_PAD, pe_on_field_pad);
     (void)pe_menu_register_toggle(0, "Always run",
-        "Hold the run button to walk.",
+        "Hold the run button to walk (d-pad and stick).",
         &s_always_run, 0);
     (void)pe_menu_register_choice(0, "Run speed",
         "How fast Aya runs in the field.",
