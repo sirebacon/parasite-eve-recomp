@@ -34,7 +34,7 @@ static inline uint8_t pe_glyph(char c) {
     if (c >= '0' && c <= '9') return (uint8_t)(c - '0');
     switch (c) {                              /* from the game's own dialogue */
     case '.': return 0x2F; case ',': return 0x4B; case ':': return 0x4A;
-    case '!': return 0x2B; case '\'': return 0x2E;
+    case '!': return 0x2B; case '\'': return 0x2E; case '/': return 0x4C;
     default: return 0x0F;
     }
 }
