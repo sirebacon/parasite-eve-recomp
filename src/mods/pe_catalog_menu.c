@@ -14,10 +14,17 @@
  *     icon panel by the list's 16 px a row;
  *   - Draw_PrintRawText (0x8005F27C) shows "Mod Catalog" for title 0x31 while
  *     that row is under the cursor;
+ *   - with Distribute Bonus Points (action 8, the last row) present, our row
+ *     goes above it: Draw_AllocSprite (0x8005EB64) swaps their icons (0x5E,
+ *     0x5F) in the main list, the titles swap, and confirm on the BP row is
+ *     handed to the game as the row above (the cursor is put back after);
  *   - confirm on it in Menu_StepItemSelectScreen (0x80043DA4) opens the
  *     Catalog in a field text box over the menu (as Wayne's Workshop,
  *     pe_wayne_menu.c): your equipped gun and armor -> their mod slots -> the
  *     unlocked effects with prices (dimmed when they can't go in) and Remove.
+ *     Like the game's own screens it hides Aya's status panels (0x12, 0x18,
+ *     0x2D: hidden while cursor_y is set, MenuWidget_UpdateAndDraw) and the
+ *     HP overlay, and shows them again on close.
  *     While it is up the menu's input queue is paused
  *     (g_MenuInputPollingPaused); on close the menu waits for every button to
  *     be released (g_MenuInputActive = 0) so the closing press isn't seen.
@@ -36,6 +43,12 @@
 #define PE_FN_ITEM_SELECT     0x80043DA4u   /* Menu_StepItemSelectScreen */
 #define PE_FN_PRINT_RAW_TEXT  0x8005F27Cu   /* Draw_PrintRawText */
 #define PE_FN_DRAW_TEXTBOXES  0x80037870u   /* Menu_DrawTextboxEntries */
+#define PE_FN_ALLOC_SPRITE    0x8005EB64u   /* Draw_AllocSprite */
+#define PE_SPRITE_BP          0x5Eu         /* action 8's icon */
+#define PE_SPRITE_ROW9        0x5Fu         /* what our row draws */
+#define PE_ACTIVE_WIDGET      0x8009CEF4u   /* g_MenuActiveWidget: list being drawn */
+#define PE_WIDGET_LIST_HEAD   0x8009D154u   /* g_MenuWidgetActiveListHead */
+#define PE_STATUS_OVERLAY     0x8009CEF8u   /* g_MenuBattleStatusOverlayActive */
 #define PE_DRAW_ITEM_LIST     0x8004F838u   /* Menu_DrawItemList: the main list's draw */
 #define PE_CONTEXT_FLAGS      0x8009CEF0u   /* g_MenuItemContextFlag */
 #define PE_BATTLE_EQUIP_MODE  0x8009D028u   /* g_MenuBattleEquipMode */
@@ -49,8 +62,12 @@
 #define PE_CHOICE_CURSOR      0x8009CEA0u   /* s8 */
 #define PE_MAX_HP_ADDR        0x800C0E06u
 #define PE_TITLE_ACTION9      0x31u         /* Str_LookupTable10 index row 9 would show */
+#define PE_TITLE_BP           0x30u         /* "Distribute Bonus Points" */
 
+#define N_NEXT        0x00u
 #define N_CHILD0      0x08u
+#define N_MODE        0x20u
+#define N_SELECTED    0x24u
 #define N_DRAW        0x30u
 #define N_GRID_W      0x34u
 #define N_CURSOR_X    0x44u
@@ -81,7 +98,10 @@
 #define IN_CANCEL  0x0400u
 
 #define PE_PAGE_SIZE 5
-#define PE_BOX_TOP   48u
+#define PE_BOX_X     28u                    /* where Aya's status panel was */
+#define PE_BOX_TOP   32u
+#define PE_BOX_MIN_W 252u
+#define PE_HIDDEN_MAX 4
 
 enum { CM_NONE, CM_GEAR, CM_SLOTS, CM_EFFECTS };
 enum { WHICH_GUN = 0, WHICH_ARMOR = 1 };
@@ -98,7 +118,13 @@ static struct {
     uint32_t prev_pad;
     int hold;
     char note[48];                            /* title line after an action */
+    uint32_t hidden[PE_HIDDEN_MAX];           /* status panels we hid */
+    uint32_t hidden_selected[PE_HIDDEN_MAX];
+    uint32_t overlay;                         /* HP overlay flag before */
 } s_cm;
+
+static uint32_t s_bp_restore_list;            /* BP confirm: put its cursor back */
+static uint32_t s_bp_restore_row;
 
 static uint32_t s_buf;                        /* the box text, mod memory */
 static uint32_t s_title;                      /* "Mod Catalog", mod memory */
@@ -128,13 +154,35 @@ static uint32_t pe_main_list(void) {
     return node;
 }
 
+static int pe_has_our_row(uint32_t list) {
+    return (int)psx_mod_read_word(list + N_Y_LIMIT) == pe_vanilla_rows() + 1;
+}
+
+/* Our row sits above Distribute Bonus Points when that is on the menu. */
+static int pe_swapped(void) { return (psx_mod_read_word(PE_CONTEXT_FLAGS) >> 8) & 1u; }
+
+static int pe_catalog_row(void) { return pe_vanilla_rows() - (pe_swapped() ? 1 : 0); }
+
+static int pe_cursor_row(uint32_t list) {
+    return (int)psx_mod_read_word(list + N_GRID_W) * (int)psx_mod_read_word(list + N_CURSOR_Y)
+         + (int)psx_mod_read_word(list + N_CURSOR_X);
+}
+
 /* Is our row on `list` and under its cursor? */
 static int pe_on_our_row(uint32_t list) {
-    const int ours = pe_vanilla_rows();
-    if ((int)psx_mod_read_word(list + N_Y_LIMIT) != ours + 1) return 0;
-    const int index = (int)psx_mod_read_word(list + N_GRID_W) * (int)psx_mod_read_word(list + N_CURSOR_Y)
-                    + (int)psx_mod_read_word(list + N_CURSOR_X);
-    return index == ours;
+    return pe_has_our_row(list) && pe_cursor_row(list) == pe_catalog_row();
+}
+
+/* Row icons: with the swap, the BP row shows action 9's icon spot and ours
+ * the BP spot -- trade the two sprites while the main list draws. */
+static void pe_on_alloc_sprite(struct CPUState *cpu, uint32_t address) {
+    (void)address;
+    const uint32_t sprite = cpu->gpr[4];
+    if (sprite != PE_SPRITE_BP && sprite != PE_SPRITE_ROW9) return;
+    const uint32_t list = psx_mod_read_word(PE_ACTIVE_WIDGET);
+    if (!pe_ram_pointer(list) || psx_mod_read_word(list + N_DRAW) != PE_DRAW_ITEM_LIST) return;
+    if (!pe_has_our_row(list) || !pe_swapped()) return;
+    cpu->gpr[4] = sprite == PE_SPRITE_BP ? PE_SPRITE_ROW9 : PE_SPRITE_BP;
 }
 
 static void pe_on_set_rows(struct CPUState *cpu, uint32_t address) {
@@ -151,9 +199,17 @@ static void pe_on_set_rows(struct CPUState *cpu, uint32_t address) {
 
 static void pe_on_print_raw_text(struct CPUState *cpu, uint32_t address) {
     (void)address;
-    if (!cpu->gpr[4] || cpu->gpr[4] != pe_text_entry(0x10u, PE_TITLE_ACTION9)) return;
+    if (!cpu->gpr[4]) return;
     const uint32_t list = pe_main_list();
-    if (!list || !pe_on_our_row(list)) return;
+    if (!list || !pe_has_our_row(list)) return;
+    const int row = pe_cursor_row(list);
+    if (pe_swapped() && row == pe_vanilla_rows() &&
+        cpu->gpr[4] == pe_text_entry(0x10u, PE_TITLE_ACTION9)) {
+        cpu->gpr[4] = pe_text_entry(0x10u, PE_TITLE_BP);      /* the BP row, moved down */
+        return;
+    }
+    if (row != pe_catalog_row() ||
+        cpu->gpr[4] != pe_text_entry(0x10u, pe_swapped() ? PE_TITLE_BP : PE_TITLE_ACTION9)) return;
     if (!s_title) {
         s_title = psx_mod_alloc_guest_memory(16, 4);
         if (!s_title) return;
@@ -348,16 +404,46 @@ static void pe_show(int screen, int cursor) {
     for (unsigned i = 0; i < t.n; ++i) psx_mod_write_byte(s_buf + i, t.b[i]);
     const uint32_t e = s_cm.entry;
     unsigned width = t.widest * 9u + 24u;
-    if (width < 200u) width = 200u;
-    if (width > 304u) width = 304u;
+    if (width < PE_BOX_MIN_W) width = PE_BOX_MIN_W;
+    if (width > 312u - PE_BOX_X) width = 312u - PE_BOX_X;
     psx_mod_write_word(e + TB_MESSAGE, s_buf);
-    psx_mod_write_half(e + TB_X, (uint16_t)((320u - width) / 2u));
+    psx_mod_write_half(e + TB_X, (uint16_t)PE_BOX_X);
     psx_mod_write_half(e + TB_Y, (uint16_t)PE_BOX_TOP);
     psx_mod_write_half(e + TB_W, (uint16_t)width);
     psx_mod_write_half(e + TB_H, (uint16_t)((unsigned)t.lines * 12u + 10u));
     if (cursor < 0) cursor = 0;
     if (cursor >= s_cm.options) cursor = s_cm.options - 1;
     psx_mod_write_byte(PE_CHOICE_CURSOR, (uint8_t)cursor);
+}
+
+/* Hide Aya's status panels as the game's own screens do. */
+static void pe_hide_panels(void) {
+    int n = 0;
+    uint32_t node = psx_mod_read_word(PE_WIDGET_LIST_HEAD);
+    for (int guard = 0; pe_ram_pointer(node) && guard < 64 && n < PE_HIDDEN_MAX; ++guard) {
+        const uint32_t sel = psx_mod_read_word(node + N_SELECTED);
+        if (psx_mod_read_word(node + N_MODE) == 1 && (sel == 0x12 || sel == 0x18 || sel == 0x2D) &&
+            psx_mod_read_word(node + N_CURSOR_Y) == 0) {
+            psx_mod_write_word(node + N_CURSOR_Y, 1);
+            s_cm.hidden[n] = node;
+            s_cm.hidden_selected[n] = sel;
+            ++n;
+        }
+        node = psx_mod_read_word(node + N_NEXT);
+    }
+    s_cm.overlay = psx_mod_read_word(PE_STATUS_OVERLAY);
+    psx_mod_write_word(PE_STATUS_OVERLAY, 0);
+}
+
+static void pe_show_panels(void) {
+    for (int i = 0; i < PE_HIDDEN_MAX; ++i) {
+        const uint32_t node = s_cm.hidden[i];
+        if (!pe_ram_pointer(node)) continue;
+        if (psx_mod_read_word(node + N_MODE) == 1 &&
+            psx_mod_read_word(node + N_SELECTED) == s_cm.hidden_selected[i])
+            psx_mod_write_word(node + N_CURSOR_Y, 0);
+    }
+    psx_mod_write_word(PE_STATUS_OVERLAY, s_cm.overlay);
 }
 
 static void pe_open(void) {
@@ -377,12 +463,14 @@ static void pe_open(void) {
     pe_show(CM_GEAR, 0);
     psx_mod_write_byte(e + TB_STATE, 2);      /* showing; 1 would re-read a script message */
     psx_mod_write_word(PE_INPUT_PAUSED, 1);
+    pe_hide_panels();
 }
 
 static void pe_close(void) {
     const uint32_t e = s_cm.entry;
     if (e && psx_mod_read_byte(e + TB_STATE) == 2 && psx_mod_read_word(e + TB_MESSAGE) == s_buf)
         psx_mod_write_byte(e + TB_STATE, 0);
+    pe_show_panels();
     psx_mod_write_word(PE_INPUT_PAUSED, 0);
     psx_mod_write_word(PE_INPUT_HELD, 0);
     psx_mod_write_word(PE_INPUT_ACTIVE, 0);   /* the menu waits for all buttons up */
@@ -397,8 +485,17 @@ static void pe_on_item_select(struct CPUState *cpu, uint32_t address) {
     if (!pe_ram_pointer(root)) return;
     const uint32_t list = psx_mod_read_word(root + N_CHILD0);
     if (!pe_ram_pointer(list) || psx_mod_read_word(list + N_DRAW) != PE_DRAW_ITEM_LIST) return;
-    if (!pe_on_our_row(list)) return;
-    pe_open();                                /* the game finds no action there */
+    if (!pe_has_our_row(list)) return;
+    const int row = pe_cursor_row(list);
+    if (row == pe_catalog_row()) {
+        if (pe_swapped()) cpu->gpr[5] = 0;    /* not the game's BP screen */
+        pe_open();                            /* (without the swap the game finds no action) */
+    } else if (pe_swapped() && row == pe_vanilla_rows()) {
+        /* The BP row, moved down: the game knows it as the row above. */
+        s_bp_restore_list = list;
+        s_bp_restore_row = psx_mod_read_word(list + N_CURSOR_Y);
+        psx_mod_write_word(list + N_CURSOR_Y, s_bp_restore_row - 1u);
+    }
 }
 
 /* ---- actions ----------------------------------------------------------------------- */
@@ -498,6 +595,11 @@ static void pe_cancel(void) {
 /* Every frame, before the text boxes are drawn. */
 static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
     (void)cpu; (void)address;
+    if (s_bp_restore_list) {
+        if (psx_mod_read_word(s_bp_restore_list + N_DRAW) == PE_DRAW_ITEM_LIST)
+            psx_mod_write_word(s_bp_restore_list + N_CURSOR_Y, s_bp_restore_row);
+        s_bp_restore_list = 0;
+    }
     if (s_cm.screen == CM_NONE) return;
     const uint32_t e = s_cm.entry;
     if (!pe_main_list() || psx_mod_read_byte(e + TB_STATE) != 2 ||
@@ -528,6 +630,14 @@ static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
     }
 }
 
+/* After a load the panels the snapshot holds hidden stay hidden; re-hide any
+ * the game showed (a snapshot from before the Catalog opened can't get here:
+ * s_cm would be closed). */
+static void pe_hide_panels_again(void) {
+    for (int i = 0; i < PE_HIDDEN_MAX; ++i)
+        if (pe_ram_pointer(s_cm.hidden[i])) psx_mod_write_word(s_cm.hidden[i] + N_CURSOR_Y, 1);
+}
+
 /* Save states: s_cm rides along (block "pe.catalog.ui"); the text lives in
  * mod memory, which snapshots don't hold, so it is written afresh. */
 static void pe_cm_state_loaded(int result, uint32_t saved_version, const void *saved,
@@ -544,6 +654,7 @@ static void pe_cm_restored(void) {
         memset(&s_cm, 0, sizeof s_cm);
         return;
     }
+    pe_hide_panels_again();
     s_cm.prev_pad = pe_pad_inputs();
     pe_show(s_cm.screen, (int8_t)psx_mod_read_byte(PE_CHOICE_CURSOR));
 }
@@ -551,6 +662,8 @@ static void pe_cm_restored(void) {
 /* Called from pe_mod_menu.c after pe_wayne_menu_register. */
 void pe_catalog_menu_register(void) {
     (void)psx_mod_register_function_entry_plugin("pe.catalog.rows", PE_FN_SET_ROWS, pe_on_set_rows);
+    (void)psx_mod_register_function_entry_plugin("pe.catalog.icons", PE_FN_ALLOC_SPRITE,
+                                                 pe_on_alloc_sprite);
     (void)psx_mod_register_function_entry_plugin("pe.catalog.title", PE_FN_PRINT_RAW_TEXT,
                                                  pe_on_print_raw_text);
     (void)psx_mod_register_function_entry_plugin("pe.catalog.open", PE_FN_ITEM_SELECT,
