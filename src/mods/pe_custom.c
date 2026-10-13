@@ -62,6 +62,7 @@ typedef struct {
     unsigned entry;
     const char *text;
     uint32_t guest;                           /* our copy, in mod memory */
+    int economy_only;                         /* only while the Junk economy is on */
 } PeRelabel;
 
 static PeRelabel s_relabels[] = {
@@ -69,6 +70,8 @@ static PeRelabel s_relabels[] = {
     { 0x08, PE_ITEM_CHARM - 1, "Lucky Charm", 0 },
     { 0x0C, PE_ITEM_SMOKE - 1, "Sure Escape from Battle", 0 },
     { 0x0C, PE_ITEM_CHARM - 1, "Finds Rare Items Faster for 10 Battles", 0 },
+    { 0x0C, 0x0B - 1, "Worth 75 Junk  a Quarter of a Wayne Gun", 0, 1 },   /* pe_loot.c bundles */
+    { 0x0C, 0x0C - 1, "Worth 150 Junk  Half of a Wayne Gun", 0, 1 },
     { 0x10, PE_FX_BARGAIN + 19, "Lowers shop prices", 0 },
     { 0x10, PE_FX_SCAVENGER + 19, "Increases Junk found", 0 },
     { 0x10, PE_FX_LUCKY_FIND + 19, "Finds rare items more often", 0 },
@@ -123,6 +126,7 @@ static void pe_on_print_raw_text(struct CPUState *cpu, uint32_t address) {
     if (!pe_ram_pointer(text)) return;
     for (int i = 0; i < PE_RELABELS; ++i) {
         if (!s_source[i] || s_source[i] != text) continue;
+        if (s_relabels[i].economy_only && !pe_loot_enabled()) return;
         const uint32_t g = pe_guest_text(&s_relabels[i]);
         if (g) cpu->gpr[4] = g;
         return;

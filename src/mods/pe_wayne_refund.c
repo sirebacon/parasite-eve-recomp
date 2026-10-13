@@ -19,10 +19,16 @@
  *      crafts again (a counter at 300 alone doesn't trigger him).
  * Leaving the room or loading a state disarms, so jumps in the counter from
  * loads never look like a craft.
+ *
+ * With the Junk economy on (pe_loot.c) this steps aside: Super Junk and Duper
+ * Junk are then Junk bundles worth 75 / 150, so a bad roll refunds that much
+ * through the item itself, the same as when one drops (2026-10-13). The 300
+ * refund applies only with the economy off, where they stay unusable items.
  */
 #include <stdint.h>
 #include "mod_plugins.h"
 #include "pe_mod_menu.h"
+#include "pe_loot.h"
 #include "pe_log.h"
 
 #define PE_WAYNE_COUNTER   0x800A78B0u  /* u16 script variable, g_EntityWorkBuffer + 0xC0 */
@@ -65,7 +71,7 @@ static void pe_wayne_refund_tick(void) {
         s_armed = 1;
     } else if (s_armed && s_prev_counter >= counter + PE_CRAFT_COST) {   /* the craft */
         s_armed = 0;
-        if (pe_count_bad_rolls() > s_junk_before) {
+        if (!pe_loot_enabled() && pe_count_bad_rolls() > s_junk_before) {
             counter += PE_CRAFT_COST;
             psx_mod_write_half(PE_WAYNE_COUNTER, (uint16_t)counter);   /* his row shows it */
             pe_log("wayne_refund", "back=%u", PE_CRAFT_COST);

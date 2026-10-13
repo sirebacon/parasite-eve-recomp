@@ -224,6 +224,20 @@ static void pe_add_junk(uint32_t n) {
     s_st.junk = s_st.junk + n > 99999u ? 99999u : s_st.junk + n;
 }
 
+/* Super Junk and Duper Junk are Junk bundles while the economy is on: worth a
+ * quarter and a half of a Wayne gun (his 300), as vanilla's (never usable)
+ * effect was a quarter and a half of max PE. The sweep turns them into Junk
+ * wherever they land: a rare drop, Wayne's bad roll (that is his refund now,
+ * pe_wayne_refund.c steps aside), or an old save's bag (2026-10-13). */
+#define PE_ITEM_SUPER_JUNK  0x0Bu
+#define PE_ITEM_DUPER_JUNK  0x0Cu
+#define PE_SUPER_JUNK_VALUE 75u
+#define PE_DUPER_JUNK_VALUE 150u
+
+static uint32_t pe_bundle_value(uint16_t v) {
+    return v == PE_ITEM_SUPER_JUNK ? PE_SUPER_JUNK_VALUE : v == PE_ITEM_DUPER_JUNK ? PE_DUPER_JUNK_VALUE : 0u;
+}
+
 /* pe_loot.h */
 int pe_loot_enabled(void) { return s_enabled; }
 uint32_t pe_loot_junk(void) { return s_st.junk; }
@@ -264,8 +278,8 @@ uint32_t pe_loot_price(uint32_t base) {
 static const struct { uint8_t weight; uint16_t item; } s_rare_table[] = {
     { 40, 0x16u },              /* Tool */
     { 35, PE_RARE_BOOSTER },    /* stat booster, tier by battle EXP */
-    { 10, 0x0Bu },              /* Super Junk (restores 1/4 PE) */
-    {  5, 0x0Cu },              /* Duper Junk (restores 1/2 PE) */
+    {  4, 0x0Bu },              /* Super Junk: worth 75 Junk (2026-10-13: was 10) */
+    {  2, 0x0Cu },              /* Duper Junk: worth 150 Junk (was 5) */
     {  7, 0x37u },              /* Mod Permit */
     {  3, 0x17u },              /* Super Tool */
     {  6, PE_RARE_ECON },       /* C5: Scavenger, Lucky Find, Salvager, Bargain */
@@ -737,13 +751,17 @@ static void pe_on_save_deserialize(struct CPUState *cpu, uint32_t address) {
 static void pe_sweep(void) {
     if (s_junk_shown) return;                /* the items-found Junk line is still settling */
     uint32_t moved = 0;
-    for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT; ++i) {
-        const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
-        if (psx_mod_read_half(a) == PE_ITEM_JUNK) { psx_mod_write_half(a, 0); ++moved; }
-    }
-    for (uint32_t i = 0; i < PE_STORAGE_COUNT; ++i) {
-        const uint32_t a = PE_STORAGE_ADDR + i * 2u;
-        if (psx_mod_read_half(a) == PE_ITEM_JUNK) { psx_mod_write_half(a, 0); ++moved; }
+    for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT + PE_STORAGE_COUNT; ++i) {
+        const uint32_t a = i < PE_AYA_SLOT_COUNT ? PE_AYA_SLOTS_ADDR + i * 2u
+                                                 : PE_STORAGE_ADDR + (i - PE_AYA_SLOT_COUNT) * 2u;
+        const uint16_t v = psx_mod_read_half(a);
+        if (v == PE_ITEM_JUNK) { psx_mod_write_half(a, 0); ++moved; continue; }
+        const uint32_t bundle = pe_bundle_value(v);
+        if (bundle) {
+            psx_mod_write_half(a, 0);
+            moved += bundle;
+            pe_log("bundle", "item=0x%02X junk=%u", (unsigned)v, (unsigned)bundle);
+        }
     }
     if (moved) pe_add_junk(moved);           /* silently: in-game messages only */
 }

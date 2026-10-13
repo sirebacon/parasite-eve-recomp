@@ -105,7 +105,8 @@ The `battle` row:
 | `rebuild` | Rebuild bought | `item price` |
 | `combine` | two Medicines combined | `from into` |
 | `wayne` | Wayne's count moved (a hand-in, a craft's -300) | `from to` |
-| `wayne_refund` | a Super/Duper Junk craft refunded | `back` |
+| `bundle` | a Super Junk / Duper Junk turned into Junk (75 / 150) | `item junk` |
+| `wayne_refund` | a Super/Duper Junk craft refunded 300 (only with the Junk economy off) | `back` |
 | `discard` | the game's Discard confirmed | `item list=bag|storage` |
 | `store` / `withdraw` | an item moved bag -> Wayne's storage / back | `item` |
 | `pickup` | field count change of Junk / Tools / kits / cards / Mod Permit | `item delta` |
