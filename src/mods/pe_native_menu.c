@@ -29,6 +29,11 @@
  * to it), and Menu_OnItemDiscardConfirm (0x80045110, a1 = yes). The selected
  * item is g_MenuActiveItemList (0 Aya's bag, else the storage list) and
  * g_MenuActiveItemSlot. Both behaviours have a Workshop toggle, on by default.
+ *
+ * "Dismantle" (68 px) is wider than the action popup's text (56 px; even the
+ * game's "Tune up" overhangs it), so while Discard dismantles the popup is
+ * 16 px wider: simple descriptors 2/3 (width 60, centered) and grid
+ * descriptors 2/3 (text width 56) -- static tables the popup is built from.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -74,6 +79,12 @@
 #define PE_MAX_HP_ADDR           0x800C0E06u
 #define PE_STR_ORIGIN            0x800A8028u
 #define PE_STR_DIRECTORY_OFFSET  0x800A802Cu
+
+#define PE_SIMPLE_DESCRIPTORS 0x80092478u  /* g_MenuWidgetSimpleDescriptors, 0x10 each */
+#define PE_GRID_DESCRIPTORS   0x80092888u  /* g_MenuWidgetGridDescriptors, 0x20 each */
+#define PE_POPUP_WIDTH      60u            /* simple +0x08 */
+#define PE_POPUP_TEXT_WIDTH 56u            /* grid +0x14 */
+#define PE_POPUP_WIDEN      16u
 
 #define PE_ITEM_MEDICINE_1 0x06u
 #define PE_ITEM_MEDICINE_3 0x08u
@@ -343,6 +354,19 @@ static void pe_on_step_equip_screen(struct CPUState *cpu, uint32_t address) {
     cpu->gpr[5] = PE_INPUT_CANCEL;            /* the game closes the list */
 }
 
+/* Every frame: the action popup's width for the next time it opens. */
+static void pe_popup_width_tick(void) {
+    const uint32_t extra = s_discard_dismantles && pe_loot_enabled() ? PE_POPUP_WIDEN : 0u;
+    for (uint32_t d = 2; d <= 3; ++d) {
+        const uint32_t w = PE_SIMPLE_DESCRIPTORS + d * 0x10u + 0x08u;
+        const uint32_t tw = PE_GRID_DESCRIPTORS + d * 0x20u + 0x14u;
+        if (psx_mod_read_word(w) == PE_POPUP_WIDTH + (PE_POPUP_WIDEN - extra))
+            psx_mod_write_word(w, PE_POPUP_WIDTH + extra);
+        if (psx_mod_read_word(tw) == PE_POPUP_TEXT_WIDTH + (PE_POPUP_WIDEN - extra))
+            psx_mod_write_word(tw, PE_POPUP_TEXT_WIDTH + extra);
+    }
+}
+
 /* After a save state loads, nothing here is current any more. */
 static void pe_native_restored(void) {
     s_extended_node = 0;
@@ -368,4 +392,5 @@ void pe_native_menu_register(void) {
     (void)psx_mod_register_function_entry_plugin("pe.native.combine-accept",
         PE_FN_STEP_EQUIP_SCREEN, pe_on_step_equip_screen);
     (void)psx_mod_register_restore_callback(pe_native_restored);
+    (void)psx_mod_register_vblank_plugin("pe.native.popup-width", pe_popup_width_tick);
 }

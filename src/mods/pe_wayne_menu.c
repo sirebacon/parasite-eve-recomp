@@ -362,11 +362,11 @@ static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
  * right after this frame's text boxes are built (Render_SetGteScreenOffset
  * follows Menu_DrawTextboxEntries in Boot_FrameLoop), their red 12x12 glyph
  * packets -- in the frame's text pool, which starts afresh every frame -- are
- * turned to that gray. Only while one of our lists (or the Mod Catalog,
- * pe_catalog_menu.c) is up, so the game's own red highlights stay red. */
+ * turned to that gray. Only while one of our lists is up, so the game's own
+ * red highlights stay red. */
 static void pe_on_after_textboxes(struct CPUState *cpu, uint32_t address) {
     (void)cpu; (void)address;
-    if (s_ui.screen != SCR_REQ && s_ui.screen != SCR_REB && !pe_catalog_menu_open()) return;
+    if (s_ui.screen != SCR_REQ && s_ui.screen != SCR_REB) return;
     const uint32_t frame = psx_mod_read_word(PE_DRAW_FRAME) & 1u;
     const uint32_t pool = psx_mod_read_word(PE_TEXT_POOL_TABLE + frame * 4u);
     if (!pe_ram_pointer(pool)) return;

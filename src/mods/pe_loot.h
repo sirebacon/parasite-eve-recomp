@@ -63,10 +63,6 @@ int pe_cat_is_bag_mod(int which, int e);
 int pe_cat_install(int which, int slot, int e, int dry_run);  /* PE_CAT_* */
 int pe_cat_remove(int which, int slot, int dry_run);
 
-/* pe_catalog_menu.c: the Catalog's text box is up (its unaffordable rows are
- * dimmed by pe_wayne_menu.c's recolor). */
-int pe_catalog_menu_open(void);
-
 #ifdef __cplusplus
 }
 #endif
