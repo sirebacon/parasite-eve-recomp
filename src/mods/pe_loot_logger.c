@@ -165,7 +165,7 @@ static uint32_t s_room_token;
 static int s_room_valid;
 static uint16_t s_prev_bag[PE_AYA_SLOT_COUNT], s_prev_store[PE_STORAGE_COUNT];
 static int s_lists_valid;
-static int s_combat_detail;        /* Debug "Combat detail": a row per combat event */
+static int s_combat_detail = 1;    /* Debug "Combat detail": a row per combat event (on for the data run) */
 
 static const char *const s_spell_names[20] = {
     "Heal1", "Heal2", "Heal3", "Detox", "Medic", "Barrier", "EnergyShot", "Scan", "Slow",

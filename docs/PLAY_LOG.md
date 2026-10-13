@@ -7,8 +7,8 @@ to chase bugs, and to hand real combat data to anyone building a combat mod.
 
 - **Where:** `pe_play_log.csv` next to the game exe (`build-release/`).
 - **On/off:** F1 > PE Enhancements > Debug > **Play log** (on by default).
-  **Combat detail** on the same page adds one row per combat event (off by
-  default, it is noisy).
+  **Combat detail** on the same page adds one row per combat event (on by
+  default for the data-collection run; turn it off for a smaller file).
 - **Code:** `src/mods/pe_loot_logger.c` (most rows), `pe_log()` in
   `src/mods/pe_log.h` (rows other modules add), the menu wrappers in
   `src/mods/pe_mod_menu.c` (F1 changes).
