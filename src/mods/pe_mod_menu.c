@@ -197,7 +197,7 @@ static int s_combat_choice = 0;
 static const char *const s_entry_names[] = { "NORMAL", "1.5X", "2X", "3X", "4X" };
 static const uint32_t s_entry_factor[] = { 0x10000u, 0x18000u, 0x20000u, 0x30000u, 0x40000u };
 #define PE_ENTRY_CHOICES 5u
-static int s_entry_choice = 3;   /* 3x */
+static int s_entry_choice = 0;   /* vanilla: the push still looks off at 3x (2026-10-13), revisit */
 
 static void pe_entry_walk_tick(uint32_t player) {
     static int s_walking, s_turning = 1;
