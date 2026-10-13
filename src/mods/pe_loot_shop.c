@@ -8,6 +8,11 @@
  *                Tool bought, never more than 100 (decision 14); the count is
  *                saved. Not sold (decisions 14, 33, 43): Super Tools, guns,
  *                armor, stat boosters, Revive, Full Recover, Maeda's bullets.
+ *                The economy mods (Bargain, Scavenger, Lucky Find, Salvager)
+ *                are sold too, after the goods, until each is unlocked: buying
+ *                one unlocks it in the Mod Catalog (no item, no bag slot). They
+ *                still roll as rare drops; this is a stopgap until a boss
+ *                guarantee or similar is decided (2026-10-13).
  *   Spare Club   decision 36: when Aya can't attack (no melee weapon, and no
  *                gun with rounds loaded or in its ammo pool, in the bag or the
  *                trunk), a free Club 1,
@@ -93,9 +98,20 @@ static const PeGood s_goods[] = {
 };
 #define PE_GOODS ((int)(sizeof s_goods / sizeof s_goods[0]))
 
+/* Economy mods for sale, in this order, until unlocked. */
+static const struct { int effect; const char *tile; const char *name; } s_econ[] = {
+    { PE_FX_BARGAIN,    "BARGAIN", "Bargain mod" },
+    { PE_FX_SCAVENGER,  "SCAVENG", "Scavenger mod" },
+    { PE_FX_LUCKY_FIND, "LUCKY",   "Lucky Find mod" },
+    { PE_FX_SALVAGER,   "SALVAGE", "Salvager mod" },
+};
+#define PE_ECON_GOODS 4
+#define PE_SHOP_ECON_ID 0xF000u               /* pe_shop_item: 0xF000 | econ index */
+
 /* Tunable (Debug > Loot tuning). */
 static int s_price_pct = 100;
 static int s_tool_start = 40, s_tool_step = 10, s_tool_cap = 100;
+static int s_econ_price = 150;
 
 #define PE_SHOP_STATE_VERSION 1u
 static struct {
@@ -203,6 +219,31 @@ static int pe_has_tool_kit(void) {
 
 static int pe_goods_on_sale(void) { return pe_loaded() && pe_has_tool_kit() ? PE_GOODS - 1 : PE_GOODS; }
 
+/* Economy mods still locked, written to out (econ indices); returns how many. */
+static int pe_econ_on_sale(int *out) {
+    int n = 0;
+    if (!pe_loaded()) return 0;
+    for (int k = 0; k < PE_ECON_GOODS; ++k)
+        if (!pe_catalog_armor_unlocked(s_econ[k].effect)) out[n++] = k;
+    return n;
+}
+
+static int pe_shop_total(void) {
+    int econ[PE_ECON_GOODS];
+    return pe_goods_on_sale() + pe_econ_on_sale(econ);
+}
+
+/* List row i: a goods index (>= 0), or -1 - econ index, or PE_GOODS if none. */
+static int pe_row(int i) {
+    const int goods = pe_goods_on_sale();
+    if (i >= 0 && i < goods) return i;
+    int econ[PE_ECON_GOODS];
+    const int n = pe_econ_on_sale(econ);
+    return i >= goods && i - goods < n ? -1 - econ[i - goods] : PE_GOODS;
+}
+
+static uint32_t pe_econ_price(void) { return pe_loot_price((uint32_t)s_econ_price); }
+
 /* ---- prices ----------------------------------------------------------------- */
 /* Prices go through the preset and Bargain (pe_loot_price); the Tool cap
  * applies after them (decisions 14, 40). */
@@ -244,8 +285,8 @@ static void pe_toast(const char *text) {
 }
 
 static unsigned pe_goods_count(void) {
-    if (s_grid < 0 || s_grid >= pe_goods_on_sale()) s_grid = 0;
-    return (unsigned)pe_goods_on_sale();
+    if (s_grid < 0 || s_grid >= pe_shop_total()) s_grid = 0;
+    return (unsigned)pe_shop_total();
 }
 
 static int pe_goods_cell(int index, char *label, unsigned size, unsigned *flags) {
@@ -257,8 +298,14 @@ static int pe_goods_cell(int index, char *label, unsigned size, unsigned *flags)
         snprintf(label, size, "BAG %d/%u", used, (unsigned)limit);
         return 1;
     }
-    if (index >= pe_goods_on_sale()) return 0;
-    const PeGood *g = &s_goods[index];
+    const int row = pe_row(index);
+    if (row == PE_GOODS) return 0;
+    if (row < 0) {                            /* an economy mod */
+        snprintf(label, size, "%s", s_econ[-1 - row].tile);
+        *flags = PE_CELL_HIGHLIGHT | (pe_shop_blocked_index(index) ? PE_CELL_DIM : 0u);
+        return 1;
+    }
+    const PeGood *g = &s_goods[row];
     snprintf(label, size, "%s", g->tile);
     unsigned f = 0;
     if (!pe_loaded() || pe_blocked(g)) f |= PE_CELL_DIM;
@@ -272,7 +319,13 @@ static unsigned pe_one(void) { return 1; }
 
 static const char *pe_sel_name(unsigned i) {
     (void)i;
-    const PeGood *g = &s_goods[s_grid >= 0 && s_grid < PE_GOODS ? s_grid : 0];
+    const int row = pe_row(s_grid);
+    if (row < 0) {
+        snprintf(s_sel_text, sizeof s_sel_text, "%s: %u (UNLOCKS IN MOD CATALOG)",
+                 s_econ[-1 - row].name, (unsigned)pe_econ_price());
+        return s_sel_text;
+    }
+    const PeGood *g = &s_goods[row < PE_GOODS ? row : 0];
     if (!pe_loaded()) { snprintf(s_sel_text, sizeof s_sel_text, "%s", g->name); return s_sel_text; }
     const int pool = pe_ammo_pool_of_item(g->id);
     const uint32_t price = pe_price(g);
@@ -288,21 +341,44 @@ static const char *pe_sel_name(unsigned i) {
 static const char *pe_result_name(unsigned i) { (void)i; return s_result; }
 
 /* pe_loot.h, for Wayne's in-game Workshop (pe_wayne_menu.c) and the F1 page. */
-int pe_shop_count(void) { return pe_goods_on_sale(); }
-uint16_t pe_shop_item(int i) { return i >= 0 && i < PE_GOODS ? s_goods[i].id : 0; }
-uint32_t pe_shop_price_index(int i) { return i >= 0 && i < PE_GOODS ? pe_price(&s_goods[i]) : 0; }
+int pe_shop_count(void) { return pe_shop_total(); }
+uint16_t pe_shop_item(int i) {
+    const int row = pe_row(i);
+    if (row < 0) return (uint16_t)(PE_SHOP_ECON_ID | (unsigned)(-1 - row));
+    return row < PE_GOODS ? s_goods[row].id : 0;
+}
+const char *pe_shop_label(int i) {
+    const int row = pe_row(i);
+    return row < 0 ? s_econ[-1 - row].name : 0;
+}
+uint32_t pe_shop_price_index(int i) {
+    const int row = pe_row(i);
+    if (row < 0) return pe_econ_price();
+    return row < PE_GOODS ? pe_price(&s_goods[row]) : 0;
+}
 const char *pe_shop_blocked_index(int i) {
-    if (i < 0 || i >= pe_goods_on_sale()) return "No such goods";
+    const int row = pe_row(i);
+    if (row == PE_GOODS) return "No such goods";
     if (!pe_loaded()) return "Load a game first";
     if (!pe_loot_enabled()) return "Junk economy is off";
-    return pe_blocked(&s_goods[i]);
+    if (row < 0) return pe_loot_junk() < pe_econ_price() ? "Not enough Junk" : 0;
+    return pe_blocked(&s_goods[row]);
 }
 
 /* Buy one of goods i; msg gets what happened. Returns 1 if bought. */
 int pe_shop_buy_index(int i, char *msg, size_t msg_size) {
     const char *why = pe_shop_blocked_index(i);
     if (why) { snprintf(msg, msg_size, "%s", why); return 0; }
-    const PeGood *g = &s_goods[i];
+    const int row = pe_row(i);
+    if (row < 0) {                            /* an economy mod: unlock it */
+        const uint32_t price = pe_econ_price();
+        if (!pe_loot_spend_junk(price)) { snprintf(msg, msg_size, "Not enough Junk"); return 0; }
+        pe_catalog_unlock_armor(s_econ[-1 - row].effect);
+        snprintf(msg, msg_size, "Bought %s: -%u Junk (total %u)", s_econ[-1 - row].name,
+                 (unsigned)price, (unsigned)pe_loot_junk());
+        return 1;
+    }
+    const PeGood *g = &s_goods[row];
     const uint32_t price = pe_price(g);
     const int pool = pe_ammo_pool_of_item(g->id);
     if (pool >= 0) {
@@ -415,7 +491,7 @@ void pe_loot_shop_menu_register(void) {
     (void)pe_menu_register_live_int(PE_SHOP_PAGE, "Your Junk",
         "Junk you have now.", 0, 99999, 1, pe_get_junk, pe_readonly);
     (void)pe_menu_register_grid(PE_SHOP_PAGE, "Goods",
-        "Grey: can't buy now. Mark: free.", &s_grid, PE_GOODS, 5,
+        "Grey: can't buy now. Mark: free.", &s_grid, PE_GOODS + PE_ECON_GOODS, 5,
         pe_goods_count, pe_goods_cell, pe_buy, 0);
     (void)pe_menu_register_dynamic_choice(PE_SHOP_PAGE, "Selected",
         "Price in Junk, and what you carry.", &s_text_dummy[0], 1, pe_one, pe_sel_name);
@@ -434,6 +510,8 @@ void pe_loot_shop_menu_register(void) {
         "Added per Tool bought.", &s_tool_step, 0, 50, 1);
     (void)pe_menu_register_int(PE_TUNING_PAGE, "Tool price cap",
         "Most a Tool costs (decision: 100).", &s_tool_cap, 10, 100, 5);
+    (void)pe_menu_register_int(PE_TUNING_PAGE, "Economy mod price",
+        "Bargain, Scavenger, Lucky Find, Salvager.", &s_econ_price, 0, 500, 10);
     (void)pe_menu_register_live_int(PE_TUNING_PAGE, "Tools bought",
         "Debug: sets the next Tool's price.", 0, 99, 1, pe_get_tools_bought, pe_set_tools_bought);
 

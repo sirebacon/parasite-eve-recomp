@@ -18,7 +18,8 @@
  *     one line taller;
  *   - confirm on Workshop is taken away from the game (the press is cleared)
  *     and the box shows our screens instead: Workshop (Requisition / Rebuild /
- *     Back), Requisition (goods with prices, 5 a page, in the game's dimmed
+ *     Back), Requisition (goods with prices, then the economy mods not yet
+ *     unlocked, 5 a page, in the game's dimmed
  *     gray when they can't be bought now) and Rebuild (dismantled gear with prices). The title line
  *     shows your Junk or what the last purchase did. Cancel (Circle) goes back
  *     a screen, Left/Right turn pages;
@@ -185,7 +186,9 @@ static void pe_build_list(PeText *t, int rebuild) {
         const int red = rebuild ? pe_rebuild_price_index(i) > pe_loot_junk()
                                 : pe_shop_blocked_index(i) != 0;
         if (red) { pe_t_byte(t, G_CODE); pe_t_byte(t, G_RED); }
-        pe_t_item(t, rebuild ? pe_rebuild_item(i) : pe_shop_item(i));
+        const char *label = rebuild ? 0 : pe_shop_label(i);
+        if (label) pe_t_str(t, label);        /* an economy mod */
+        else pe_t_item(t, rebuild ? pe_rebuild_item(i) : pe_shop_item(i));
         pe_t_str(t, "  ");
         pe_t_num(t, (unsigned)(rebuild ? pe_rebuild_price_index(i) : pe_shop_price_index(i)));
         if (red) { pe_t_byte(t, G_CODE); pe_t_byte(t, G_NORMAL); }
@@ -237,8 +240,8 @@ static void pe_list_confirm(int rebuild, int cursor) {
         char *paren = strchr(s_ui.note, '(');
         if (paren) *paren = '\0';
         int keep = cursor;
-        if (rebuild) {                        /* the list got shorter */
-            const int left = pe_rebuild_count() - s_ui.page * PE_PAGE_SIZE;
+        {                                     /* the list may have got shorter */
+            const int left = (rebuild ? pe_rebuild_count() : pe_shop_count()) - s_ui.page * PE_PAGE_SIZE;
             if (left <= 0 && s_ui.page > 0) { --s_ui.page; keep = 0; }
             else if (keep >= left) keep = left > 0 ? left - 1 : 0;
         }

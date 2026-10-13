@@ -41,6 +41,7 @@ int pe_shop_count(void);
 uint16_t pe_shop_item(int i);
 uint32_t pe_shop_price_index(int i);
 const char *pe_shop_blocked_index(int i);   /* why it can't be bought now, or 0 */
+const char *pe_shop_label(int i);           /* ASCII name for a row with no item (an economy mod), or 0 */
 int pe_shop_buy_index(int i, char *msg, size_t msg_size);
 int pe_rebuild_count(void);
 uint8_t pe_rebuild_item(int i);
