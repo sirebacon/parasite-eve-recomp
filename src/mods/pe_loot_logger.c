@@ -68,7 +68,7 @@
 #define EN_STEAL     0x9Fu
 #define EN_ENTITY_ID 0x07u
 
-static int s_logging;
+static int s_logging = 1;          /* on by default: playtest data for balancing (2026-10-13) */
 static FILE *s_log;
 static unsigned s_battle_no, s_battle_frames;
 static int s_in_battle;
