@@ -50,6 +50,23 @@
  *   store / withdraw   an item moved between the bag and Wayne's storage.
  *   add rows carry bagfree= (free bag slots when the game tried to add it).
  *
+ * Combat, on every battle row (from watching the player's Combatant through
+ * g_PlayerEntity 0x8009D254 -> core, and the enemy slots; no guesses about
+ * command codes):
+ *   turns     Aya's turn gauge (+0x10, full at 9000) emptying.
+ *   acts      per turn, the queued action's id (core +0x68 -> BattleAction
+ *             +0x06) as id:count. Raw: the decomp names 6 fire-weapon and 8
+ *             item/special; the rest are unconfirmed.
+ *   pe        PE (+0x08 >> 16) at start -> end, spent and regained.
+ *   casts     PE techniques (Battle_ApplySpellEffect 0x80024250 entry, a0 =
+ *             technique index) by name:count.
+ *   dealt / taken / healed   enemy HP lost, Aya's HP lost / gained (+0x0C).
+ *   hp_min, kills, first_kill (seconds), shots (loaded rounds spent), reloads
+ *   (loaded rounds rising), wswaps (equipped gun changing), used (bag items
+ *   below 0x100 that went down: medicine, cures, grenades).
+ * "Combat detail" (Debug, off by default) adds a row per event: turn, hit,
+ * hurt, heal, spell, reload, kill, weapon.
+ *
  * The file starts over (the old one renamed with the time) when its header
  * isn't this version's.
  * Other modules add their own rows through pe_log() (pe_log.h): the
@@ -80,6 +97,13 @@
 #define PE_STORAGE_COUNT          100
 #define PE_AMMO_POOLS_ADDR        0x800A1E64u  /* 3 x 0x20, rounds at +0x0A */
 #define PE_EQUIP_RECORDS_ADDR     0x800C0EACu
+#define PE_FN_APPLY_SPELL         0x80024250u  /* Battle_ApplySpellEffect(idx, target) */
+#define PE_PLAYER_PTR_ADDR        0x8009D254u  /* g_PlayerEntity: BattleEntity, +0 core */
+#define PE_GAUGE_FULL             9000u
+#define CB_PE      0x08u                       /* Combatant: PE, 16.16 */
+#define CB_HP      0x0Cu
+#define CB_GAUGE   0x10u
+#define CB_ACTION  0x68u                       /* -> BattleAction, +0x06 action id */
 #define PE_FN_RESOLVE_HIT_START   0x800236E8u  /* Battle_ResolveHitOnTimer (steals) */
 #define PE_FN_RESOLVE_HIT_END     0x80023E14u  /* next function, Battle_ApplyDamage */
 #define PE_INV_CMD_START_NEW_GAME 1117
@@ -141,6 +165,26 @@ static uint32_t s_room_token;
 static int s_room_valid;
 static uint16_t s_prev_bag[PE_AYA_SLOT_COUNT], s_prev_store[PE_STORAGE_COUNT];
 static int s_lists_valid;
+static int s_combat_detail;        /* Debug "Combat detail": a row per combat event */
+
+static const char *const s_spell_names[20] = {
+    "Heal1", "Heal2", "Heal3", "Detox", "Medic", "Barrier", "EnergyShot", "Scan", "Slow",
+    "Haste", "Confuse", "GeneHeal", "Preraise", "Mito14", "Mito15", "Mito16", "Mito17",
+    "Mito18", "FullRecover", "Liberate",
+};
+
+typedef struct {
+    int valid;
+    unsigned turns, casts[20], acts_id[8], acts_n[8];
+    int pe_start, pe_last, pe_spent, pe_gained;
+    int hp_last, hp_min;
+    unsigned dealt, taken, healed, kills, first_kill, shots, reloads, wswaps;
+    unsigned gauge_last;
+    uint32_t gun_rec;
+    int loaded_last;
+    uint8_t bag_start[256];
+} PeCombat;
+static PeCombat s_cb;
 
 typedef struct {
     int tracking;
@@ -259,7 +303,7 @@ static unsigned pe_value_item(uint16_t v) {
 }
 
 void pe_log(const char *kind, const char *fmt, ...) {
-    char detail[640];
+    char detail[1100];
     va_list ap;
     if (!s_logging || !pe_log_open()) return;
     va_start(ap, fmt);
@@ -300,6 +344,129 @@ static unsigned pe_equipped_id(int which) {
     return rec ? psx_mod_read_byte(rec + REC_ITEM_ID) : 0u;
 }
 
+/* ---- combat ----------------------------------------------------------------- */
+static uint32_t pe_player_core(void) {
+    const uint32_t player = psx_mod_read_word(PE_PLAYER_PTR_ADDR);
+    if (player < 0x80000000u || player >= 0x80200000u) return 0;
+    const uint32_t core = psx_mod_read_word(player);
+    return core >= 0x80000000u && core < 0x80200000u ? core : 0;
+}
+
+static unsigned pe_secs(void) { return (s_battle_frames * 10u / 599u + 5u) / 10u; }
+
+static void pe_combat_start(void) {
+    memset(&s_cb, 0, sizeof s_cb);
+    for (int i = 0; i < PE_AYA_SLOT_COUNT; ++i) {
+        const uint16_t v = psx_mod_read_half(PE_AYA_SLOTS_ADDR + (uint32_t)i * 2u);
+        if (v && v < 0x100u && s_cb.bag_start[v] < 255) ++s_cb.bag_start[v];
+    }
+}
+
+/* Once a frame in battle. */
+static void pe_combat_tick(void) {
+    const uint32_t core = pe_player_core();
+    if (!core) return;
+    const int hp = psx_mod_read_half(core + CB_HP);
+    const int pe = (int32_t)psx_mod_read_word(core + CB_PE) >> 16;
+    const unsigned gauge = psx_mod_read_half(core + CB_GAUGE);
+    const uint32_t gun = pe_cat_record(0);
+    const int loaded = gun ? psx_mod_read_half(gun + REC_AMMO) : 0;
+    if (!s_cb.valid) {
+        s_cb.valid = 1;
+        s_cb.pe_start = s_cb.pe_last = pe;
+        s_cb.hp_last = s_cb.hp_min = hp;
+        s_cb.gauge_last = gauge;
+        s_cb.gun_rec = gun;
+        s_cb.loaded_last = loaded;
+        return;
+    }
+    if (hp < s_cb.hp_last) {
+        s_cb.taken += (unsigned)(s_cb.hp_last - hp);
+        if (s_combat_detail) pe_log("hurt", "dmg=%d t=%u", s_cb.hp_last - hp, pe_secs());
+    } else if (hp > s_cb.hp_last) {
+        s_cb.healed += (unsigned)(hp - s_cb.hp_last);
+        if (s_combat_detail) pe_log("heal", "hp=%d t=%u", hp - s_cb.hp_last, pe_secs());
+    }
+    if (hp < s_cb.hp_min) s_cb.hp_min = hp;
+    s_cb.hp_last = hp;
+    if (pe < s_cb.pe_last) s_cb.pe_spent += s_cb.pe_last - pe;
+    else s_cb.pe_gained += pe - s_cb.pe_last;
+    s_cb.pe_last = pe;
+
+    if (s_cb.gauge_last >= PE_GAUGE_FULL && gauge < s_cb.gauge_last) {   /* a turn */
+        ++s_cb.turns;
+        const uint32_t action = psx_mod_read_word(core + CB_ACTION);
+        const unsigned id = action >= 0x80000000u && action < 0x80200000u
+                            ? psx_mod_read_half(action + 0x06u) : 0xFFFFu;
+        int k = 0;
+        while (k < 8 && s_cb.acts_n[k] && s_cb.acts_id[k] != id) ++k;
+        if (k < 8) { s_cb.acts_id[k] = id; ++s_cb.acts_n[k]; }
+        if (s_combat_detail)
+            pe_log("turn", "n=%u act=%u t=%u pe=%d loaded=%d", s_cb.turns, id, pe_secs(), pe, loaded);
+    }
+    s_cb.gauge_last = gauge;
+
+    if (gun != s_cb.gun_rec) {                /* changed weapons */
+        ++s_cb.wswaps;
+        if (s_combat_detail) pe_log("weapon", "gun=0x%02X t=%u", pe_equipped_id(0), pe_secs());
+        s_cb.gun_rec = gun;
+    } else if (loaded < s_cb.loaded_last) {
+        s_cb.shots += (unsigned)(s_cb.loaded_last - loaded);
+    } else if (loaded > s_cb.loaded_last) {
+        ++s_cb.reloads;
+        if (s_combat_detail) pe_log("reload", "loaded=%d t=%u", loaded, pe_secs());
+    }
+    s_cb.loaded_last = loaded;
+}
+
+/* An enemy's HP went from `before` to `after` (pe_track_enemies). */
+static void pe_combat_enemy_hp(int slot, int before, int after) {
+    const int a = after < 0 ? 0 : after;
+    if (before <= 0 || a >= before) return;
+    s_cb.dealt += (unsigned)(before - a);
+    if (s_combat_detail) pe_log("hit", "slot=%d dmg=%d left=%d t=%u", slot, before - a, a, pe_secs());
+    if (a == 0) {
+        if (!s_cb.kills) s_cb.first_kill = pe_secs();
+        ++s_cb.kills;
+        if (s_combat_detail) pe_log("kill", "slot=%d t=%u", slot, pe_secs());
+    }
+}
+
+/* Battle_ApplySpellEffect(idx, target) entry: a PE technique lands. */
+static void pe_on_apply_spell(struct CPUState *cpu, uint32_t address) {
+    (void)address;
+    if (!s_logging || !s_in_battle) return;
+    const uint32_t idx = cpu->gpr[4];
+    if (idx < 20u) ++s_cb.casts[idx];
+    if (s_combat_detail) pe_log("spell", "tech=%s t=%u", idx < 20u ? s_spell_names[idx] : "?", pe_secs());
+}
+
+static void pe_combat_summary(char *out, size_t size) {
+    size_t n = 0;
+    n += (size_t)snprintf(out + n, size - n, "turns=%u acts=", s_cb.turns);
+    for (int k = 0; k < 8 && s_cb.acts_n[k] && n < size; ++k)
+        n += (size_t)snprintf(out + n, size - n, "%u:%u/", s_cb.acts_id[k], s_cb.acts_n[k]);
+    if (n < size)
+        n += (size_t)snprintf(out + n, size - n, " pe=%d->%d spent=%d regained=%d casts=",
+                              s_cb.pe_start, s_cb.pe_last, s_cb.pe_spent, s_cb.pe_gained);
+    for (int i = 0; i < 20 && n < size; ++i)
+        if (s_cb.casts[i]) n += (size_t)snprintf(out + n, size - n, "%s:%u/", s_spell_names[i], s_cb.casts[i]);
+    if (n < size)
+        n += (size_t)snprintf(out + n, size - n,
+            " dealt=%u taken=%u healed=%u hp_min=%d kills=%u first_kill=%u shots=%u reloads=%u wswaps=%u used=",
+            s_cb.dealt, s_cb.taken, s_cb.healed, s_cb.hp_min, s_cb.kills, s_cb.first_kill, s_cb.shots,
+            s_cb.reloads, s_cb.wswaps);
+    uint8_t now[256];
+    memset(now, 0, sizeof now);
+    for (int i = 0; i < PE_AYA_SLOT_COUNT; ++i) {
+        const uint16_t v = psx_mod_read_half(PE_AYA_SLOTS_ADDR + (uint32_t)i * 2u);
+        if (v && v < 0x100u && now[v] < 255) ++now[v];
+    }
+    for (int v = 1; v < 256 && n < size; ++v)
+        if (s_cb.bag_start[v] > now[v])
+            n += (size_t)snprintf(out + n, size - n, "%02X:%u/", v, s_cb.bag_start[v] - now[v]);
+}
+
 static void pe_log_battle_end(void) {
     char rewards[160];
     unsigned n = 0;
@@ -316,12 +483,13 @@ static void pe_log_battle_end(void) {
     }
     const int hp = psx_mod_read_half(PE_CUR_HP_ADDR);
     const char *outcome = hp <= 0 ? "loss" : s_battle_escape ? "escape" : "win";
-    char snap[400];
+    char snap[400], combat[420];
     pe_snapshot(snap, sizeof snap);
-    pe_log("battle", "frames=%u secs=%u exp=%u bp=%u outcome=%s hp=%d->%d gun=0x%02X armor=0x%02X boss=%d rewards=%s %s",
+    pe_combat_summary(combat, sizeof combat);
+    pe_log("battle", "frames=%u secs=%u exp=%u bp=%u outcome=%s hp=%d->%d gun=0x%02X armor=0x%02X boss=%d rewards=%s %s %s",
            s_battle_frames, (s_battle_frames * 10u / 599u + 5u) / 10u,
            psx_mod_read_word(PE_BATTLE_EXP_ADDR), psx_mod_read_word(PE_BATTLE_BP_ADDR), outcome,
-           s_battle_hp_start, hp, pe_equipped_id(0), pe_equipped_id(1), s_battle_boss, rewards, snap);
+           s_battle_hp_start, hp, pe_equipped_id(0), pe_equipped_id(1), s_battle_boss, rewards, combat, snap);
 }
 
 static int pe_count_item(uint16_t id) {
@@ -348,8 +516,10 @@ static void pe_track_enemies(void) {
             e->tracking = 1;
             e->entity_id = entity_id;
             e->start_hp = hp;
+            e->last_hp = hp;                      /* a new enemy: no damage yet */
         }
         if (hp > e->start_hp) e->start_hp = hp;   /* scripts may set HP after spawn */
+        if (e->identity) pe_combat_enemy_hp(s, e->last_hp, hp);
         e->last_hp = hp;
         e->identity = psx_mod_read_half(core + EN_IDENTITY);
         e->exp = psx_mod_read_half(core + EN_HP_MIRROR);
@@ -515,7 +685,9 @@ static void pe_loot_logger_tick(void) {
             s_in_battle = 1; ++s_battle_no; s_battle_frames = 0;
             s_battle_escape = s_battle_boss = 0;
             s_battle_hp_start = psx_mod_read_half(PE_CUR_HP_ADDR);
+            pe_combat_start();
         }
+        pe_combat_tick();
         ++s_battle_frames;
         if (psx_mod_read_word(PE_BATTLE_PHASE_ADDR) == 4u) s_battle_escape = 1;
         pe_track_enemies();
@@ -576,6 +748,10 @@ void pe_loot_logger_menu_register(void) {
         PE_FN_SAVE_SERIALIZE, pe_on_save_serialize);
     (void)psx_mod_register_function_entry_plugin("pe.loot-logger.load",
         PE_FN_SAVE_DESERIALIZE, pe_on_save_deserialize);
+    (void)pe_menu_register_toggle("Debug", "Combat detail",
+        "Play log: a row per hit, turn, spell.", &s_combat_detail, 0);
+    (void)psx_mod_register_function_entry_plugin("pe.loot-logger.spell",
+        PE_FN_APPLY_SPELL, pe_on_apply_spell);
     (void)psx_mod_register_function_entry_plugin("pe.loot-logger.discard",
         PE_FN_DISCARD_CONFIRM, pe_on_discard_confirm);
     (void)psx_mod_register_restore_callback(pe_on_restored);

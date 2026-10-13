@@ -67,7 +67,7 @@ strict = true
 #   0x8004C608 Menu_DrawContextHelpText - Catalog descriptions in the title bar
 #   0x80062CC4 MenuWidget_GetCurrentNode, 0x80052534 Battle_IsActiveWrapped - Catalog Cross (as a list's itemAction)
 #   0x80050ADC Menu_DrawActionCodeItem - no portrait for economy armor mod badges
-mod_function_entry_funcs = ["0x8005F27C", "0x800299CC", "0x8004B70C", "0x8005D2B4",
+mod_function_entry_funcs = ["0x80024250", "0x8005F27C", "0x800299CC", "0x8004B70C", "0x8005D2B4",
                             "0x80053D2C", "0x8003F800", "0x8003FBD8", "0x800194F8",
                             "0x8005A318", "0x80023E14", "0x80052C08", "0x80045110",
                             "0x80050878", "0x8005F354", "0x80044B0C", "0x80037870", "0x800661A4",
