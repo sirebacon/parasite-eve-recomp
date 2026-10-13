@@ -437,6 +437,11 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
         for (int a = 0; a < 2; ++a) {
             if (!adds[a]) continue;
             uint16_t id = adds[a];
+            /* A carried-over economy mod may have been unlocked since (bought at
+             * Requisition): roll a fresh rare instead of a duplicate. */
+            if ((id & PE_ECON_DROP) &&
+                pe_catalog_armor_unlocked(s_econ_mods[(id & 0xFFu) % PE_ECON_COUNT].effect))
+                id = pe_pick_rare(exp);
             if (id & PE_ECON_DROP) {
                 /* Carried by a Mod Permit entry: never next to a real one, never two. */
                 if (s_econ_shown >= 0 || adds[1 - a] == PE_ITEM_MOD_PERMIT || kept >= PE_REWARD_SLOTS) {
@@ -451,7 +456,7 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
                 keep[kept++] = 0xFFFF0000u | id;
                 s_rare_shown[a] = id;                /* drawn in gold */
             } else {
-                s_st.rare_carry = adds[a];           /* next battle */
+                s_st.rare_carry = id;                /* next battle (never an economy mod here) */
             }
         }
         for (uint32_t i = 0; i < PE_REWARD_SLOTS; ++i)
