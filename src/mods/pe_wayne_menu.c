@@ -16,8 +16,8 @@
  *     one line taller;
  *   - confirm on Workshop is taken away from the game (the press is cleared)
  *     and the box shows our screens instead: Workshop (Requisition / Rebuild /
- *     Back), Requisition (goods with prices, 5 a page, red when they can't be
- *     bought now) and Rebuild (dismantled gear with prices). The title line
+ *     Back), Requisition (goods with prices, 5 a page, in the game's dimmed
+ *     gray when they can't be bought now) and Rebuild (dismantled gear with prices). The title line
  *     shows your Junk or what the last purchase did. Cancel (Circle) goes back
  *     a screen, Left/Right turn pages;
  *   - confirm on our Cancel moves the cursor up one first, so the script gets
@@ -33,6 +33,12 @@
 #include "pe_loot.h"
 
 #define PE_FN_DRAW_TEXTBOXES     0x80037870u   /* Menu_DrawTextboxEntries */
+#define PE_FN_AFTER_TEXTBOXES    0x800661A4u   /* Render_SetGteScreenOffset: next in the frame */
+#define PE_TEXT_POOL_TABLE       0x800B0E44u   /* D_800B0E38.other_buffers[1 + frame] */
+#define PE_DRAW_FRAME            0x8009CDDCu   /* D_8009CDDC: 0/1 */
+#define PE_DIM_GRAY              0x40u         /* menus' dimmed text: (0x80 >> 1) */
+#define PE_GLYPH_PACKET          28u           /* TextboxGlyphPacket */
+#define PE_GLYPH_MAX             600u
 #define PE_TEXTBOX_BASE          0x800BCEA8u   /* g_TextboxEntries */
 #define PE_TEXTBOX_STRIDE        0x38u
 #define PE_TEXTBOX_COUNT         4u
@@ -57,7 +63,7 @@
 #define G_END     0xFFu
 #define G_CODE    0xFBu
 #define G_CHOICE  0x09u
-#define G_RED     0x04u
+#define G_RED     0x04u                       /* our "can't buy" marker, recolored gray */
 #define G_NORMAL  0x05u
 #define PE_PAGE_SIZE 5
 #define PE_TEXT_MAX  768
@@ -421,8 +427,36 @@ static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
     if (taken) psx_mod_write_word(PE_PAD_PRESSED, pressed & ~taken);
 }
 
+/* The field text box knows only normal and red. Menus dim what can't be
+ * picked to half brightness (Draw_AllocTexturedQuad: g_DrawColorShaded =
+ * (color >> 1) & 0x7F7F7F, so 0x80 -> 0x40). Our lists mark those rows red;
+ * right after this frame's text boxes are built (Render_SetGteScreenOffset
+ * follows Menu_DrawTextboxEntries in Boot_FrameLoop), their red 12x12 glyph
+ * packets -- in the frame's text pool, which starts afresh every frame -- are
+ * turned to that gray. Only while one of our lists is up, so the game's own
+ * red highlights stay red. */
+static void pe_on_after_textboxes(struct CPUState *cpu, uint32_t address) {
+    (void)cpu; (void)address;
+    if (s_ui.screen != SCR_REQ && s_ui.screen != SCR_REB) return;
+    const uint32_t frame = psx_mod_read_word(PE_DRAW_FRAME) & 1u;
+    const uint32_t pool = psx_mod_read_word(PE_TEXT_POOL_TABLE + frame * 4u);
+    if (!pe_ram_pointer(pool)) return;
+    for (uint32_t i = 0; i < PE_GLYPH_MAX; ++i) {
+        const uint32_t p = pool + i * PE_GLYPH_PACKET;
+        if (psx_mod_read_half(p + 24u) != 12u || psx_mod_read_half(p + 26u) != 12u) break;
+        if (psx_mod_read_byte(p + 12u) == 0xFFu && psx_mod_read_byte(p + 13u) == 0 &&
+            psx_mod_read_byte(p + 14u) == 0) {
+            psx_mod_write_byte(p + 12u, PE_DIM_GRAY);
+            psx_mod_write_byte(p + 13u, PE_DIM_GRAY);
+            psx_mod_write_byte(p + 14u, PE_DIM_GRAY);
+        }
+    }
+}
+
 /* Called from pe_mod_menu.c after pe_native_menu_register. */
 void pe_wayne_menu_register(void) {
+    (void)psx_mod_register_function_entry_plugin("pe.wayne.dim-rows",
+        PE_FN_AFTER_TEXTBOXES, pe_on_after_textboxes);
     (void)psx_mod_register_function_entry_plugin("pe.wayne.workshop",
         PE_FN_DRAW_TEXTBOXES, pe_on_draw_textboxes);
     (void)psx_mod_register_state("pe.wayne.ui", 1u, &s_ui, sizeof s_ui, pe_wayne_state_loaded);
