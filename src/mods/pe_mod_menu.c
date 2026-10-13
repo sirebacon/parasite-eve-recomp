@@ -226,9 +226,9 @@ static void pe_entry_walk_tick(uint32_t player) {
     }
     const int push = s_walking && !s_turning && (mx || mz);
 
-    const uint32_t step = walk ? psx_mod_read_word(step_addr) : 0;
-    if (!push) {                             /* her own pace and animation */
-        if (s_our_step && walk && step == s_our_step) psx_mod_write_word(step_addr, PE_ANIM_STEP_STOCK);
+    const uint32_t step = psx_mod_read_word(step_addr);
+    if (!push) {                             /* her own pace and animation (also once the walk ends) */
+        if (s_our_step && step == s_our_step) psx_mod_write_word(step_addr, PE_ANIM_STEP_STOCK);
         s_our_step = 0;
         return;
     }
