@@ -341,7 +341,7 @@ static void pe_shop_tick(void) {
     if (!pe_cannot_attack()) { warned = 0; return; }
     if (warned) return;
     warned = 1;
-    psx_mod_osd_message("Aya can't attack: spare Club in F1 > Workshop > Requisition");
+    psx_mod_osd_message("Aya can't attack: Wayne's Workshop has a spare Club");   /* the one kept toast: a soft-lock lifeline */
 }
 
 /* ---- debug ------------------------------------------------------------------ */

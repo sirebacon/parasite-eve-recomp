@@ -13,7 +13,8 @@
  * At the entry of Menu_DrawTextboxEntries (0x80037870), every frame:
  *   - a box showing Wayne's menu (a choice with "Discard junk") is pointed at
  *     our copy with "Workshop" above Cancel and "Discard junk <your Junk>,
- *     <his count>/300",
+ *     <his count>/300" (plus "bag full" when a hand-in has no free slot, or
+ *     "Day 4" when he holds 300 but can't build yet),
  *     one line taller;
  *   - confirm on Workshop is taken away from the game (the press is cleared)
  *     and the box shows our screens instead: Workshop (Requisition / Rebuild /
@@ -136,6 +137,8 @@ static void pe_build_wayne(PeText *t) {
             pe_t_str(t, ", ");
             pe_t_num(t, psx_mod_read_half(PE_WAYNE_COUNTER));
             pe_t_str(t, "/300");
+            if (pe_loot_handin_blocked()) pe_t_str(t, " bag full");     /* needs one free slot */
+            else if (pe_loot_wayne_waiting()) pe_t_str(t, " Day 4");    /* he builds from Day 4 */
         }
         if (i < s_orig_len) pe_t_byte(t, G_NEWLINE);
         ++option;

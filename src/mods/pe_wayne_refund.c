@@ -66,8 +66,7 @@ static void pe_wayne_refund_tick(void) {
         s_armed = 0;
         if (pe_count_bad_rolls() > s_junk_before) {
             counter += PE_CRAFT_COST;
-            psx_mod_write_half(PE_WAYNE_COUNTER, (uint16_t)counter);
-            psx_mod_osd_message("Wayne refunds 300 Junk");
+            psx_mod_write_half(PE_WAYNE_COUNTER, (uint16_t)counter);   /* his row shows it */
         }
     }
     s_prev_counter = counter;

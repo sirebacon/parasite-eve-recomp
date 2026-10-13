@@ -956,11 +956,9 @@ static void pe_on_tool_transfer(struct CPUState *cpu, uint32_t address) {
             s_cat.bits[dest_which] |= 1u << old;
             kept_new = 1;
         }
-        if (kept_new && (cpu->gpr[6] & 1u)) {
-            snprintf(msg, sizeof msg, "%s replaced: kept in the Mod Catalog",
+        if (kept_new && (cpu->gpr[6] & 1u))  /* F1's result row, no toast */
+            snprintf(s_result, sizeof s_result, "%s replaced: kept in the Mod Catalog",
                      pe_effect_name(dest_which, old));
-            pe_toast(msg);
-        }
     }
     if (cpu->gpr[6] & 1u) return;             /* Super Tool: donor survives */
     int16_t bonus[3];
@@ -979,9 +977,8 @@ static void pe_on_tool_transfer(struct CPUState *cpu, uint32_t address) {
     pe_record_salvage(which, id, (uint8_t)psx_mod_read_byte(src + REC_MOD_COUNT),
                       bonus, mods, n, payout);
     pe_loot_give_junk(payout);
-    snprintf(msg, sizeof msg, "Salvaged %s: +%u Junk, %d new effect(s)",
-             pe_item_name(id), (unsigned)payout, unlocks + kept_new);
-    pe_toast(msg);
+    snprintf(s_result, sizeof s_result, "Salvaged %s: +%u Junk, %d new effect(s)",
+             pe_item_name(id), (unsigned)payout, unlocks + kept_new);   /* F1's result row */
 }
 
 /* ---- pe_loot.h: armor effects for the rare table -------------------------------- */

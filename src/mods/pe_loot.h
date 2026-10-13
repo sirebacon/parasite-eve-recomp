@@ -12,6 +12,8 @@ int pe_loot_enabled(void);              /* "Junk economy" switch */
 uint32_t pe_loot_junk(void);
 int pe_loot_spend_junk(uint32_t n);     /* 0 (and nothing spent) if short */
 void pe_loot_give_junk(uint32_t n);
+int pe_loot_wayne_waiting(void);        /* he holds 300+ but can't build before Day 4 */
+int pe_loot_handin_blocked(void);       /* a hand-in needs one free bag slot */
 
 /* Economy armor mods (custom items doc C1-C5) in the game's unused armor
  * effect numbers: 17-20 show the "dummy" mod texts, which pe_custom.c

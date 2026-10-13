@@ -14,15 +14,16 @@
  *     '0'-'9' 0x00-0x09, space 0x0F, end 0xFF (read from the live tables).
  *   - Use. Item flags (+0x05 of the base record: bit 0 field use, bit 1
  *     battle use) are set every half second: the Smoke Grenade is battle
- *     only; the Lucky Charm can't be used (it works by being carried,
- *     pe_loot.c).
+ *     only, and greyed out in a battle it can't escape (the game's own way to
+ *     say an item can't be used); the Lucky Charm can't be used (it works by
+ *     being carried, pe_loot.c).
  *   - Smoke Grenade (C6). A battle item resolves through Battle_ApplyDamage
  *     (0x80023E14, a0 = item id), right after Battle_ApplyPlayerHit sets the
  *     player's idle action mode -- the same thing a successful escape roll
  *     does before it sets the battle phase to 4 (escape). So on the grenade,
  *     the phase (0x8009D28C) is set to 4: a sure escape. Enemies flagged
  *     "can't escape" (statusFlags2 & 0x40000, as Battle_RollEscapeChance
- *     checks) stop it, and the grenade goes back in the bag.
+ *     checks) stop it; if one is used there anyway, it goes back in the bag.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -144,12 +145,15 @@ static void pe_set_item_flags(uint8_t id, uint8_t use) {
     if ((f & 3u) != use) psx_mod_write_byte(rec + 0x05u, (uint8_t)((f & ~3u) | use));
 }
 
+static int pe_escape_blocked(void);
+
 static void pe_custom_tick(void) {
     static unsigned frames;
     if (++frames % 30u) return;
     pe_refresh_sources();
     if (!pe_loaded()) return;
-    pe_set_item_flags(PE_ITEM_SMOKE, 0x2u);   /* battle only */
+    const int battle = (psx_mod_read_word(PE_GAME_BLOCK_ADDR) & 0x2u) != 0;
+    pe_set_item_flags(PE_ITEM_SMOKE, battle && pe_escape_blocked() ? 0x0u : 0x2u);   /* battle only */
     pe_set_item_flags(PE_ITEM_CHARM, 0x0u);   /* carried, never used */
 }
 
@@ -174,11 +178,9 @@ static void pe_on_apply_damage(struct CPUState *cpu, uint32_t address) {
                 psx_mod_write_half(PE_AYA_SLOTS_ADDR + i * 2u, PE_ITEM_SMOKE);
                 break;
             }
-        psx_mod_osd_message("Smoke Grenade: no escape from this battle");
         return;
     }
     psx_mod_write_word(PE_BATTLE_PHASE_ADDR, 4u);
-    psx_mod_osd_message("Smoke Grenade: escaped");
 }
 
 /* Called last from pe_mod_menu.c (after pe_loot_hooks_register). */

@@ -170,6 +170,7 @@ static uint16_t s_rare_shown[2];   /* rare drops to draw in gold this battle */
 static int s_rare_list_seen;       /* the items-found list has been shown */
 static int s_color_saved;
 static uint32_t s_saved_color, s_saved_color_shaded;
+static int s_wayne_waiting;        /* a hand-in reached 300 and he built nothing (before Day 4) */
 static uint16_t s_wayne_prev;      /* Wayne's count during a hand-in */
 static int s_wayne_dropped;        /* ... it went down: he made a gun */
 static uint32_t s_junk_shown;      /* this battle's Junk, shown as "Junk xN" */
@@ -338,8 +339,7 @@ static void pe_charm_battle_won(void) {
         const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
         if (psx_mod_read_half(a) != PE_ITEM_LUCKY_CHARM) continue;
         psx_mod_write_half(a, 0);
-        s_st.charm_left = PE_CHARM_BATTLES;
-        psx_mod_osd_message("Lucky Charm: rare finds come faster for 10 battles");
+        s_st.charm_left = PE_CHARM_BATTLES;      /* it leaves the bag; F1 shows the pity */
         return;
     }
 }
@@ -564,10 +564,7 @@ static void pe_on_task_count_items(struct CPUState *cpu, uint32_t address) {
         if (n > needed) n = needed;
     }
     if (n > PE_HANDIN_MAX) n = PE_HANDIN_MAX;
-    if (pe_free_bag_slot(limit) < 0) {
-        psx_mod_osd_message("Free one bag slot to hand Junk to Wayne");
-        return;
-    }
+    if (pe_free_bag_slot(limit) < 0) return; /* his "Discard junk" row says "bag full" */
     if (!s_scratch_list) {
         s_scratch_list = psx_mod_alloc_guest_memory(PE_HANDIN_MAX * 2u, 4);
         if (!s_scratch_list) return;
@@ -785,6 +782,7 @@ static void pe_loot_tick(void) {
         return;
     }
 
+    if (s_wayne_waiting && psx_mod_read_half(PE_WAYNE_COUNTER) < PE_WAYNE_CRAFT_COST) s_wayne_waiting = 0;
     if (s_list_redirected && s_frames - s_last_count_frame > 2u) pe_restore_active_list();
     /* A hand-in stays open until every removal is fed: Wayne's dialogue can
      * take seconds between the count and the removals, and his script adds to
@@ -806,12 +804,8 @@ static void pe_loot_tick(void) {
     if (s_wayne_check && !s_handin_active && s_free_frames > 60u) {
         s_wayne_check = 0;
         /* At 300+ with no gun made: before Day 4 his menu only stores Junk. */
-        if (!s_wayne_dropped && s_wayne_prev >= PE_WAYNE_CRAFT_COST) {
-            char msg[112];
-            snprintf(msg, sizeof msg, "Wayne has %u Junk but can't build yet. Come back from "
-                     "Day 4: your next hand-in makes the gun", (unsigned)s_wayne_prev);
-            psx_mod_osd_message(msg);
-        }
+        /* At 300+ with no gun made: before Day 4; his row says "Day 4". */
+        if (!s_wayne_dropped && s_wayne_prev >= PE_WAYNE_CRAFT_COST) s_wayne_waiting = 1;
     }
     if (!s_handin_active && pe_free_field()) pe_sweep();
 }
@@ -852,6 +846,18 @@ static void pe_loot_restored(void) {
     s_rare_shown[0] = s_rare_shown[1] = 0;
     s_junk_shown = 0;
     s_color_saved = 0;
+}
+
+/* ---- pe_loot.h: Wayne's row (pe_wayne_menu.c) ------------------------------- */
+int pe_loot_wayne_waiting(void) {
+    return s_enabled && s_wayne_waiting && psx_mod_read_half(PE_WAYNE_COUNTER) >= PE_WAYNE_CRAFT_COST;
+}
+
+int pe_loot_handin_blocked(void) {
+    if (!s_enabled || !pe_game_loaded() || !s_st.junk) return 0;
+    uint32_t limit = psx_mod_read_byte(0x800C0E0Cu) + psx_mod_read_word(0x8009D018u);
+    if (limit > PE_AYA_SLOT_COUNT) limit = PE_AYA_SLOT_COUNT;
+    return pe_free_bag_slot(limit) < 0;
 }
 
 /* ---- menu ----------------------------------------------------------------- */
