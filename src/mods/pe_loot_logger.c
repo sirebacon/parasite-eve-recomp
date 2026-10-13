@@ -4,9 +4,13 @@
  * findings pe-loot-overhaul-design-2026-10-11.md section 6.1, and the
  * balance estimate's second pass) and for chasing bugs.
  *
- * Columns: kind, battle, room, play_s, level, exp, hp, max_hp, junk, wayne,
- * detail. Every row carries the context: the battle number while in battle,
- * the room word, play time in seconds (GAME_TIME_COUNTER(2), frames / 60),
+ * Columns: kind, battle, day, map, scene, play_s, level, exp, hp, max_hp,
+ * junk, wayne, detail. Every row carries the context: the battle number while
+ * in battle, the engine's story day (g_GameState.current_story_day,
+ * 0x800B0CE4, 1-8), the map number and scene name (g_SceneDispatchToken
+ * 0x8009D280 in base 32, as Save_GetCurrentMapNumber reads it; the decomp's
+ * docs/ROOMS.md lists maps in story order), play time in seconds
+ * (GAME_TIME_COUNTER(2), frames / 60),
  * Aya's level (1-based), total EXP, HP / max HP, the Junk counter and Wayne's
  * count. `detail` is key=value pairs.
  *
@@ -34,6 +38,20 @@
  *             loaded game's).
  *   save      a memory card save: bag use, the equipped gun and armor with
  *             their + bonuses and mods, bonus points.
+ *   settings  every F1 row not at its default, at the first frame of play and
+ *             after every load (pe_menu_log_settings).
+ *   room      a map change: from -> to, and the consumables snapshot.
+ *   battle rows carry the snapshot too. The snapshot: bag items below 0x100
+ *             as id:count, the same for Wayne's storage (st=), the three ammo
+ *             pools' rounds and the equipped gun's loaded rounds, so what was
+ *             used shows as the difference between two snapshots.
+ *   discard   the game's Discard confirmed (Menu_OnItemDiscardConfirm, a1 = yes;
+ *             gear there is a dismantle, logged as that too).
+ *   store / withdraw   an item moved between the bag and Wayne's storage.
+ *   add rows carry bagfree= (free bag slots when the game tried to add it).
+ *
+ * The file starts over (the old one renamed with the time) when its header
+ * isn't this version's.
  * Other modules add their own rows through pe_log() (pe_log.h): the
  * overhaul's battle loot, Junk taken or left, rare drops, purchases, installs,
  * dismantles, rebuilds, Combine, Lucky Charm, Wayne's refund, and every F1
@@ -53,6 +71,15 @@
 #define PE_FN_INV_DISPATCH        0x8005D2B4u
 #define PE_FN_SAVE_SERIALIZE      0x8003F800u
 #define PE_FN_SAVE_DESERIALIZE    0x8003FBD8u
+#define PE_FN_DISCARD_CONFIRM     0x80045110u  /* Menu_OnItemDiscardConfirm(dialog, yes) */
+#define PE_MENU_ACTIVE_LIST       0x8009CF10u  /* 0 = Aya's bag, else storage */
+#define PE_MENU_ACTIVE_SLOT       0x8009CF04u
+#define PE_STORY_DAY_ADDR         0x800B0CE4u  /* g_GameState.current_story_day, s8 */
+#define PE_BASE32_TABLE           0x800930B4u  /* g_Base32CharTable */
+#define PE_STORAGE_ADDR           0x800C1EB8u  /* Wayne's storage: 100 slots */
+#define PE_STORAGE_COUNT          100
+#define PE_AMMO_POOLS_ADDR        0x800A1E64u  /* 3 x 0x20, rounds at +0x0A */
+#define PE_EQUIP_RECORDS_ADDR     0x800C0EACu
 #define PE_FN_RESOLVE_HIT_START   0x800236E8u  /* Battle_ResolveHitOnTimer (steals) */
 #define PE_FN_RESOLVE_HIT_END     0x80023E14u  /* next function, Battle_ApplyDamage */
 #define PE_INV_CMD_START_NEW_GAME 1117
@@ -62,7 +89,7 @@
 #define PE_GAME_BLOCK_ADDR    0x8009D1A0u
 #define PE_GAME_BLOCK_BATTLE  0x2u
 #define PE_BATTLE_PHASE_ADDR  0x8009D28Cu  /* 4 = escape */
-#define PE_ROOM_ADDR          0x8009D280u  /* room word (the debug-warp cheat writes it) */
+#define PE_ROOM_ADDR          0x8009D280u  /* g_SceneDispatchToken (the debug-warp cheat writes it) */
 #define PE_PLAY_FRAMES_ADDR   0x800A76BCu  /* GAME_TIME_COUNTER(2): play time in frames */
 #define PE_ENEMY_SLOT_BASE    0x800A5D58u  /* 7 x { u8 active; pad; EnemyCombatant } */
 #define PE_ENEMY_SLOT_STRIDE  0xDCu
@@ -94,7 +121,9 @@
 #define EN_STATUS_FLAGS2 0xCCu             /* & 0x40000: can't escape (bosses) */
 
 #define REC_ITEM_ID  0x04u
+#define REC_AMMO     0x0Au
 #define REC_BONUS    0x0Eu
+#define PE_LOG_HEADER "kind,battle,day,map,scene,play_s,level,exp,hp,max_hp,junk,wayne,detail" 
 
 static int s_logging = 1;          /* on by default: playtest data for balancing (2026-10-13) */
 static FILE *s_log;
@@ -107,6 +136,11 @@ static unsigned s_frame;
 static int s_level_seen = -1;
 static int s_wayne_valid, s_wayne_moving;
 static unsigned s_wayne_prev, s_wayne_from, s_wayne_changed, s_wayne_room;
+static int s_settings_due = 1;     /* a "settings" row at the first frame of play */
+static uint32_t s_room_token;
+static int s_room_valid;
+static uint16_t s_prev_bag[PE_AYA_SLOT_COUNT], s_prev_store[PE_STORAGE_COUNT];
+static int s_lists_valid;
 
 typedef struct {
     int tracking;
@@ -134,11 +168,22 @@ static int s_session_written;
 
 static int pe_log_open(void) {
     if (!s_log) {
+        FILE *old = fopen("pe_play_log.csv", "r");
+        if (old) {                               /* another version's columns: start over */
+            char first[160] = "";
+            const int same = fgets(first, sizeof first, old) &&
+                             strncmp(first, PE_LOG_HEADER, strlen(PE_LOG_HEADER)) == 0;
+            fclose(old);
+            if (!same) {
+                char name[64];
+                snprintf(name, sizeof name, "pe_play_log.%ld.csv", (long)time(NULL));
+                rename("pe_play_log.csv", name);
+            }
+        }
         s_log = fopen("pe_play_log.csv", "a");
         if (!s_log) return 0;
         fseek(s_log, 0, SEEK_END);
-        if (ftell(s_log) == 0)
-            fprintf(s_log, "kind,battle,room,play_s,level,exp,hp,max_hp,junk,wayne,detail\n");
+        if (ftell(s_log) == 0) fprintf(s_log, "%s\n", PE_LOG_HEADER);
     }
     if (!s_session_written) {
         char stamp[32];
@@ -152,8 +197,69 @@ static int pe_log_open(void) {
     return 1;
 }
 
+/* The scene's 6-character name and map number, as Save_GetCurrentMapNumber. */
+static int pe_scene_name_of(uint32_t token, char *out) {
+    for (int i = 0; i < 6; ++i) {
+        char c = (char)psx_mod_read_byte(PE_BASE32_TABLE + ((token >> ((5 - i) * 5 + 2)) & 0x1Fu));
+        if (c >= 'a' && c <= 'z') c = (char)(c - 0x20);
+        out[i] = (c >= 0x20 && c < 0x7F && c != ',') ? c : '?';
+    }
+    out[6] = 0;
+    if (out[2] < '0' || out[2] > '9' || out[3] < '0' || out[3] > '9' || out[4] < '0' || out[4] > '9')
+        return -1;
+    return (out[2] - '0') * 100 + (out[3] - '0') * 10 + (out[4] - '0');
+}
+
+static int pe_scene_name(char *out) { return pe_scene_name_of(psx_mod_read_word(PE_ROOM_ADDR), out); }
+
+/* Bag and storage consumables (ids below 0x100) as id:count, the ammo pools
+ * and the equipped gun's loaded rounds. */
+static void pe_snapshot(char *out, size_t size) {
+    uint8_t bag[256], store[256];
+    size_t n = 0;
+    memset(bag, 0, sizeof bag);
+    memset(store, 0, sizeof store);
+    for (int i = 0; i < PE_AYA_SLOT_COUNT; ++i) {
+        const uint16_t v = psx_mod_read_half(PE_AYA_SLOTS_ADDR + (uint32_t)i * 2u);
+        if (v && v < 0x100u && bag[v] < 255) ++bag[v];
+    }
+    for (int i = 0; i < PE_STORAGE_COUNT; ++i) {
+        const uint16_t v = psx_mod_read_half(PE_STORAGE_ADDR + (uint32_t)i * 2u);
+        if (v && v < 0x100u && store[v] < 255) ++store[v];
+    }
+    out[0] = 0;
+    n += (size_t)snprintf(out + n, size - n, "bag=");
+    for (int v = 1; v < 256 && n < size; ++v)
+        if (bag[v]) n += (size_t)snprintf(out + n, size - n, "%02X:%u/", v, bag[v]);
+    if (n < size) n += (size_t)snprintf(out + n, size - n, " st=");
+    for (int v = 1; v < 256 && n < size; ++v)
+        if (store[v]) n += (size_t)snprintf(out + n, size - n, "%02X:%u/", v, store[v]);
+    const uint32_t gun = pe_cat_record(0);
+    if (n < size)
+        snprintf(out + n, size - n, " ammo=%u/%u/%u loaded=%u",
+                 psx_mod_read_half(PE_AMMO_POOLS_ADDR + REC_AMMO),
+                 psx_mod_read_half(PE_AMMO_POOLS_ADDR + 0x20u + REC_AMMO),
+                 psx_mod_read_half(PE_AMMO_POOLS_ADDR + 0x40u + REC_AMMO),
+                 gun ? psx_mod_read_half(gun + REC_AMMO) : 0u);
+}
+
+static int pe_bag_free(void) {
+    unsigned limit = psx_mod_read_byte(PE_SLOT_COUNT_ADDR) + psx_mod_read_word(PE_BONUS_SLOTS_ADDR);
+    if (limit > 50u) limit = 50u;
+    int free_slots = 0;
+    for (unsigned i = 0; i < limit; ++i) free_slots += psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == 0;
+    return free_slots;
+}
+
+/* An item id for a bag / storage value: gear (0x100 + record) by its record. */
+static unsigned pe_value_item(uint16_t v) {
+    if (v >= 0x100u && v < 0x180u)
+        return psx_mod_read_byte(PE_EQUIP_RECORDS_ADDR + (uint32_t)(v - 0x100u) * 0x20u + REC_ITEM_ID);
+    return v;
+}
+
 void pe_log(const char *kind, const char *fmt, ...) {
-    char detail[320];
+    char detail[640];
     va_list ap;
     if (!s_logging || !pe_log_open()) return;
     va_start(ap, fmt);
@@ -163,9 +269,13 @@ void pe_log(const char *kind, const char *fmt, ...) {
         if (*c == ',') *c = ';';
         else if (*c == '"') *c = '\'';
         else if (*c == '\n' || *c == '\r') *c = ' ';
-    char battle[12] = "";
+    char battle[12] = "", scene[8];
     if (s_in_battle) snprintf(battle, sizeof battle, "%u", s_battle_no);
-    fprintf(s_log, "%s,%s,0x%04X,", kind, battle, psx_mod_read_half(PE_ROOM_ADDR));
+    const int map = pe_scene_name(scene);
+    fprintf(s_log, "%s,%s,", kind, battle);
+    if (pe_game_loaded()) fprintf(s_log, "%d,", (int)(int8_t)psx_mod_read_byte(PE_STORY_DAY_ADDR));
+    else fprintf(s_log, ",");
+    fprintf(s_log, "%d,%s,", map, scene);
     if (pe_game_loaded())
         fprintf(s_log, "%u,%u,%u,%u,%u,%u,%u,", psx_mod_read_word(PE_PLAY_FRAMES_ADDR) / 60u,
                 psx_mod_read_byte(PE_LEVEL_ADDR) + 1u, psx_mod_read_word(PE_TOTAL_EXP_ADDR),
@@ -206,10 +316,12 @@ static void pe_log_battle_end(void) {
     }
     const int hp = psx_mod_read_half(PE_CUR_HP_ADDR);
     const char *outcome = hp <= 0 ? "loss" : s_battle_escape ? "escape" : "win";
-    pe_log("battle", "frames=%u secs=%u exp=%u bp=%u outcome=%s hp=%d->%d gun=0x%02X armor=0x%02X boss=%d rewards=%s",
+    char snap[400];
+    pe_snapshot(snap, sizeof snap);
+    pe_log("battle", "frames=%u secs=%u exp=%u bp=%u outcome=%s hp=%d->%d gun=0x%02X armor=0x%02X boss=%d rewards=%s %s",
            s_battle_frames, (s_battle_frames * 10u / 599u + 5u) / 10u,
            psx_mod_read_word(PE_BATTLE_EXP_ADDR), psx_mod_read_word(PE_BATTLE_BP_ADDR), outcome,
-           s_battle_hp_start, hp, pe_equipped_id(0), pe_equipped_id(1), s_battle_boss, rewards);
+           s_battle_hp_start, hp, pe_equipped_id(0), pe_equipped_id(1), s_battle_boss, rewards, snap);
 }
 
 static int pe_count_item(uint16_t id) {
@@ -269,6 +381,70 @@ static void pe_track_wayne(void) {
     s_wayne_room = room;
 }
 
+/* A map change: one row with the snapshot. */
+static void pe_track_room(void) {
+    const uint32_t token = psx_mod_read_word(PE_ROOM_ADDR);
+    if (s_room_valid && token != s_room_token) {
+        char from[8], snap[400];
+        const int from_map = pe_scene_name_of(s_room_token, from);
+        pe_snapshot(snap, sizeof snap);
+        pe_log("room", "from=%d/%s %s", from_map, from, snap);
+    }
+    s_room_token = token;
+    s_room_valid = 1;
+}
+
+/* Items moved between the bag and Wayne's storage (pickups and use are other
+ * rows / the snapshots). */
+static void pe_track_storage(void) {
+    uint16_t bag[PE_AYA_SLOT_COUNT], store[PE_STORAGE_COUNT];
+    for (int i = 0; i < PE_AYA_SLOT_COUNT; ++i) bag[i] = psx_mod_read_half(PE_AYA_SLOTS_ADDR + (uint32_t)i * 2u);
+    for (int i = 0; i < PE_STORAGE_COUNT; ++i) store[i] = psx_mod_read_half(PE_STORAGE_ADDR + (uint32_t)i * 2u);
+    if (s_lists_valid && (memcmp(bag, s_prev_bag, sizeof bag) || memcmp(store, s_prev_store, sizeof store))) {
+        uint16_t bag_out[16], bag_in[16], st_out[16], st_in[16];
+        int nbo = 0, nbi = 0, nso = 0, nsi = 0;
+        for (int i = 0; i < PE_AYA_SLOT_COUNT; ++i)
+            if (bag[i] != s_prev_bag[i]) {
+                if (s_prev_bag[i] && nbo < 16) bag_out[nbo++] = s_prev_bag[i];
+                if (bag[i] && nbi < 16) bag_in[nbi++] = bag[i];
+            }
+        for (int i = 0; i < PE_STORAGE_COUNT; ++i)
+            if (store[i] != s_prev_store[i]) {
+                if (s_prev_store[i] && nso < 16) st_out[nso++] = s_prev_store[i];
+                if (store[i] && nsi < 16) st_in[nsi++] = store[i];
+            }
+        for (int a = 0; a < nbo; ++a)               /* bag -> storage */
+            for (int b = 0; b < nsi; ++b)
+                if (bag_out[a] == st_in[b]) {
+                    pe_log("store", "item=0x%02X%s", pe_value_item(bag_out[a]), bag_out[a] >= 0x100u ? " gear" : "");
+                    st_in[b] = 0;
+                    break;
+                }
+        for (int a = 0; a < nso; ++a)               /* storage -> bag */
+            for (int b = 0; b < nbi; ++b)
+                if (st_out[a] == bag_in[b]) {
+                    pe_log("withdraw", "item=0x%02X%s", pe_value_item(st_out[a]), st_out[a] >= 0x100u ? " gear" : "");
+                    bag_in[b] = 0;
+                    break;
+                }
+    }
+    memcpy(s_prev_bag, bag, sizeof bag);
+    memcpy(s_prev_store, store, sizeof store);
+    s_lists_valid = 1;
+}
+
+/* Menu_OnItemDiscardConfirm(dialog, yes) entry: the game's Discard. */
+static void pe_on_discard_confirm(struct CPUState *cpu, uint32_t address) {
+    (void)address;
+    if (!s_logging || !pe_game_loaded() || !cpu->gpr[5]) return;
+    const int storage = psx_mod_read_word(PE_MENU_ACTIVE_LIST) != 0;
+    const uint32_t slot = psx_mod_read_word(PE_MENU_ACTIVE_SLOT);
+    if (slot >= (uint32_t)(storage ? PE_STORAGE_COUNT : PE_AYA_SLOT_COUNT)) return;
+    const uint16_t v = psx_mod_read_half((storage ? PE_STORAGE_ADDR : PE_AYA_SLOTS_ADDR) + slot * 2u);
+    pe_log("discard", "item=0x%02X%s list=%s", pe_value_item(v), v >= 0x100u ? " gear" : "",
+           storage ? "storage" : "bag");
+}
+
 /* What a memory card save holds that matters for balance. */
 static void pe_append_gear(char *out, size_t size, int which) {
     const uint32_t rec = pe_cat_record(which);
@@ -324,8 +500,11 @@ static void pe_loot_logger_tick(void) {
         s_wayne_valid = s_wayne_moving = 0;
         s_level_seen = -1;
         s_in_battle = 0;
+        s_room_valid = s_lists_valid = 0;
         memset(s_enemy, 0, sizeof s_enemy);
+        s_settings_due = 1;
     }
+    if (s_settings_due) { s_settings_due = 0; pe_menu_log_settings(); }
     const int level = psx_mod_read_byte(PE_LEVEL_ADDR) + 1;
     if (s_level_seen > 0 && level > s_level_seen) pe_log("levelup", "to=%d", level);
     s_level_seen = level;
@@ -341,6 +520,7 @@ static void pe_loot_logger_tick(void) {
         if (psx_mod_read_word(PE_BATTLE_PHASE_ADDR) == 4u) s_battle_escape = 1;
         pe_track_enemies();
         s_counts_valid = 0;          /* battle rewards aren't field pickups */
+        s_lists_valid = 0;
         return;
     }
     if (s_in_battle) {
@@ -350,6 +530,8 @@ static void pe_loot_logger_tick(void) {
         s_in_battle = 0;
     }
     pe_track_wayne();
+    pe_track_room();
+    pe_track_storage();
 
     /* Field pickups: count changes of watched items. */
     for (unsigned i = 0; i < PE_WATCH_COUNT; ++i) {
@@ -368,7 +550,8 @@ static void pe_on_inv_add_item(struct CPUState *cpu, uint32_t address) {
     if (!s_logging || !psx_mod_game_started()) return;
     const uint32_t ra = cpu->gpr[31];
     const int steal = ra >= PE_FN_RESOLVE_HIT_START && ra < PE_FN_RESOLVE_HIT_END;
-    pe_log(steal ? "steal" : "add", "item=0x%02X", (unsigned)(cpu->gpr[4] & 0xFFFFu));
+    pe_log(steal ? "steal" : "add", "item=0x%02X bagfree=%d", (unsigned)(cpu->gpr[4] & 0xFFFFu),
+           pe_game_loaded() ? pe_bag_free() : -1);
 }
 
 /* Inv_DispatchCommand(command, value, other) entry: script inventory actions. */
@@ -393,5 +576,7 @@ void pe_loot_logger_menu_register(void) {
         PE_FN_SAVE_SERIALIZE, pe_on_save_serialize);
     (void)psx_mod_register_function_entry_plugin("pe.loot-logger.load",
         PE_FN_SAVE_DESERIALIZE, pe_on_save_deserialize);
+    (void)psx_mod_register_function_entry_plugin("pe.loot-logger.discard",
+        PE_FN_DISCARD_CONFIRM, pe_on_discard_confirm);
     (void)psx_mod_register_restore_callback(pe_on_restored);
 }

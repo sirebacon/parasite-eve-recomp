@@ -41,7 +41,7 @@ static int            s_tick_count;
 typedef struct {
     const char *sub, *label;
     int *value;
-    int last;
+    int last, def;                            /* last seen, value at registration */
     const char *const *names;
     unsigned count;
 } PeWatch;
@@ -54,7 +54,7 @@ static void pe_watch(const char *sub, const char *label, int *value,
                      const char *const *names, unsigned count) {
     if (!value || s_watch_count >= PE_WATCH_MAX) return;
     if (sub && strcmp(sub, "Stats") == 0) return;      /* mirrored; logs itself */
-    s_watch[s_watch_count++] = (PeWatch){ sub, label, value, *value, names, count };
+    s_watch[s_watch_count++] = (PeWatch){ sub, label, value, *value, *value, names, count };
 }
 
 static void pe_value_text(char *out, size_t size, int v, const char *const *names, unsigned count) {
@@ -75,6 +75,24 @@ static void pe_watch_tick(void) {
         w->last = v;
     }
     s_watch_ready = 1;
+}
+
+/* Every row not at its default, so a log shows what was already on (God mode,
+ * No random battles, speeds...) when play started or a save loaded. */
+void pe_menu_log_settings(void) {
+    char out[300];
+    size_t n = 0;
+    out[0] = 0;
+    for (int i = 0; i < s_watch_count && n < sizeof out; ++i) {
+        const PeWatch *w = &s_watch[i];
+        const int v = *w->value;
+        if (v == w->def) continue;
+        char text[32];
+        pe_value_text(text, sizeof text, v, w->names, w->count);
+        n += (size_t)snprintf(out + n, sizeof out - n, "%s%s/%s=%s", n ? " " : "",
+                              pe_sub_name(w->sub), w->label, text);
+    }
+    pe_log("settings", "%s", n ? out : "all defaults");
 }
 
 typedef struct { const char *sub, *label; PeMenuAction fn; int accept; } PeWrapAction;

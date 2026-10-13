@@ -10,3 +10,6 @@ void pe_log(const char *kind, const char *fmt, ...)
     __attribute__((format(printf, 2, 3)))
 #endif
     ;
+
+/* pe_mod_menu.c: one "settings" row listing every F1 row not at its default. */
+void pe_menu_log_settings(void);
