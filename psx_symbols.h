@@ -1465,12 +1465,20 @@
 #define func_80038BC0 Render_DrawTextDigit  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Render_GetFontSlotCode 0x80038CE4u
+#define func_80038CE4 Render_GetFontSlotCode  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_IsEquipSlotActive 0x80038D0Cu
 #define func_80038D0C Menu_IsEquipSlotActive  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_ConsumeEquipSlotFlag 0x80038D1Cu
 #define func_80038D1C Menu_ConsumeEquipSlotFlag  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Render_ConsumeFontShuffleSeed 0x80038D48u
+#define func_80038D48 Render_ConsumeFontShuffleSeed  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Render_LoadFontGlyphAlt 0x80038D74u
@@ -5061,6 +5069,14 @@
 #define func_8007E0C0 RemovePatchPad  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_LIBAPI_PAD_text_254 0x8007E0F8u
+#define func_8007E0F8 LIBAPI_PAD_text_254  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_LIBAPI_PAD_text_2BC 0x8007E160u
+#define func_8007E160 LIBAPI_PAD_text_2BC  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_InitPAD2 0x8007E1A4u
 #define func_8007E1A4 InitPAD2  /* alias */
 
@@ -5111,6 +5127,10 @@
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_StopCARD2 0x8007E334u
 #define func_8007E334 StopCARD2  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_LIBCARD_PATCH_text_70 0x8007E3B4u
+#define func_8007E3B4 LIBCARD_PATCH_text_70  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN__ExitCard 0x8007E514u
@@ -5617,6 +5637,10 @@
 #define func_80084B44 _padInitDirSeq  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_LIBPAD_PADSEQD_text_34 0x80084B78u
+#define func_80084B78 LIBPAD_PADSEQD_text_34  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_LIBPAD_PADSEQD_text_108 0x80084C4Cu
 #define func_80084C4C LIBPAD_PADSEQD_text_108  /* alias */
 
@@ -5867,6 +5891,14 @@
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Akao_Cmd_C2_WithSlot 0x80086CA4u
 #define func_80086CA4 Akao_Cmd_C2_WithSlot  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Akao_Cmd_C8 0x80086CF8u
+#define func_80086CF8 Akao_Cmd_C8  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_Akao_Cmd_C9 0x80086D2Cu
+#define func_80086D2C Akao_Cmd_C9  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Akao_Cmd_D0 0x80086DACu
@@ -6789,6 +6821,114 @@
 #define func_800C2E08 FieldFx_FreeAllSlots  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SetSpriteTexturePreset 0x800C2EACu
+#define func_800C2EAC FieldFx_SetSpriteTexturePreset  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SetSpriteCellSize 0x800C2FF0u
+#define func_800C2FF0 FieldFx_SetSpriteCellSize  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SetSpriteColorMode 0x800C3098u
+#define func_800C3098 FieldFx_SetSpriteColorMode  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_InterpolateColorRamp 0x800C3134u
+#define func_800C3134 FieldFx_InterpolateColorRamp  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SetSpriteBlendMode 0x800C3238u
+#define func_800C3238 FieldFx_SetSpriteBlendMode  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawOrientedSprite 0x800C3324u
+#define func_800C3324 FieldFx_DrawOrientedSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawBillboard 0x800C3B04u
+#define func_800C3B04 FieldFx_DrawBillboard  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawGlowSprite 0x800C42A4u
+#define func_800C42A4 FieldFx_DrawGlowSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawShadedQuad 0x800C499Cu
+#define func_800C499C FieldFx_DrawShadedQuad  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_BuildRingGeometry 0x800C4E50u
+#define func_800C4E50 FieldFx_BuildRingGeometry  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawShadedRing 0x800C4FC4u
+#define func_800C4FC4 FieldFx_DrawShadedRing  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_BuildParticleChain 0x800C5538u
+#define func_800C5538 FieldFx_BuildParticleChain  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawTexturedStrip 0x800C5A40u
+#define func_800C5A40 FieldFx_DrawTexturedStrip  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_UpdateStripCollision 0x800C5EB0u
+#define func_800C5EB0 FieldFx_UpdateStripCollision  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ScaleColor 0x800C608Cu
+#define func_800C608C FieldFx_ScaleColor  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_IsActorWithinRadius 0x800C6148u
+#define func_800C6148 FieldFx_IsActorWithinRadius  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_IsPointInSpriteQuad 0x800C61A8u
+#define func_800C61A8 FieldFx_IsPointInSpriteQuad  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_IsPointInTriangleXZ 0x800C62DCu
+#define func_800C62DC FieldFx_IsPointInTriangleXZ  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_IsPointInQuadXZ 0x800C653Cu
+#define func_800C653C FieldFx_IsPointInQuadXZ  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_CirclesOverlapXZ 0x800C6584u
+#define func_800C6584 FieldFx_CirclesOverlapXZ  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_BuildPlacementBasis 0x800C65E4u
+#define func_800C65E4 FieldFx_BuildPlacementBasis  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_PlaySoundAtMatrixPosition 0x800C66C8u
+#define func_800C66C8 FieldFx_PlaySoundAtMatrixPosition  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_PlaySoundAtVectorPosition 0x800C6764u
+#define func_800C6764 FieldFx_PlaySoundAtVectorPosition  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_FindAssetAtShortPosition 0x800C6800u
+#define func_800C6800 FieldFx_FindAssetAtShortPosition  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_IsPlayerInTriangleXZ 0x800C689Cu
+#define func_800C689C FieldFx_IsPlayerInTriangleXZ  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_IsPlayerInQuadXZ 0x800C6B20u
+#define func_800C6B20 FieldFx_IsPlayerInQuadXZ  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_IsPlayerWithinRadius 0x800C6B90u
+#define func_800C6B90 FieldFx_IsPlayerWithinRadius  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_GetStatus 0x800C6CE0u
 #define func_800C6CE0 FieldFx_GetStatus  /* alias */
 
@@ -6865,6 +7005,74 @@
 #define func_800C7DDC GlowEffect_ClassNop0  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_InitOwner 0x800C7DE4u
+#define func_800C7DE4 GlowEffect_InitOwner  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_InitParticle 0x800C7E50u
+#define func_800C7E50 GlowEffect_InitParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_InitFlareLayers 0x800C7F60u
+#define func_800C7F60 GlowEffect_InitFlareLayers  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_InitCoreGlow 0x800C8064u
+#define func_800C8064 GlowEffect_InitCoreGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_InitGroundGlow 0x800C811Cu
+#define func_800C811C GlowEffect_InitGroundGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_InitHaloGlow 0x800C815Cu
+#define func_800C815C GlowEffect_InitHaloGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_DrawNop 0x800C8268u
+#define func_800C8268 GlowEffect_DrawNop  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_DrawParticle 0x800C8270u
+#define func_800C8270 GlowEffect_DrawParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_DrawFlareLayers 0x800C83A0u
+#define func_800C83A0 GlowEffect_DrawFlareLayers  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_DrawPointGlow 0x800C8870u
+#define func_800C8870 GlowEffect_DrawPointGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_DrawGroundGlow 0x800C8970u
+#define func_800C8970 GlowEffect_DrawGroundGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_DrawHaloGlow 0x800C8A88u
+#define func_800C8A88 GlowEffect_DrawHaloGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_UpdateEnd 0x800C8BB4u
+#define func_800C8BB4 GlowEffect_UpdateEnd  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_UpdateParticle 0x800C8BC0u
+#define func_800C8BC0 GlowEffect_UpdateParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_UpdateFlareLayers 0x800C8C4Cu
+#define func_800C8C4C GlowEffect_UpdateFlareLayers  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_UpdateCoreGlow 0x800C8C80u
+#define func_800C8C80 GlowEffect_UpdateCoreGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_UpdateHaloGlow 0x800C8CF8u
+#define func_800C8CF8 GlowEffect_UpdateHaloGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_GlowEffectB_PlantScript 0x800C8D34u
 #define func_800C8D34 GlowEffectB_PlantScript  /* alias */
 
@@ -6891,6 +7099,54 @@
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_GlowEffectB_ClassNop0 0x800C8F20u
 #define func_800C8F20 GlowEffectB_ClassNop0  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_InitOwner 0x800C8F28u
+#define func_800C8F28 GlowEffectB_InitOwner  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_InitParticle 0x800C8F94u
+#define func_800C8F94 GlowEffectB_InitParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_InitFlareLayers 0x800C90A4u
+#define func_800C90A4 GlowEffectB_InitFlareLayers  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_InitPointGlow 0x800C91A8u
+#define func_800C91A8 GlowEffectB_InitPointGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_DrawNop 0x800C9260u
+#define func_800C9260 GlowEffectB_DrawNop  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_DrawParticle 0x800C9268u
+#define func_800C9268 GlowEffectB_DrawParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_DrawFlareLayers 0x800C9398u
+#define func_800C9398 GlowEffectB_DrawFlareLayers  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_DrawPointGlow 0x800C9868u
+#define func_800C9868 GlowEffectB_DrawPointGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_UpdateEnd 0x800C9968u
+#define func_800C9968 GlowEffectB_UpdateEnd  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_UpdateParticle 0x800C9974u
+#define func_800C9974 GlowEffectB_UpdateParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_UpdateFlareLayers 0x800C9A00u
+#define func_800C9A00 GlowEffectB_UpdateFlareLayers  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectB_UpdatePointGlow 0x800C9A34u
+#define func_800C9A34 GlowEffectB_UpdatePointGlow  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_GlowEffectC_PlantScript 0x800C9A70u
@@ -6921,6 +7177,42 @@
 #define func_800C9C18 GlowEffectC_ClassNop0  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_InitOwner 0x800C9C20u
+#define func_800C9C20 GlowEffectC_InitOwner  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_InitParticle 0x800C9C8Cu
+#define func_800C9C8C GlowEffectC_InitParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_InitFlareLayers 0x800C9D9Cu
+#define func_800C9D9C GlowEffectC_InitFlareLayers  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_DrawNop 0x800C9EA0u
+#define func_800C9EA0 GlowEffectC_DrawNop  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_DrawParticle 0x800C9EA8u
+#define func_800C9EA8 GlowEffectC_DrawParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_DrawFlareLayers 0x800C9FD8u
+#define func_800C9FD8 GlowEffectC_DrawFlareLayers  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_UpdateEnd 0x800CA4A8u
+#define func_800CA4A8 GlowEffectC_UpdateEnd  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_UpdateParticle 0x800CA4B4u
+#define func_800CA4B4 GlowEffectC_UpdateParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffectC_UpdateFlareLayers 0x800CA540u
+#define func_800CA540 GlowEffectC_UpdateFlareLayers  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FourLayerGlow_PlantScript 0x800CA574u
 #define func_800CA574 FourLayerGlow_PlantScript  /* alias */
 
@@ -6947,6 +7239,74 @@
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FourLayerGlow_ClassNop0 0x800CA7B0u
 #define func_800CA7B0 FourLayerGlow_ClassNop0  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_InitOwner 0x800CA7B8u
+#define func_800CA7B8 FourLayerGlow_InitOwner  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_InitParticle 0x800CA824u
+#define func_800CA824 FourLayerGlow_InitParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_InitFlareLayers 0x800CA934u
+#define func_800CA934 FourLayerGlow_InitFlareLayers  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_InitTwinGlow 0x800CAA38u
+#define func_800CAA38 FourLayerGlow_InitTwinGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_InitGroundGlow 0x800CAB88u
+#define func_800CAB88 FourLayerGlow_InitGroundGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_InitHaloGlow 0x800CABC8u
+#define func_800CABC8 FourLayerGlow_InitHaloGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_DrawNop 0x800CACD4u
+#define func_800CACD4 FourLayerGlow_DrawNop  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_DrawParticle 0x800CACDCu
+#define func_800CACDC FourLayerGlow_DrawParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_DrawFlareLayers 0x800CAE0Cu
+#define func_800CAE0C FourLayerGlow_DrawFlareLayers  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_DrawTwinGlow 0x800CB750u
+#define func_800CB750 FourLayerGlow_DrawTwinGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_DrawGroundGlow 0x800CB8E0u
+#define func_800CB8E0 FourLayerGlow_DrawGroundGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_DrawHaloGlow 0x800CB9F8u
+#define func_800CB9F8 FourLayerGlow_DrawHaloGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_UpdateEnd 0x800CBB24u
+#define func_800CBB24 FourLayerGlow_UpdateEnd  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_UpdateParticle 0x800CBB30u
+#define func_800CBB30 FourLayerGlow_UpdateParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_UpdateFlareLayers 0x800CBBBCu
+#define func_800CBBBC FourLayerGlow_UpdateFlareLayers  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_UpdateGroundGlow 0x800CBC2Cu
+#define func_800CBC2C FourLayerGlow_UpdateGroundGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_UpdateHaloGlow 0x800CBC68u
+#define func_800CBC68 FourLayerGlow_UpdateHaloGlow  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_PointSprite_PlantScript 0x800CBCA4u
@@ -6977,16 +7337,76 @@
 #define func_800CBFBC PointSprite_ClassNop0  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_InitRisingStreak 0x800CBFC4u
+#define func_800CBFC4 PointSprite_InitRisingStreak  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_InitRadialEntries 0x800CC0E0u
 #define func_800CC0E0 FieldFx_InitRadialEntries  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_InitGroundRing 0x800CC244u
+#define func_800CC244 PointSprite_InitGroundRing  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_InitBillboard 0x800CC284u
+#define func_800CC284 PointSprite_InitBillboard  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_InitScatteredParticles 0x800CC2C4u
+#define func_800CC2C4 FieldFx_InitScatteredParticles  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_InitOrientedFlash 0x800CC440u
+#define func_800CC440 PointSprite_InitOrientedFlash  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_DrawRisingStreak 0x800CC480u
+#define func_800CC480 PointSprite_DrawRisingStreak  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_ProcessInterleavedPoints 0x800CC55Cu
 #define func_800CC55C FieldFx_ProcessInterleavedPoints  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_DrawGroundRing 0x800CC644u
+#define func_800CC644 PointSprite_DrawGroundRing  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_DrawBillboardFlash 0x800CC6F8u
+#define func_800CC6F8 PointSprite_DrawBillboardFlash  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_ProcessPointTriples 0x800CC7ACu
 #define func_800CC7AC FieldFx_ProcessPointTriples  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_DrawOrientedFlash 0x800CC878u
+#define func_800CC878 PointSprite_DrawOrientedFlash  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_UpdateRisingStreak 0x800CC92Cu
+#define func_800CC92C PointSprite_UpdateRisingStreak  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_UpdateRadialParticles 0x800CC974u
+#define func_800CC974 PointSprite_UpdateRadialParticles  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_UpdateBillboardFlash 0x800CCA78u
+#define func_800CCA78 PointSprite_UpdateBillboardFlash  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_UpdateScatteredParticles 0x800CCAB0u
+#define func_800CCAB0 PointSprite_UpdateScatteredParticles  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_UpdateOrientedFlash 0x800CCB6Cu
+#define func_800CCB6C PointSprite_UpdateOrientedFlash  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_PlantScript 0x800CCBA8u
+#define func_800CCBA8 BurstEffect_PlantScript  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_BurstEffect_Spawn6 0x800CCEBCu
@@ -7013,8 +7433,60 @@
 #define func_800CCF98 BurstEffect_ClassNop0  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_InitTarget 0x800CCFA0u
+#define func_800CCFA0 BurstEffect_InitTarget  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_InitRandomOffsetPairs 0x800CD0BCu
 #define func_800CD0BC FieldFx_InitRandomOffsetPairs  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_InitSparkPoint 0x800CD1FCu
+#define func_800CD1FC BurstEffect_InitSparkPoint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_InitNop4 0x800CD2DCu
+#define func_800CD2DC BurstEffect_InitNop4  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_DrawNop0 0x800CD2E4u
+#define func_800CD2E4 BurstEffect_DrawNop0  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_DrawGroundGlow 0x800CD2ECu
+#define func_800CD2EC BurstEffect_DrawGroundGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_DrawSparkPairs 0x800CD404u
+#define func_800CD404 BurstEffect_DrawSparkPairs  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_DrawSparkPoint 0x800CD50Cu
+#define func_800CD50C BurstEffect_DrawSparkPoint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_DrawNop4 0x800CD59Cu
+#define func_800CD59C BurstEffect_DrawNop4  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_UpdateEnd 0x800CD5A4u
+#define func_800CD5A4 BurstEffect_UpdateEnd  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_UpdateGroundGlow 0x800CD5B0u
+#define func_800CD5B0 BurstEffect_UpdateGroundGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_UpdateSparkPairs 0x800CD5ECu
+#define func_800CD5EC BurstEffect_UpdateSparkPairs  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_UpdateSparkPoint 0x800CD678u
+#define func_800CD678 BurstEffect_UpdateSparkPoint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_UpdateEnd4 0x800CD71Cu
+#define func_800CD71C BurstEffect_UpdateEnd4  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_BurstEffectB_PlantScript 0x800CD728u
@@ -7045,6 +7517,42 @@
 #define func_800CD978 BurstEffectB_ClassNop0  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_InitTarget 0x800CD980u
+#define func_800CD980 BurstEffectB_InitTarget  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_InitSparkCloud 0x800CDA5Cu
+#define func_800CDA5C BurstEffectB_InitSparkCloud  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_InitSparkPoint 0x800CDC24u
+#define func_800CDC24 BurstEffectB_InitSparkPoint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_DrawNop 0x800CDD04u
+#define func_800CDD04 BurstEffectB_DrawNop  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_DrawSparkCloud 0x800CDD0Cu
+#define func_800CDD0C BurstEffectB_DrawSparkCloud  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_DrawSparkPoint 0x800CDE90u
+#define func_800CDE90 BurstEffectB_DrawSparkPoint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_UpdateEnd 0x800CDF40u
+#define func_800CDF40 BurstEffectB_UpdateEnd  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_UpdateSparkCloud 0x800CDF4Cu
+#define func_800CDF4C BurstEffectB_UpdateSparkCloud  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectB_UpdateSparkPoint 0x800CDFE0u
+#define func_800CDFE0 BurstEffectB_UpdateSparkPoint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_BurstEffectC_PlantScript 0x800CE084u
 #define func_800CE084 BurstEffectC_PlantScript  /* alias */
 
@@ -7073,36 +7581,480 @@
 #define func_800CE1F4 BurstEffectC_ClassNop0  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_InitTarget 0x800CE1FCu
+#define func_800CE1FC BurstEffectC_InitTarget  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_InitTimedSpark 0x800CE2B4u
+#define func_800CE2B4 BurstEffectC_InitTimedSpark  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_DrawNop 0x800CE3ACu
+#define func_800CE3AC BurstEffectC_DrawNop  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_DrawTimedSpark 0x800CE3B4u
+#define func_800CE3B4 BurstEffectC_DrawTimedSpark  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_UpdateEnd 0x800CE464u
+#define func_800CE464 BurstEffectC_UpdateEnd  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffectC_UpdateTimedSpark 0x800CE470u
+#define func_800CE470 BurstEffectC_UpdateTimedSpark  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_GetEffectResource 0x800CE4F8u
 #define func_800CE4F8 FieldFx_GetEffectResource  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_InitCallbackList 0x800CE560u
+#define func_800CE560 FieldFx_InitCallbackList  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_AllocCallbackList 0x800CE5ACu
+#define func_800CE5AC FieldFx_AllocCallbackList  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_AcquireCallbackSlot 0x800CE610u
+#define func_800CE610 FieldFx_AcquireCallbackSlot  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_UpdateCallbackList 0x800CE688u
+#define func_800CE688 FieldFx_UpdateCallbackList  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawCallbackList 0x800CE78Cu
+#define func_800CE78C FieldFx_DrawCallbackList  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_GetActorPosition 0x800CE870u
+#define func_800CE870 FieldFx_GetActorPosition  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_TransformMatrixPoint 0x800CE8F0u
 #define func_800CE8F0 FieldFx_TransformMatrixPoint  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_GetTransformLookAngles 0x800CE9D4u
+#define func_800CE9D4 FieldFx_GetTransformLookAngles  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_RotateVector 0x800CEAE8u
 #define func_800CEAE8 FieldFx_RotateVector  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_IsPlayerInSegmentBand 0x800CEB8Cu
+#define func_800CEB8C FieldFx_IsPlayerInSegmentBand  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_InitTexturePageTable 0x800CECACu
+#define func_800CECAC FieldFx_InitTexturePageTable  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_LoadEffectTexturePage 0x800CED3Cu
+#define func_800CED3C FieldFx_LoadEffectTexturePage  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_EnsureEffectTexturePage 0x800CEDA8u
+#define func_800CEDA8 FieldFx_EnsureEffectTexturePage  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawShapeQuads 0x800CEE20u
+#define func_800CEE20 FieldFx_DrawShapeQuads  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SampleColorTrack 0x800CF3ACu
+#define func_800CF3AC FieldFx_SampleColorTrack  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_LoadRotatedClutRow 0x800CF4B4u
+#define func_800CF4B4 FieldFx_LoadRotatedClutRow  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_TransformTranslation 0x800CF5B0u
 #define func_800CF5B0 FieldFx_TransformTranslation  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_LoadRotationMatrix 0x800CF658u
+#define func_800CF658 FieldFx_LoadRotationMatrix  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_LinkBlendedPacket 0x800CF6F8u
+#define func_800CF6F8 FieldFx_LinkBlendedPacket  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_OffsetPointByAngles 0x800CF844u
+#define func_800CF844 FieldFx_OffsetPointByAngles  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_CalculateLookAngles 0x800CFAA8u
 #define func_800CFAA8 FieldFx_CalculateLookAngles  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_AnglesToVector 0x800CFB7Cu
+#define func_800CFB7C FieldFx_AnglesToVector  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_GetTurnDirection 0x800CFCF4u
+#define func_800CFCF4 FieldFx_GetTurnDirection  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_EaseAngles 0x800CFD50u
+#define func_800CFD50 FieldFx_EaseAngles  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_GetDistanceNonZero 0x800CFE94u
+#define func_800CFE94 FieldFx_GetDistanceNonZero  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RandomScatterOffsetYZ 0x800CFF0Cu
+#define func_800CFF0C FieldFx_RandomScatterOffsetYZ  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RandomScatterOffsetXY 0x800CFFACu
+#define func_800CFFAC FieldFx_RandomScatterOffsetXY  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawStarFan 0x800D004Cu
+#define func_800D004C FieldFx_DrawStarFan  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawRingBand 0x800D0728u
+#define func_800D0728 FieldFx_DrawRingBand  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawRotatedTriangle 0x800D0E88u
+#define func_800D0E88 FieldFx_DrawRotatedTriangle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawHistoryTrail 0x800D1384u
+#define func_800D1384 FieldFx_DrawHistoryTrail  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawScreenTint 0x800D1AE0u
+#define func_800D1AE0 FieldFx_DrawScreenTint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawHaloedPoint 0x800D1DECu
+#define func_800D1DEC FieldFx_DrawHaloedPoint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawPointTile 0x800D2104u
+#define func_800D2104 FieldFx_DrawPointTile  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawRotatedQuad 0x800D2370u
+#define func_800D2370 FieldFx_DrawRotatedQuad  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawOrbitPoint 0x800D27FCu
+#define func_800D27FC FieldFx_DrawOrbitPoint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawGlowLine 0x800D2B58u
+#define func_800D2B58 FieldFx_DrawGlowLine  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawTexturedRibbon 0x800D3114u
+#define func_800D3114 FieldFx_DrawTexturedRibbon  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_UpdatePointHistory 0x800D3AFCu
 #define func_800D3AFC FieldFx_UpdatePointHistory  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawPulledSprite 0x800D3BC8u
+#define func_800D3BC8 FieldFx_DrawPulledSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_PlaySoundAtOwner 0x800D3F64u
+#define func_800D3F64 FieldFx_PlaySoundAtOwner  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_GetOwnerProgress 0x800D3FD8u
+#define func_800D3FD8 FieldFx_GetOwnerProgress  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SpawnTask 0x800D401Cu
+#define func_800D401C FieldFx_SpawnTask  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_UpdateTasks 0x800D413Cu
+#define func_800D413C FieldFx_UpdateTasks  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_InitTaskContext 0x800D4620u
+#define func_800D4620 FieldFx_InitTaskContext  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_InitTaskProgram 0x800D4698u
+#define func_800D4698 FieldFx_InitTaskProgram  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawTasks 0x800D4704u
+#define func_800D4704 FieldFx_DrawTasks  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_CloseTaskOwner 0x800D4850u
+#define func_800D4850 FieldFx_CloseTaskOwner  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_InitEffectResources 0x800D4860u
+#define func_800D4860 FieldFx_InitEffectResources  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_FallingSprite 0x800D4928u
+#define func_800D4928 FieldFx_FallingSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_FallingSpriteEmitter 0x800D4C24u
+#define func_800D4C24 FieldFx_FallingSpriteEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_PulsingStarFan 0x800D4EA4u
+#define func_800D4EA4 FieldFx_PulsingStarFan  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ScatterBurstEmitter 0x800D5290u
+#define func_800D5290 FieldFx_ScatterBurstEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_CosineEffectB 0x800D5898u
+#define func_800D5898 FieldFx_CosineEffectB  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_CosineSparkEmitter 0x800D5A00u
+#define func_800D5A00 FieldFx_CosineSparkEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RisingSprite 0x800D5CE4u
+#define func_800D5CE4 FieldFx_RisingSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RisingSpriteEmitter 0x800D5EB4u
+#define func_800D5EB4 FieldFx_RisingSpriteEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SpiralSprite 0x800D629Cu
+#define func_800D629C FieldFx_SpiralSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SpiralEmitter 0x800D6514u
+#define func_800D6514 FieldFx_SpiralEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RingPulse 0x800D6A1Cu
+#define func_800D6A1C FieldFx_RingPulse  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_BouncingSpinEmitter 0x800D6E3Cu
+#define func_800D6E3C FieldFx_BouncingSpinEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_EmberSpark 0x800D70C0u
+#define func_800D70C0 FieldFx_EmberSpark  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_FanSweepSpark 0x800D71B8u
+#define func_800D71B8 FieldFx_FanSweepSpark  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_FanSweep 0x800D751Cu
+#define func_800D751C FieldFx_FanSweep  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_FanSweepGlow 0x800D7764u
+#define func_800D7764 FieldFx_FanSweepGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ArcingSpark 0x800D7A1Cu
+#define func_800D7A1C FieldFx_ArcingSpark  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ArcingSparkEmitter 0x800D7B70u
+#define func_800D7B70 FieldFx_ArcingSparkEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_OrbitTrailPoint 0x800D7E78u
+#define func_800D7E78 FieldFx_OrbitTrailPoint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_OrbitingSprite 0x800D7FBCu
+#define func_800D7FBC FieldFx_OrbitingSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_OrbitingSpriteEmitter 0x800D8388u
+#define func_800D8388 FieldFx_OrbitingSpriteEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_OrbitingSpriteBurst 0x800D868Cu
+#define func_800D868C FieldFx_OrbitingSpriteBurst  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_VerticalRingSprite 0x800D8978u
+#define func_800D8978 FieldFx_VerticalRingSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_VerticalEffectEmitter 0x800D8B6Cu
+#define func_800D8B6C FieldFx_VerticalEffectEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_HelicalTrailPoint 0x800D8D14u
+#define func_800D8D14 FieldFx_HelicalTrailPoint  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_HelicalSprite 0x800D8E74u
+#define func_800D8E74 FieldFx_HelicalSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_HelicalSpriteEmitter 0x800D927Cu
+#define func_800D927C FieldFx_HelicalSpriteEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DampedSpark 0x800D9554u
+#define func_800D9554 FieldFx_DampedSpark  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DampedSparkEmitter 0x800D96F4u
+#define func_800D96F4 FieldFx_DampedSparkEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SpinningModelFlareA 0x800D9A8Cu
+#define func_800D9A8C FieldFx_SpinningModelFlareA  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RisingSpinSprite 0x800D9E5Cu
+#define func_800D9E5C FieldFx_RisingSpinSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RisingSpinEmitter 0x800D9FD4u
+#define func_800D9FD4 FieldFx_RisingSpinEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SpinningModelFlareB 0x800DA1FCu
+#define func_800DA1FC FieldFx_SpinningModelFlareB  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SpinningModelEmitterB 0x800DA5D4u
+#define func_800DA5D4 FieldFx_SpinningModelEmitterB  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DescendingSprite 0x800DA780u
+#define func_800DA780 FieldFx_DescendingSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DescendingSpriteEmitter 0x800DA934u
+#define func_800DA934 FieldFx_DescendingSpriteEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_CosineEffect 0x800DAB98u
 #define func_800DAB98 FieldFx_CosineEffect  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_CosineEmitter 0x800DACA4u
+#define func_800DACA4 FieldFx_CosineEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SineSweepTriangle 0x800DAF8Cu
+#define func_800DAF8C FieldFx_SineSweepTriangle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SineEmitter 0x800DB0D0u
+#define func_800DB0D0 FieldFx_SineEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DrawDiamondOutline 0x800DB25Cu
+#define func_800DB25C FieldFx_DrawDiamondOutline  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DiamondParticle 0x800DB5F4u
+#define func_800DB5F4 FieldFx_DiamondParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DiamondEmitter 0x800DB6BCu
+#define func_800DB6BC FieldFx_DiamondEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RingFlash 0x800DBA9Cu
+#define func_800DBA9C FieldFx_RingFlash  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_JitterSprite 0x800DBCD8u
+#define func_800DBCD8 FieldFx_JitterSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_JitterSpriteEmitter 0x800DBE6Cu
+#define func_800DBE6C FieldFx_JitterSpriteEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_TwinModelEffect 0x800DC058u
+#define func_800DC058 FieldFx_TwinModelEffect  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RisingJitterSprite 0x800DC5BCu
+#define func_800DC5BC FieldFx_RisingJitterSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RisingJitterEmitter 0x800DC750u
+#define func_800DC750 FieldFx_RisingJitterEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_DriftingEffect 0x800DC910u
 #define func_800DC910 FieldFx_DriftingEffect  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_DriftingEmitter 0x800DCA80u
+#define func_800DCA80 FieldFx_DriftingEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_TiltingSprite 0x800DCCCCu
+#define func_800DCCCC FieldFx_TiltingSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_TiltingSpriteEmitter 0x800DCE94u
+#define func_800DCE94 FieldFx_TiltingSpriteEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_StarFanRingGlow 0x800DD19Cu
+#define func_800DD19C FieldFx_StarFanRingGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ConvergingSprite 0x800DD380u
+#define func_800DD380 FieldFx_ConvergingSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ConvergingEmitter 0x800DD76Cu
+#define func_800DD76C FieldFx_ConvergingEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SettlingSprite 0x800DD9E4u
+#define func_800DD9E4 FieldFx_SettlingSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SettlingEmitter 0x800DDD70u
+#define func_800DDD70 FieldFx_SettlingEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_FlashBurst 0x800DE0A8u
+#define func_800DE0A8 FieldFx_FlashBurst  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_SpinGlow 0x800DE7A8u
+#define func_800DE7A8 FieldFx_SpinGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_GlowFountain 0x800DEA30u
+#define func_800DEA30 FieldFx_GlowFountain  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_FadeParticle 0x800DEFFCu
+#define func_800DEFFC FieldFx_FadeParticle  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_FadeEmitter 0x800DF6ACu
+#define func_800DF6AC FieldFx_FadeEmitter  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_RotatingEffect 0x800DF87Cu
@@ -7111,6 +8063,30 @@
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_PointEmitter 0x800DF9B0u
 #define func_800DF9B0 FieldFx_PointEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_IsOwnerBusy 0x800DFB78u
+#define func_800DFB78 FieldFx_IsOwnerBusy  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_IntSqrt 0x800DFC44u
+#define func_800DFC44 FieldFx_IntSqrt  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_GetFixedDistance3D 0x800DFC80u
+#define func_800DFC80 FieldFx_GetFixedDistance3D  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_GetShortDistance3D 0x800DFD54u
+#define func_800DFD54 FieldFx_GetShortDistance3D  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_GetDistanceXZ 0x800DFE20u
+#define func_800DFE20 FieldFx_GetDistanceXZ  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_FixedVecToLookAngles 0x800DFE94u
+#define func_800DFE94 FieldFx_FixedVecToLookAngles  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_VecToAngle 0x800DFF80u
