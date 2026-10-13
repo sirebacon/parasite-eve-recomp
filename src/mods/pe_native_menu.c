@@ -198,13 +198,9 @@ static void pe_on_discard_confirm(struct CPUState *cpu, uint32_t address) {
     (void)address;
     if (!cpu->gpr[5] || !pe_loaded()) return;
     const PeSelected sel = pe_selected();
-    char msg[80];
-    if (sel.what == 1) {
+    if (sel.what == 1) {                      /* the confirm dialog already said what it pays */
         int unlocks = 0;
-        const uint32_t paid = pe_catalog_dismantle_reward(sel.rec, &unlocks);
-        snprintf(msg, sizeof msg, "Dismantled: +%u Junk, %d new effect(s) (total %u)",
-                 (unsigned)paid, unlocks, (unsigned)pe_loot_junk());
-        psx_mod_osd_message(msg);
+        (void)pe_catalog_dismantle_reward(sel.rec, &unlocks);
     }
 }
 

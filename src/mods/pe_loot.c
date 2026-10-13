@@ -9,10 +9,16 @@
  *     list for the counter; the battle pays floor + EXP / divisor (capped),
  *     plus a no-hit bonus (hits each enemy landed on Aya, +0x9C), plus Junk
  *     stolen during the battle. Fleeing never reaches this hook, so stolen
- *     Junk is forfeited (decision 41). One toast per battle.
+ *     Junk is forfeited (decision 41). The battle's Junk is credited here and
+ *     shown on the game's own items-found screen as one entry, Junk (0x14),
+ *     whose name row reads "Junk xN" (Draw_PrintRawText while Sfx_DrawSlotRow
+ *     draws the list, as the rare drops' gold names; decision 21). Taking it
+ *     moves a real Junk into the bag; it is removed again, uncounted, when the
+ *     list closes. No toast (user, 2026-10-13: in-game messages only).
  *   - Inv_AddItem(0x14) (chests, story gifts, steals): the id is rewritten to
  *     0 before the body runs, which adds nothing and reports success
- *     (Item_LookupBaseData(-1) is out of range), and the Junk is counted --
+ *     (Item_LookupBaseData(-1) is out of range; the game's own pickup message
+ *     still names the Junk), and the Junk is counted --
  *     or banked until the battle is won when it comes from a steal
  *     (Battle_ResolveHitOnTimer). So Junk is taken even with a full bag.
  *   - Wayne's "Discard junk" counts Junk ONCE with the script opcode
@@ -163,6 +169,10 @@ static int s_color_saved;
 static uint32_t s_saved_color, s_saved_color_shaded;
 static uint16_t s_wayne_prev;      /* Wayne's count during a hand-in */
 static int s_wayne_dropped;        /* ... it went down: he made a gun */
+static uint32_t s_junk_shown;      /* this battle's Junk, shown as "Junk xN" */
+static int s_junk_list_seen;       /* ... and its items-found list has been open */
+static uint32_t s_bag_junk_before; /* Junk in the bag when the battle paid out */
+static uint32_t s_junk_label;      /* "Junk xN" in game text, mod memory */
 static uint16_t s_steal_item;      /* Aya just stole this; highlight its name */
 static uint32_t s_steal_frame;
 
@@ -331,6 +341,13 @@ static void pe_charm_battle_won(void) {
     }
 }
 
+static uint32_t pe_bag_junk_count(void) {
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT; ++i)
+        if (psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == PE_ITEM_JUNK) ++n;
+    return n;
+}
+
 /* ---- battle end ------------------------------------------------------------ */
 static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
     (void)address;
@@ -338,8 +355,21 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
     const uint32_t exp = cpu->gpr[4];
     const uint32_t list = cpu->gpr[6];
 
-    /* Vanilla Junk leaves the reward list for the counter (keeps it contiguous). */
+    /* Floor + EXP-scaled, capped, with the no-hit bonus (16, 17, 32). */
+    const uint32_t per = s_tune_exp_per_junk > 0 ? (uint32_t)s_tune_exp_per_junk : 1u;
+    uint32_t earned = (uint32_t)s_tune_floor + exp / per;
+    if (earned > (uint32_t)s_tune_battle_cap) earned = (uint32_t)s_tune_battle_cap;
+    uint32_t hits = 0;
+    for (int s = 0; s < PE_ENEMY_SLOTS; ++s) hits += s_st.hits[s];
+    if (hits < 4) earned += earned * (uint32_t)s_tune_nohit_bonus * (4u - hits) / 400u;
+    earned = earned * s_preset_junk[s_st.preset < 3 ? s_st.preset : 1] / 100u;   /* 39 */
+    if (pe_loot_armor_has(PE_FX_SCAVENGER)) earned += earned / 2u;               /* C1 */
+
+    /* Vanilla Junk leaves the reward list for the counter; the battle's whole
+     * Junk comes back as one "Junk xN" entry at the top (keeps it contiguous). */
     uint32_t vanilla = 0;
+    s_junk_shown = 0;
+    s_junk_list_seen = 0;
     if (pe_ram_pointer(list)) {
         uint32_t keep[PE_REWARD_SLOTS];
         uint32_t kept = 0;
@@ -348,6 +378,14 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
             if ((entry & 0xFFFFu) == 0) break;
             if ((entry & 0xFFFFu) == PE_ITEM_JUNK) ++vanilla;
             else keep[kept++] = entry;
+        }
+        const uint32_t shown = earned + vanilla + s_st.steal_bank;
+        if (shown && kept < PE_REWARD_SLOTS) {
+            for (uint32_t i = kept; i > 0; --i) keep[i] = keep[i - 1];
+            keep[0] = 0xFFFF0000u | PE_ITEM_JUNK;
+            ++kept;
+            s_junk_shown = shown;
+            s_bag_junk_before = pe_bag_junk_count();
         }
         /* Rare drop (and one carried over from a full list) after the vanilla
          * items, as {id, extra = -1}. */
@@ -370,23 +408,9 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
             psx_mod_write_word(list + i * 4u, i < kept ? keep[i] : 0xFFFF0000u);
     }
 
-    /* Floor + EXP-scaled, capped, with the no-hit bonus (16, 17, 32). */
-    const uint32_t per = s_tune_exp_per_junk > 0 ? (uint32_t)s_tune_exp_per_junk : 1u;
-    uint32_t earned = (uint32_t)s_tune_floor + exp / per;
-    if (earned > (uint32_t)s_tune_battle_cap) earned = (uint32_t)s_tune_battle_cap;
-    uint32_t hits = 0;
-    for (int s = 0; s < PE_ENEMY_SLOTS; ++s) hits += s_st.hits[s];
-    if (hits < 4) earned += earned * (uint32_t)s_tune_nohit_bonus * (4u - hits) / 400u;
-    earned = earned * s_preset_junk[s_st.preset < 3 ? s_st.preset : 1] / 100u;   /* 39 */
-    if (pe_loot_armor_has(PE_FX_SCAVENGER)) earned += earned / 2u;               /* C1 */
-
     const uint32_t total = earned + vanilla + s_st.steal_bank;
     s_st.steal_bank = 0;
     pe_add_junk(total);
-
-    char msg[64];
-    snprintf(msg, sizeof msg, "+%u Junk (total %u)", (unsigned)total, (unsigned)s_st.junk);
-    psx_mod_osd_message(msg);
 }
 
 /* ---- gold names for rare drops on the items-found screen ---------------------- */
@@ -408,15 +432,40 @@ static void pe_restore_text_color(void) {
 
 /* Draw_PrintRawText(text) entry: the color is read while the text is drawn, so
  * a rare drop's name row gets gold here and the next text call restores it. */
+/* "Junk xN" in game text: the game's own name for Junk, then " x" and N. */
+static uint32_t pe_junk_label(uint32_t n) {
+    if (!s_junk_label) s_junk_label = psx_mod_alloc_guest_memory(32, 4);
+    const uint32_t name = pe_item_name_text(PE_ITEM_JUNK);
+    if (!s_junk_label || !name) return 0;
+    uint32_t o = 0;
+    for (uint32_t i = 0; i < 16u; ++i) {
+        const uint8_t c = psx_mod_read_byte(name + i);
+        if (c == 0xFFu) break;
+        psx_mod_write_byte(s_junk_label + o++, c);
+    }
+    char digits[12];
+    snprintf(digits, sizeof digits, "%u", (unsigned)n);
+    psx_mod_write_byte(s_junk_label + o++, 0x0Fu);              /* space */
+    psx_mod_write_byte(s_junk_label + o++, 0x30u + ('x' - 'a'));
+    for (const char *d = digits; *d && o < 30u; ++d) psx_mod_write_byte(s_junk_label + o++, (uint8_t)(*d - '0'));
+    psx_mod_write_byte(s_junk_label + o, 0xFFu);
+    return s_junk_label;
+}
+
 static void pe_on_print_raw_text(struct CPUState *cpu, uint32_t address) {
     (void)address;
     pe_restore_text_color();
-    if (!s_rare_shown[0] && !s_rare_shown[1]) return;
+    if (!s_rare_shown[0] && !s_rare_shown[1] && !s_junk_shown) return;
     const uint32_t ra = cpu->gpr[31];
     if (ra < PE_FN_SLOT_ROW_START || ra >= PE_FN_SLOT_ROW_END) return;
     const uint32_t override = psx_mod_read_word(PE_INV_OVERRIDE_LIST);
     if (!override || psx_mod_read_word(PE_ACTIVE_LIST_PTR) != override) return;
     const uint32_t text = cpu->gpr[4];
+    if (s_junk_shown && text == pe_item_name_text(PE_ITEM_JUNK)) {
+        const uint32_t label = pe_junk_label(s_junk_shown);
+        if (label) cpu->gpr[4] = label;
+        return;
+    }
     for (int a = 0; a < 2; ++a) {
         if (!s_rare_shown[a] || pe_item_name_text(s_rare_shown[a]) != text) continue;
         s_saved_color = psx_mod_read_word(PE_DRAW_COLOR);
@@ -445,13 +494,11 @@ static void pe_on_inv_add_item(struct CPUState *cpu, uint32_t address) {
     }
     if (!s_enabled || !pe_game_loaded() || cpu->gpr[4] != PE_ITEM_JUNK) return;
     cpu->gpr[4] = 0;   /* Inv_AddItem(0): adds nothing, returns success */
+    if (s_junk_shown && psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) return;  /* the "Junk xN" line, already paid */
     if (ra >= PE_FN_RESOLVE_HIT_START && ra < PE_FN_RESOLVE_HIT_END) {
         if (s_st.steal_bank < 0xFFFFu) ++s_st.steal_bank;   /* paid on a win (41) */
     } else {
-        pe_add_junk(1);
-        char msg[48];
-        snprintf(msg, sizeof msg, "+1 Junk (total %u)", (unsigned)s_st.junk);
-        psx_mod_osd_message(msg);
+        pe_add_junk(1);                          /* the game's pickup message names it */
     }
 }
 
@@ -599,6 +646,7 @@ static void pe_on_save_deserialize(struct CPUState *cpu, uint32_t address) {
 
 /* ---- per frame -------------------------------------------------------------- */
 static void pe_sweep(void) {
+    if (s_junk_shown) return;                /* the items-found Junk line is still settling */
     uint32_t moved = 0;
     for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT; ++i) {
         const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
@@ -608,12 +656,7 @@ static void pe_sweep(void) {
         const uint32_t a = PE_STORAGE_ADDR + i * 2u;
         if (psx_mod_read_half(a) == PE_ITEM_JUNK) { psx_mod_write_half(a, 0); ++moved; }
     }
-    if (!moved) return;
-    pe_add_junk(moved);
-    char msg[64];
-    snprintf(msg, sizeof msg, "+%u Junk moved to the counter (total %u)",
-             (unsigned)moved, (unsigned)s_st.junk);
-    psx_mod_osd_message(msg);
+    if (moved) pe_add_junk(moved);           /* silently: in-game messages only */
 }
 
 /* Wrap the stolen item's name in the steal message with the textbox's red
@@ -656,6 +699,7 @@ static void pe_loot_switched_off(void) {
     s_handin_active = 0;                     /* a started hand-in still gets its Junk */
     s_st.steal_bank = 0;
     s_rare_shown[0] = s_rare_shown[1] = 0;
+    s_junk_shown = 0;
     pe_restore_text_color();
     s_in_battle = 0;
     if (!pe_game_loaded()) return;
@@ -687,6 +731,21 @@ static void pe_loot_tick(void) {
     if (!s_enabled || !pe_game_loaded()) { s_in_battle = 0; return; }
 
     pe_restore_text_color();
+    if (s_junk_shown) {                      /* the "Junk xN" line: already counted */
+        if (psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
+            s_junk_list_seen = 1;
+        } else if (s_junk_list_seen) {
+            /* Taken into the bag? Take it back out, uncounted. */
+            uint32_t extra = pe_bag_junk_count();
+            extra = extra > s_bag_junk_before ? extra - s_bag_junk_before : 0u;
+            for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT && extra; ++i) {
+                const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
+                if (psx_mod_read_half(a) == PE_ITEM_JUNK) { psx_mod_write_half(a, 0); --extra; }
+            }
+            s_junk_shown = 0;
+            s_junk_list_seen = 0;
+        }
+    }
     if (s_rare_shown[0] || s_rare_shown[1]) {
         const int listed = psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0;
         if (listed) s_rare_list_seen = 1;
@@ -696,6 +755,7 @@ static void pe_loot_tick(void) {
     const int battle = pe_in_battle();
     if (battle && !s_in_battle) {            /* a battle starts */
         s_rare_shown[0] = s_rare_shown[1] = 0;
+        s_junk_shown = 0;
         s_st.steal_bank = 0;
         memset(s_st.hits, 0, sizeof s_st.hits);
     } else if (!battle && s_in_battle) {     /* it ended; a win already paid out */
@@ -778,6 +838,7 @@ static void pe_loot_restored(void) {
     s_handin_left = 0;
     s_list_redirected = 0;
     s_rare_shown[0] = s_rare_shown[1] = 0;
+    s_junk_shown = 0;
     s_color_saved = 0;
 }
 
