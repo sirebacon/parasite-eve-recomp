@@ -60,10 +60,13 @@ strict = true
 #   0x80044B0C Menu_StepEquipScreen - item action accept (Combine)
 #   0x80037870 Menu_DrawTextboxEntries - Wayne's Workshop in his choice box (pe_wayne_menu.c)
 #   0x800661A4 Render_SetGteScreenOffset - right after text boxes: dim our unbuyable rows
+#   0x800647D0 Draw_SetPrimCallback - Mod Catalog row in Aya's main menu (pe_catalog_menu.c)
+#   0x80043DA4 Menu_StepItemSelectScreen - confirm on that row opens the Catalog
 mod_function_entry_funcs = ["0x8005F27C", "0x800299CC", "0x8004B70C", "0x8005D2B4",
                             "0x80053D2C", "0x8003F800", "0x8003FBD8", "0x800194F8",
                             "0x8005A318", "0x80023E14", "0x80052C08", "0x80045110",
-                            "0x80050878", "0x8005F354", "0x80044B0C", "0x80037870", "0x800661A4"]
+                            "0x80050878", "0x8005F354", "0x80044B0C", "0x80037870", "0x800661A4",
+                            "0x800647D0", "0x80043DA4"]
 
 [runtime]
 window_title = "Parasite Eve Recompiled"

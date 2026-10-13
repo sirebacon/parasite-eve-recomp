@@ -45,6 +45,28 @@ uint8_t pe_rebuild_item(int i);
 uint32_t pe_rebuild_price_index(int i);
 int pe_rebuild_index(int i, char *msg, size_t msg_size);
 
+/* The Mod Catalog (pe_loot_catalog.c) for the in-game menu (pe_catalog_menu.c).
+ * which: 0 = the equipped gun, 1 = the equipped armor. */
+enum {
+    PE_CAT_OK, PE_CAT_NO_GAME, PE_CAT_OFF, PE_CAT_NO_ITEM, PE_CAT_NO_SLOTS, PE_CAT_LOCKED,
+    PE_CAT_ALREADY, PE_CAT_BAG, PE_CAT_JUNK, PE_CAT_TOOL, PE_CAT_EMPTY,
+};
+uint32_t pe_cat_record(int which);          /* equipment record, 0 if none */
+int pe_cat_slots(int which);
+int pe_cat_slot_effect(int which, int slot); /* 0 = empty */
+int pe_cat_board_count(int which);
+int pe_cat_board_effect(int which, int i);
+int pe_cat_unlocked(int which, int e);
+uint32_t pe_cat_price(int which, int e);
+int pe_cat_needs_tool(int which, int e);
+int pe_cat_is_bag_mod(int which, int e);
+int pe_cat_install(int which, int slot, int e, int dry_run);  /* PE_CAT_* */
+int pe_cat_remove(int which, int slot, int dry_run);
+
+/* pe_catalog_menu.c: the Catalog's text box is up (its unaffordable rows are
+ * dimmed by pe_wayne_menu.c's recolor). */
+int pe_catalog_menu_open(void);
+
 #ifdef __cplusplus
 }
 #endif

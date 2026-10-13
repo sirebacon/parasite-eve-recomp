@@ -600,43 +600,40 @@ static const char *pe_slot_list_name(unsigned i) {
     return i < (unsigned)n ? s_slot_names[i] : "";
 }
 
-static void pe_install(void) {
-    char msg[96];
-    if (!pe_ready()) return;
-    const uint32_t rec = pe_target_record();
-    if (!rec) { pe_toast(s_target == PE_GUN ? "Equip a gun first" : "Equip armor first"); return; }
+/* Install effect e into `slot` of the equipped gun/armor (`which`), or with
+ * dry_run only say whether it would work. Returns a PE_CAT_* result. */
+static int pe_install_at(int which, int slot, int e, int dry_run) {
+    if (!pe_loaded()) return PE_CAT_NO_GAME;
+    if (!pe_loot_enabled()) return PE_CAT_OFF;
+    const uint32_t rec = pe_equipped_record(which);
+    if (!rec) return PE_CAT_NO_ITEM;
     const int n = pe_mod_count(rec);
-    if (n <= 0 || s_slot_choice < 0 || s_slot_choice >= n) { pe_toast("This item has no mod slots"); return; }
-    pe_grid_count();
-    const int e = pe_grid_effect();
-    if (!pe_unlocked(s_target, e)) { pe_toast("Locked: dismantle an item with this effect"); return; }
+    if (n <= 0 || slot < 0 || slot >= n) return PE_CAT_NO_SLOTS;
+    if (e <= 0 || !pe_unlocked(which, e)) return PE_CAT_LOCKED;
 
-    const uint32_t slot_addr = rec + REC_MODS + (uint32_t)s_slot_choice;
+    const uint32_t slot_addr = rec + REC_MODS + (uint32_t)slot;
     const int current = psx_mod_read_byte(slot_addr) & 0x1F;
-    if (current == e) { pe_toast("Already installed there"); return; }
-    if (pe_is_bag_mod(s_target, current)) { pe_toast("Bag mods can't be replaced here"); return; }
-    const int group = pe_mod_group(s_target, e);
+    if (current == e) return PE_CAT_ALREADY;
+    if (pe_is_bag_mod(which, current)) return PE_CAT_BAG;
+    const int group = pe_mod_group(which, e);
     if (group) {
         for (int m = 0; m < n; ++m) {
-            if (m == s_slot_choice) continue;
+            if (m == slot) continue;
             const int other = psx_mod_read_byte(rec + REC_MODS + (uint32_t)m);
-            if ((other & 0x1F) && (other >> 5) == group && pe_is_bag_mod(s_target, other & 0x1F)) {
-                pe_toast("Bag mods can't be replaced here"); return;
-            }
+            if ((other & 0x1F) && (other >> 5) == group && pe_is_bag_mod(which, other & 0x1F))
+                return PE_CAT_BAG;
         }
     }
 
-    const int tier = pe_effect_tier(s_target, e);
+    const int tier = pe_effect_tier(which, e);
     const uint32_t price = (uint32_t)pe_tier_price(tier);
-    if (pe_loot_junk() < price) {
-        snprintf(msg, sizeof msg, "Need %u Junk (have %u)", (unsigned)price, (unsigned)pe_loot_junk());
-        pe_toast(msg); return;
-    }
-    if (tier == 2 && !pe_take_tool(1)) { pe_toast("Needs a Tool (or a Tool Kit)"); return; }
+    if (pe_loot_junk() < price) return PE_CAT_JUNK;
+    if (tier == 2 && !pe_take_tool(1)) return PE_CAT_TOOL;
+    if (dry_run) return PE_CAT_OK;
 
     if (group) {                              /* the game's rule: one per group */
         for (int m = 0; m < n; ++m) {
-            if (m == s_slot_choice) continue;
+            if (m == slot) continue;
             const uint32_t a = rec + REC_MODS + (uint32_t)m;
             const int other = psx_mod_read_byte(a);
             if ((other & 0x1F) && (other >> 5) == group) psx_mod_write_byte(a, 0);
@@ -645,10 +642,50 @@ static void pe_install(void) {
     psx_mod_write_byte(slot_addr, (uint8_t)((group << 5) | e));
     pe_loot_spend_junk(price);
     if (tier == 2) pe_take_tool(0);
-    snprintf(msg, sizeof msg, "%s: installed %s (-%u Junk%s)%s",
-             pe_item_name(psx_mod_read_byte(rec + REC_ITEM_ID)), pe_effect_name(s_target, e),
-             (unsigned)price, tier == 2 ? ", Tool" : "",
-             pe_is_bag_mod(s_target, e) ? ". Re-equip to grow the bag" : "");
+    return PE_CAT_OK;
+}
+
+static int pe_remove_at(int which, int slot, int dry_run) {
+    if (!pe_loaded()) return PE_CAT_NO_GAME;
+    if (!pe_loot_enabled()) return PE_CAT_OFF;
+    const uint32_t rec = pe_equipped_record(which);
+    if (!rec) return PE_CAT_NO_ITEM;
+    const int n = pe_mod_count(rec);
+    if (n <= 0 || slot < 0 || slot >= n) return PE_CAT_NO_SLOTS;
+    const uint32_t a = rec + REC_MODS + (uint32_t)slot;
+    const int e = psx_mod_read_byte(a) & 0x1F;
+    if (!e) return PE_CAT_EMPTY;
+    if (pe_is_bag_mod(which, e)) return PE_CAT_BAG;
+    if (!dry_run) psx_mod_write_byte(a, 0);
+    return PE_CAT_OK;
+}
+
+static void pe_install(void) {
+    char msg[96];
+    if (!pe_ready()) return;
+    pe_grid_count();
+    const int e = pe_grid_effect();
+    const uint32_t rec = pe_target_record();
+    const int tier = e > 0 ? pe_effect_tier(s_target, e) : 0;
+    const uint32_t price = (uint32_t)pe_tier_price(tier);
+    switch (pe_install_at(s_target, s_slot_choice, e, 0)) {
+    case PE_CAT_OK:
+        snprintf(msg, sizeof msg, "%s: installed %s (-%u Junk%s)%s",
+                 pe_item_name(psx_mod_read_byte(rec + REC_ITEM_ID)), pe_effect_name(s_target, e),
+                 (unsigned)price, tier == 2 ? ", Tool" : "",
+                 pe_is_bag_mod(s_target, e) ? ". Re-equip to grow the bag" : "");
+        break;
+    case PE_CAT_NO_ITEM: snprintf(msg, sizeof msg, s_target == PE_GUN ? "Equip a gun first" : "Equip armor first"); break;
+    case PE_CAT_NO_SLOTS: snprintf(msg, sizeof msg, "This item has no mod slots"); break;
+    case PE_CAT_LOCKED: snprintf(msg, sizeof msg, "Locked: dismantle an item with this effect"); break;
+    case PE_CAT_ALREADY: snprintf(msg, sizeof msg, "Already installed there"); break;
+    case PE_CAT_BAG: snprintf(msg, sizeof msg, "Bag mods can't be replaced here"); break;
+    case PE_CAT_JUNK:
+        snprintf(msg, sizeof msg, "Need %u Junk (have %u)", (unsigned)price, (unsigned)pe_loot_junk());
+        break;
+    case PE_CAT_TOOL: snprintf(msg, sizeof msg, "Needs a Tool (or a Tool Kit)"); break;
+    default: snprintf(msg, sizeof msg, "Can't install now"); break;
+    }
     pe_toast(msg);
 }
 
@@ -675,18 +712,40 @@ static void pe_remove(void) {
     char msg[64];
     if (!pe_ready()) return;
     const uint32_t rec = pe_target_record();
-    if (!rec) { pe_toast(s_target == PE_GUN ? "Equip a gun first" : "Equip armor first"); return; }
-    const int n = pe_mod_count(rec);
-    if (n <= 0 || s_slot_choice < 0 || s_slot_choice >= n) return;
-    const uint32_t a = rec + REC_MODS + (uint32_t)s_slot_choice;
-    const int e = psx_mod_read_byte(a) & 0x1F;
-    if (!e) { pe_toast("That slot is empty"); return; }
-    if (pe_is_bag_mod(s_target, e)) { pe_toast("Bag mods can't be removed here"); return; }
-    psx_mod_write_byte(a, 0);
-    snprintf(msg, sizeof msg, "%s: removed %s (stays unlocked)",
-             pe_item_name(psx_mod_read_byte(rec + REC_ITEM_ID)), pe_effect_name(s_target, e));
+    const int e = rec && s_slot_choice >= 0 && s_slot_choice < pe_mod_count(rec)
+        ? psx_mod_read_byte(rec + REC_MODS + (uint32_t)s_slot_choice) & 0x1F : 0;
+    switch (pe_remove_at(s_target, s_slot_choice, 0)) {
+    case PE_CAT_OK:
+        snprintf(msg, sizeof msg, "%s: removed %s (stays unlocked)",
+                 pe_item_name(psx_mod_read_byte(rec + REC_ITEM_ID)), pe_effect_name(s_target, e));
+        break;
+    case PE_CAT_NO_ITEM: snprintf(msg, sizeof msg, s_target == PE_GUN ? "Equip a gun first" : "Equip armor first"); break;
+    case PE_CAT_EMPTY: snprintf(msg, sizeof msg, "That slot is empty"); break;
+    case PE_CAT_BAG: snprintf(msg, sizeof msg, "Bag mods can't be removed here"); break;
+    default: return;
+    }
     pe_toast(msg);
 }
+
+/* ---- pe_loot.h: the in-game Mod Catalog (pe_catalog_menu.c) -------------------- */
+uint32_t pe_cat_record(int which) { return pe_equipped_record(which); }
+int pe_cat_slots(int which) {
+    const uint32_t rec = pe_equipped_record(which);
+    return rec ? pe_mod_count(rec) : 0;
+}
+int pe_cat_slot_effect(int which, int slot) {
+    const uint32_t rec = pe_equipped_record(which);
+    if (!rec || slot < 0 || slot >= pe_mod_count(rec)) return 0;
+    return psx_mod_read_byte(rec + REC_MODS + (uint32_t)slot) & 0x1F;
+}
+int pe_cat_board_count(int which) { return pe_effect_count(which); }
+int pe_cat_board_effect(int which, int i) { return pe_board_effect(which, i); }
+int pe_cat_unlocked(int which, int e) { return e > 0 && e < 32 && pe_unlocked(which, e); }
+uint32_t pe_cat_price(int which, int e) { return (uint32_t)pe_tier_price(pe_effect_tier(which, e)); }
+int pe_cat_needs_tool(int which, int e) { return pe_effect_tier(which, e) == 2; }
+int pe_cat_is_bag_mod(int which, int e) { return pe_is_bag_mod(which, e); }
+int pe_cat_install(int which, int slot, int e, int dry_run) { return pe_install_at(which, slot, e, dry_run); }
+int pe_cat_remove(int which, int slot, int dry_run) { return pe_remove_at(which, slot, dry_run); }
 
 static int pe_readonly(int value) { (void)value; return 0; }
 
