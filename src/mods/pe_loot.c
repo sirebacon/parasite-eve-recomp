@@ -61,6 +61,11 @@
  *     doubles pity progress for 10 won battles; the rare table also unlocks
  *     the four economy mods straight into the Mod Catalog and drops Lucky
  *     Charms; an empty steal banks a little Junk, paid on a win (19, 35).
+ *     An economy mod has no item of its own: it shows on the items-found
+ *     screen as a Mod Permit entry (0x37) whose name row reads "<mod> mod" in
+ *     gold; taking it unlocks the mod (the permit leaves the bag at once),
+ *     leaving it loses it (it can roll again). It never shares a list with a
+ *     real Mod Permit (it waits for the next battle instead).
  *   - Saved in the save's free tail (0x1C90 of the 8 KB block, covered by the
  *     game's CRC) and in save states (psx_mod_register_state "pe.loot").
  *     A new game resets it (Inv_DispatchCommand 1117).
@@ -188,6 +193,10 @@ static uint32_t s_junk_shown;      /* this battle's Junk, shown as "Junk xN" */
 static int s_junk_list_seen;       /* ... and its items-found list has been open */
 static uint32_t s_bag_junk_before; /* Junk in the bag when the battle paid out */
 static uint32_t s_junk_label;      /* "Junk xN" in game text, mod memory */
+static int s_econ_shown = -1;      /* economy mod index on the list (as a Mod Permit) */
+static uint32_t s_permits_before;  /* Mod Permits in the bag when it was listed */
+static int s_econ_list_seen;
+static uint32_t s_econ_label;      /* "<mod> mod" in game text, mod memory */
 static uint16_t s_steal_item;      /* Aya just stole this; highlight its name */
 static uint32_t s_steal_frame;
 
@@ -262,11 +271,13 @@ static const struct { uint8_t weight; uint16_t item; } s_rare_table[] = {
     {  5, PE_ITEM_LUCKY_CHARM },/* C7 */
 };
 static const struct { int effect; const char *name; } s_econ_mods[] = {
-    { PE_FX_SCAVENGER, "Increases Junk found" },
-    { PE_FX_LUCKY_FIND, "Finds rare items more often" },
-    { PE_FX_SALVAGER, "More Junk from dismantling" },
-    { PE_FX_BARGAIN, "Lowers shop prices" },
+    { PE_FX_SCAVENGER, "Scavenger mod" },
+    { PE_FX_LUCKY_FIND, "Lucky Find mod" },
+    { PE_FX_SALVAGER, "Salvager mod" },
+    { PE_FX_BARGAIN, "Bargain mod" },
 };
+#define PE_ITEM_MOD_PERMIT 0x37u           /* carries an economy mod on the items-found screen */
+#define PE_ECON_DROP       0x8000u         /* a rare "add": 0x8000 | econ index */
 #define PE_ECON_COUNT 4
 /* Offense, Range, Bullet Cap, Defense, CR Evade, PE: tier 1 at these ids. */
 static const uint16_t s_booster_base[] = { 0x1Du, 0x21u, 0x25u, 0x29u, 0x2Du, 0x31u };
@@ -305,16 +316,8 @@ static uint16_t pe_pick_rare(uint32_t exp) {
     for (size_t i = 0; i < sizeof s_rare_table / sizeof s_rare_table[0]; ++i) {
         if (s_rare_table[i].item == PE_RARE_ECON && !econ) continue;   /* all found */
         if (r < s_rare_table[i].weight) {
-            if (s_rare_table[i].item == PE_RARE_ECON) {
-                /* Straight into the Mod Catalog: no carrier item (C5). */
-                const int pick = missing[pe_rand() % (uint32_t)econ];
-                char msg[80];
-                pe_catalog_unlock_armor(s_econ_mods[pick].effect);
-                snprintf(msg, sizeof msg, "Rare find: armor mod \"%s\" (Mod Catalog)",
-                         s_econ_mods[pick].name);
-                psx_mod_osd_message(msg);
-                return 0;
-            }
+            if (s_rare_table[i].item == PE_RARE_ECON)   /* shown as "<mod> mod", taken to unlock */
+                return (uint16_t)(PE_ECON_DROP | (uint32_t)missing[pe_rand() % (uint32_t)econ]);
             uint16_t item = s_rare_table[i].item;
             /* A Tool is wasted with the Tool Kit (either kit makes Tools free),
              * a Super Tool with the Super Tool Kit: a stat booster instead. */
@@ -372,12 +375,14 @@ static void pe_charm_battle_won(void) {
     }
 }
 
-static uint32_t pe_bag_junk_count(void) {
+static uint32_t pe_bag_count_of(uint16_t v) {
     uint32_t n = 0;
     for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT; ++i)
-        if (psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == PE_ITEM_JUNK) ++n;
+        if (psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == v) ++n;
     return n;
 }
+
+static uint32_t pe_bag_junk_count(void) { return pe_bag_count_of(PE_ITEM_JUNK); }
 
 /* ---- battle end ------------------------------------------------------------ */
 static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
@@ -427,11 +432,24 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
         s_st.rare_carry = 0;
         s_rare_shown[0] = s_rare_shown[1] = 0;
         s_rare_list_seen = 0;
+        s_econ_shown = -1;
+        s_econ_list_seen = 0;
         for (int a = 0; a < 2; ++a) {
             if (!adds[a]) continue;
+            uint16_t id = adds[a];
+            if (id & PE_ECON_DROP) {
+                /* Carried by a Mod Permit entry: never next to a real one, never two. */
+                if (s_econ_shown >= 0 || adds[1 - a] == PE_ITEM_MOD_PERMIT || kept >= PE_REWARD_SLOTS) {
+                    if (!s_st.rare_carry) s_st.rare_carry = id;
+                    continue;
+                }
+                s_econ_shown = (int)(id & 0xFFu) % PE_ECON_COUNT;
+                s_permits_before = pe_bag_count_of(PE_ITEM_MOD_PERMIT);
+                id = PE_ITEM_MOD_PERMIT;
+            }
             if (kept < PE_REWARD_SLOTS) {
-                keep[kept++] = 0xFFFF0000u | adds[a];
-                s_rare_shown[a] = adds[a];           /* drawn in gold */
+                keep[kept++] = 0xFFFF0000u | id;
+                s_rare_shown[a] = id;                /* drawn in gold */
             } else {
                 s_st.rare_carry = adds[a];           /* next battle */
             }
@@ -464,6 +482,22 @@ static void pe_restore_text_color(void) {
 
 /* Draw_PrintRawText(text) entry: the color is read while the text is drawn, so
  * a rare drop's name row gets gold here and the next text call restores it. */
+/* ASCII letters, digits and spaces to game text, in mod memory. */
+static uint32_t pe_ascii_label(uint32_t *slot, const char *ascii) {
+    if (!*slot) *slot = psx_mod_alloc_guest_memory(32, 4);
+    if (!*slot) return 0;
+    uint32_t o = 0;
+    for (; *ascii && o < 30u; ++ascii, ++o) {
+        const char c = *ascii;
+        const uint8_t g = (c >= 'A' && c <= 'Z') ? (uint8_t)(0x10 + c - 'A') :
+                          (c >= 'a' && c <= 'z') ? (uint8_t)(0x30 + c - 'a') :
+                          (c >= '0' && c <= '9') ? (uint8_t)(c - '0') : 0x0Fu;
+        psx_mod_write_byte(*slot + o, g);
+    }
+    psx_mod_write_byte(*slot + o, 0xFFu);
+    return *slot;
+}
+
 /* "Junk xN" in game text: the game's own name for Junk, then " x" and N. */
 static uint32_t pe_junk_label(uint32_t n) {
     if (!s_junk_label) s_junk_label = psx_mod_alloc_guest_memory(32, 4);
@@ -498,8 +532,12 @@ static void pe_on_print_raw_text(struct CPUState *cpu, uint32_t address) {
         if (label) cpu->gpr[4] = label;
         return;
     }
+    if (s_econ_shown >= 0 && text == pe_item_name_text(PE_ITEM_MOD_PERMIT)) {
+        const uint32_t label = pe_ascii_label(&s_econ_label, s_econ_mods[s_econ_shown].name);
+        if (label) cpu->gpr[4] = label;      /* and gold, below */
+    }
     for (int a = 0; a < 2; ++a) {
-        if (!s_rare_shown[a] || pe_item_name_text(s_rare_shown[a]) != text) continue;
+        if (!s_rare_shown[a] || pe_item_name_text(s_rare_shown[a]) != text) continue;   /* text: before any swap */
         s_saved_color = psx_mod_read_word(PE_DRAW_COLOR);
         s_saved_color_shaded = psx_mod_read_word(PE_DRAW_COLOR_SHADED);
         psx_mod_write_word(PE_DRAW_COLOR, PE_RARE_COLOR);
@@ -733,6 +771,7 @@ static void pe_loot_switched_off(void) {
     s_st.steal_bank = 0;
     s_rare_shown[0] = s_rare_shown[1] = 0;
     s_junk_shown = 0;
+    s_econ_shown = -1;
     pe_restore_text_color();
     s_in_battle = 0;
     if (!pe_game_loaded()) return;
@@ -784,6 +823,20 @@ static void pe_loot_tick(void) {
             s_junk_list_seen = 0;
         }
     }
+    if (s_econ_shown >= 0) {                 /* the "<mod> mod" entry, not taken yet */
+        if (pe_bag_count_of(PE_ITEM_MOD_PERMIT) > s_permits_before) {
+            for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT; ++i) {
+                const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
+                if (psx_mod_read_half(a) == PE_ITEM_MOD_PERMIT) { psx_mod_write_half(a, 0); break; }
+            }
+            pe_catalog_unlock_armor(s_econ_mods[s_econ_shown].effect);
+            s_econ_shown = -1;
+        } else if (psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
+            s_econ_list_seen = 1;
+        } else if (s_econ_list_seen) {
+            s_econ_shown = -1;               /* left behind: lost (it can roll again) */
+        }
+    }
     if (s_rare_shown[0] || s_rare_shown[1]) {
         const int listed = psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0;
         if (listed) s_rare_list_seen = 1;
@@ -794,6 +847,7 @@ static void pe_loot_tick(void) {
     if (battle && !s_in_battle) {            /* a battle starts */
         s_rare_shown[0] = s_rare_shown[1] = 0;
         s_junk_shown = 0;
+        s_econ_shown = -1;
         s_boss_battle = 0;
         s_st.steal_bank = 0;
         memset(s_st.hits, 0, sizeof s_st.hits);
@@ -876,6 +930,7 @@ static void pe_loot_restored(void) {
     s_list_redirected = 0;
     s_rare_shown[0] = s_rare_shown[1] = 0;
     s_junk_shown = 0;
+    s_econ_shown = -1;
     s_color_saved = 0;
 }
 
