@@ -9,12 +9,15 @@
  *     list for the counter; the battle pays floor + EXP / divisor (capped),
  *     plus a no-hit bonus (hits each enemy landed on Aya, +0x9C), plus Junk
  *     stolen during the battle. Fleeing never reaches this hook, so stolen
- *     Junk is forfeited (decision 41). The battle's Junk is credited here and
- *     shown on the game's own items-found screen as one entry, Junk (0x14),
- *     whose name row reads "Junk xN" (Draw_PrintRawText while Sfx_DrawSlotRow
- *     draws the list, as the rare drops' gold names; decision 21). Taking it
- *     moves a real Junk into the bag; it is removed again, uncounted, when the
- *     list closes. No toast (user, 2026-10-13: in-game messages only).
+ *     Junk is forfeited (decision 41). The battle's Junk is shown on the game's
+ *     own items-found screen as one entry, Junk (0x14), whose name row reads
+ *     "Junk xN" (Draw_PrintRawText while Sfx_DrawSlotRow draws the list, as the
+ *     rare drops' gold names; decision 21). As with vanilla drops it's the
+ *     player's choice (user, 2026-10-13): taking it moves a real Junk into the
+ *     bag, which goes straight back out while all N go into the counter; left
+ *     behind, it's lost, and a full bag can't take it. With no room in the list
+ *     for the entry, the Junk is credited directly. No toast (in-game messages
+ *     only).
  *   - Inv_AddItem(0x14) (chests, story gifts, steals): the id is rewritten to
  *     0 before the body runs, which adds nothing and reports success
  *     (Item_LookupBaseData(-1) is out of range; the game's own pickup message
@@ -410,7 +413,7 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
 
     const uint32_t total = earned + vanilla + s_st.steal_bank;
     s_st.steal_bank = 0;
-    pe_add_junk(total);
+    if (!s_junk_shown) pe_add_junk(total);   /* else paid when the "Junk xN" entry is taken */
 }
 
 /* ---- gold names for rare drops on the items-found screen ---------------------- */
@@ -494,7 +497,11 @@ static void pe_on_inv_add_item(struct CPUState *cpu, uint32_t address) {
     }
     if (!s_enabled || !pe_game_loaded() || cpu->gpr[4] != PE_ITEM_JUNK) return;
     cpu->gpr[4] = 0;   /* Inv_AddItem(0): adds nothing, returns success */
-    if (s_junk_shown && psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) return;  /* the "Junk xN" line, already paid */
+    if (s_junk_shown && psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
+        pe_add_junk(s_junk_shown);           /* the "Junk xN" entry taken */
+        s_junk_shown = 0;
+        return;
+    }
     if (ra >= PE_FN_RESOLVE_HIT_START && ra < PE_FN_RESOLVE_HIT_END) {
         if (s_st.steal_bank < 0xFFFFu) ++s_st.steal_bank;   /* paid on a win (41) */
     } else {
@@ -731,19 +738,23 @@ static void pe_loot_tick(void) {
     if (!s_enabled || !pe_game_loaded()) { s_in_battle = 0; return; }
 
     pe_restore_text_color();
-    if (s_junk_shown) {                      /* the "Junk xN" line: already counted */
-        /* Taken into the bag? Take it straight back out, uncounted, so it reads
-         * as gone into the counter (a full bag can't take it: nothing lost). */
+    if (s_junk_shown) {                      /* the "Junk xN" entry, not taken yet */
+        /* Taken into the bag: straight back out, and all N into the counter. */
         uint32_t extra = pe_bag_junk_count();
         extra = extra > s_bag_junk_before ? extra - s_bag_junk_before : 0u;
+        int taken = 0;
         for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT && extra; ++i) {
             const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
-            if (psx_mod_read_half(a) == PE_ITEM_JUNK) { psx_mod_write_half(a, 0); --extra; }
+            if (psx_mod_read_half(a) == PE_ITEM_JUNK) { psx_mod_write_half(a, 0); --extra; taken = 1; }
         }
-        if (psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
+        if (taken) {
+            pe_add_junk(s_junk_shown);
+            s_junk_shown = 0;
+            s_junk_list_seen = 0;
+        } else if (psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
             s_junk_list_seen = 1;
         } else if (s_junk_list_seen) {
-            s_junk_shown = 0;                /* the list closed */
+            s_junk_shown = 0;                /* the list closed with it left behind: lost */
             s_junk_list_seen = 0;
         }
     }
