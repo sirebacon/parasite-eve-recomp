@@ -30,10 +30,17 @@
  * Time (Menu_MainUpdate): Aya's turn gauge fills 0..9000 by scaledOffense a
  * battle frame, which an action sets to stat22 * scale[action] / 10
  * (Battle_SetupEnemyAnims); a gun attack is action 6, scale 4, the same for
- * every gun. stat22 = 50 + her Active Time row (Aya_LookupLevelStats). The
- * battle runs at 30 frames a second (Draw_RenderFrame: VSync(2)), so a turn
- * after attacking takes 9000 / (stat22 * 0.4) / 30 = 750 / stat22 seconds.
- * Haste and Slow (battle-only) aren't counted.
+ * every gun. stat22 = 50 + her Active Time row (Aya_LookupLevelStats). So a
+ * turn after attacking takes C / (stat22 * 0.4) seconds, where C = fill time
+ * x fill rate = 9000 / battle frames a second.
+ *
+ * C is measured, not assumed: on every guest VBlank (game time, whatever the
+ * host speed) during a battle, a fill of Aya's gauge from empty to full at a
+ * steady rate (no Haste or Slow: stateFlags +0x4C & 0x1C0, no pause) gives
+ * C = seconds x scaledOffense. Until the first such fill it is 300 (the
+ * battle loop's VSync(2): 30 frames a second). So a 60 fps logic patch, or a
+ * speed patch that changes the gauge's step, is picked up by itself. Haste
+ * and Slow (battle-only) aren't counted in the figure.
  *
  * The gun's record: the equipped gun if the name matches it, else the first
  * matching gun in Aya's bag, else the item's base data.
@@ -60,7 +67,14 @@
 #define PE_PLAYER_PTR_ADDR       0x8009D254u
 #define COMBATANT_ATTACK         0x1Eu
 #define COMBATANT_STAT22         0x22u     /* 50 + Active Time row: the gauge speed */
-#define PE_TURN_SECONDS_X_STAT22 750u      /* 9000 / (stat22 * 4 / 10) / 30 fps */
+#define COMBATANT_GAUGE          0x10u     /* turn gauge 0..9000 */
+#define COMBATANT_FILL_RATE      0x24u     /* scaledOffense: gauge step a battle frame */
+#define COMBATANT_STATE_FLAGS    0x4Cu     /* & 0xC0: Slow, & 0x100: Haste */
+#define PE_GAUGE_FULL            9000u
+#define PE_GAME_BLOCK_ADDR       0x8009D1A0u   /* & 2: in battle */
+#define PE_GAME_STATE_FLAGS      0x8009D1A0u
+#define PE_VBLANKS_X10_PER_SEC   599u          /* NTSC 59.94 */
+#define PE_DEFAULT_CLOCK_X10     3000u         /* C x10: 9000 / 30 fps */
 
 #define REC_ITEM_ID   0x04u
 #define REC_KIND      0x06u
@@ -76,6 +90,8 @@
 
 static int s_show_power = 1;
 static uint32_t s_text_buf;            /* mod memory for the swapped string */
+static uint32_t s_clock_x10 = PE_DEFAULT_CLOCK_X10;   /* C x10, measured in battle */
+static uint32_t s_clock_samples;
 
 static int pe_loaded(void) {
     return psx_mod_game_started() && psx_mod_read_half(PE_MAX_HP_ADDR) != 0;
@@ -180,7 +196,46 @@ static unsigned pe_dps_x10(uint32_t rec) {
         const unsigned cycle = ((unsigned)capacity + shots - 1u) / shots + 1u;   /* + the reload */
         turn_x10 = (uint64_t)commands * (unsigned)capacity * (unsigned)per_shot * 10u / cycle;
     }
-    return (unsigned)(turn_x10 * stat22 / PE_TURN_SECONDS_X_STAT22);
+    /* DPS = a turn's damage / (C / (stat22 * 0.4)) */
+    return (unsigned)(turn_x10 * stat22 * 4u / s_clock_x10);
+}
+
+/* ---- the battle clock ------------------------------------------------------- */
+/* Every guest VBlank: time a steady fill of Aya's gauge from empty to full. */
+static void pe_clock_vblank(void) {
+    static uint32_t vblanks, start, last_change;
+    static unsigned prev_gauge, rate;
+    static int timing, clean;
+    ++vblanks;
+    if (!pe_loaded() || !(psx_mod_read_word(PE_GAME_BLOCK_ADDR) & 2u)) { timing = 0; return; }
+    const uint32_t player = psx_mod_read_word(PE_PLAYER_PTR_ADDR);
+    if (!pe_ram_pointer(player)) { timing = 0; return; }
+    const uint32_t core = psx_mod_read_word(player);
+    if (!pe_ram_pointer(core)) { timing = 0; return; }
+    const unsigned gauge = psx_mod_read_half(core + COMBATANT_GAUGE);
+    const unsigned fill = psx_mod_read_half(core + COMBATANT_FILL_RATE);
+    const uint32_t flags = psx_mod_read_word(core + COMBATANT_STATE_FLAGS);
+
+    if (gauge < prev_gauge || (gauge == 0 && !timing)) {     /* emptied: an action */
+        timing = 1; clean = 1; start = vblanks; last_change = vblanks; rate = fill;
+    } else if (timing) {
+        if (gauge != prev_gauge) last_change = vblanks;
+        if ((flags & 0x1C0u) || fill != rate || fill == 0) clean = 0;   /* Haste / Slow / new rate */
+        if (vblanks - last_change > 6u) clean = 0;                     /* paused (a menu) */
+        if (gauge >= PE_GAUGE_FULL) {
+            if (clean && vblanks > start) {
+                /* C x10 = seconds x rate x10 = vblanks / 59.94 x rate x10 */
+                const uint32_t c_x10 = (uint32_t)((uint64_t)(vblanks - start) * rate * 100u /
+                                                  PE_VBLANKS_X10_PER_SEC);
+                if (c_x10 >= 500u && c_x10 <= 20000u) {
+                    s_clock_x10 = s_clock_samples ? (s_clock_x10 * 3u + c_x10) / 4u : c_x10;
+                    ++s_clock_samples;
+                }
+            }
+            timing = 0;
+        }
+    }
+    prev_gauge = gauge;
 }
 
 /* ---- the hook --------------------------------------------------------------- */
@@ -217,12 +272,19 @@ static void pe_on_print_raw_text(struct CPUState *cpu, uint32_t address) {
 }
 
 /* Called from pe_mod_menu.c, which fixes the order of the PE page. */
+static int pe_get_turn_tenths(void) { return (int)(s_clock_x10 * 10u / (50u * 4u)); }
+static int pe_readonly(int value) { (void)value; return 0; }
+
 void pe_weapon_power_menu_register(void) {
     (void)pe_menu_register_toggle(0, "Weapon power",
         "Shows gun damage per second in menus.", &s_show_power, 0);
+    (void)pe_menu_register_live_int("Debug", "DPS clock (turn, 0.1 s)",
+        "After an attack at Active Time 1; measured in battle.", 0, 100000, 1,
+        pe_get_turn_tenths, pe_readonly);
 }
 
 PSX_MOD_CONSTRUCTOR(pe_register_weapon_power_hook) {
     (void)psx_mod_register_function_entry_plugin("pe.weapon-power",
         PE_DRAW_PRINT_RAW_TEXT, pe_on_print_raw_text);
+    (void)psx_mod_register_vblank_plugin("pe.weapon-power.clock", pe_clock_vblank);
 }
