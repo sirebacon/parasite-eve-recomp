@@ -27,11 +27,18 @@
  * locked ones as "Unknown") and an info panel (Junk, Tools, what the
  * highlighted effect costs or why it can't go in); the title bar shows the
  * highlighted effect's description from the game's own text. Installing asks
- * first: Cross on an effect turns the info panel into the question (the
- * effect, its price, what it takes out of the gun or armor) and the title bar
- * into "Cross: install, Circle: cancel"; Cross again installs, Circle or Left
- * or moving the cursor drops it. Remove is free and the mod stays unlocked, so
- * it doesn't ask. Each panel is a
+ * first, in the game's own OK / Cancel dialog (the one Discard and Tune Up
+ * use): a mode-1 node 0x29 drawn by Menu_DrawItemLabel (0x80044E14, the first
+ * line from g_MenuItemLabelBuffer) and stepped by Menu_ConfirmDialogHandler
+ * (0x80044E98), with a mode-2 child 0x29 (Menu_DrawActionOptionList, text base
+ * 5: OK / Cancel), built as MenuWidget_CreateSimpleNode / CreateNode would from
+ * descriptors 0x29. The other lines (price, what it takes out, the game's own
+ * "Is this OK?") are drawn under the first, glyph by glyph as
+ * Draw_AllocTexturedQuad draws, when Draw_PrintCenteredTextInWidth prints the
+ * label; the panel grows 14 px a line. The handler reports through
+ * g_MenuConfirmCallback, which we point at MenuWidget_GetCurrentNode: its entry
+ * hook, called from the handler, reads a1 (1 = OK) and installs. Remove is
+ * free and the mod stays unlocked, so it doesn't ask. Each panel is a
  * mode-1 node with a mode-2 list child, written into the widget pool as
  * MenuWidget_CreateSimpleNode / MenuWidget_CreateNode would. The lists step
  * with Menu_StepScrollCursor (cursor, scrolling, the move sound) and draw with
@@ -122,6 +129,17 @@
 #define PE_TITLE_ACTION9      0x31u         /* Str_LookupTable10 index row 9 would show */
 #define PE_TITLE_BP           0x30u         /* "Distribute Bonus Points" */
 #define PE_HEADER_COLOR       0x00308CA8u   /* yellow, as the menus' labels */
+#define PE_FN_DRAW_ITEM_LABEL 0x80044E14u   /* Menu_DrawItemLabel: a dialog's text */
+#define PE_FN_CONFIRM_DIALOG  0x80044E98u   /* Menu_ConfirmDialogHandler */
+#define PE_FN_CONFIRM_DIALOG_END 0x80044F8Cu
+#define PE_ACTION_TEXT_BASE   0x8009CF14u   /* g_MenuActionTextBase: 5 = OK / Cancel */
+#define PE_CONFIRM_CALLBACK   0x8009CFA8u   /* g_MenuConfirmCallback */
+#define PE_ITEM_LABEL_BUF     0x800A1980u   /* g_MenuItemLabelBuffer (2 x 0x40) */
+#define PE_ITEM_PRIM_HANDLES  0x8009CFA0u   /* g_MenuItemPrimListHandles */
+#define PE_SIMPLE_DESC        0x80092478u   /* g_MenuWidgetSimpleDescriptors, 0x10 each */
+#define PE_GRID_DESC          0x80092888u   /* g_MenuWidgetGridDescriptors, 0x20 each */
+#define PE_DIALOG             0x29u         /* the yes/no dialog's descriptors */
+#define PE_DLG_LINES          5
 
 /* MenuWidgetNode */
 #define N_NEXT        0x00u
@@ -183,9 +201,10 @@ static struct {
     int prev_slot_row;                        /* for skipping the name rows */
     uint32_t pending;                         /* buttons for next frame */
     int note_effects_row;                     /* the note belongs to this row */
-    int confirm;                              /* asking about an install */
-    int confirm_row;                          /* ... of the effect on this row */
+    int confirm;                              /* the install dialog is up */
+    int confirm_row;                          /* ... for the effect on this row */
     int confirm_effect;
+    uint32_t dlg, dlg_list;                   /* its nodes */
     char note[48];
     uint32_t hidden[PE_HIDDEN_MAX];           /* status panels we hid */
     uint32_t hidden_selected[PE_HIDDEN_MAX];
@@ -203,6 +222,9 @@ static int s_help_pending;
 static int s_blank_badge;                     /* the next sprite is an econ badge */
 static int s_color_saved;
 static uint32_t s_saved_color, s_saved_color_dim;
+static PeText s_dlg_text[PE_DLG_LINES];       /* the dialog's lines after the first */
+static int s_dlg_lines;
+static uint32_t s_is_this_ok;                 /* the game's "Is this OK?" (table 4) */
 
 static int pe_loaded(void) {
     return psx_mod_game_started() && psx_mod_read_half(PE_MAX_HP_ADDR) != 0;
@@ -462,25 +484,6 @@ static void pe_row_text(int panel, int i, PeText *left, PeText *right, int *dim,
             break;
         case R_LOCKED: pe_t_str(left, "Unknown"); *dim = 1; break;
         default: break;
-        }
-    } else if (s_cm.confirm) {                /* the question */
-        const Row r = pe_effect_row(s_cm.confirm_row);
-        if (i == 0) {
-            pe_t_str(left, "Install ");
-            pe_t_str(left, pe_fx_name(r.which, r.effect));
-            pe_t_num(right, (unsigned)pe_cat_price(r.which, r.effect));
-            pe_t_str(right, pe_cat_needs_tool(r.which, r.effect) ? " Junk, Tool" : " Junk");
-        } else {
-            int out[4];
-            const int k = pe_cat_replaces(r.which, r.slot, r.effect, out, 4);
-            if (!k) pe_t_str(left, "Into the empty slot");
-            else {
-                pe_t_str(left, "Replaces ");
-                for (int j = 0; j < k; ++j) {
-                    if (j) pe_t_str(left, ", ");
-                    pe_t_str(left, pe_fx_name(r.which, out[j]));
-                }
-            }
         }
     } else if (i == 0) {
         int tools, kit;
@@ -751,6 +754,10 @@ static void pe_show_panels(void) {
 
 /* ---- open / close ------------------------------------------------------------------ */
 static void pe_close(void) {
+    if (s_cm.confirm) {
+        pe_node_free(s_cm.dlg_list);
+        pe_node_free(s_cm.dlg);
+    }
     for (int p = 0; p < P_COUNT; ++p) {
         if (s_cm.list[p]) pe_node_free(s_cm.list[p]);
         if (s_cm.panel[p]) pe_node_free(s_cm.panel[p]);
@@ -809,6 +816,111 @@ static void pe_note(const char *text) {
     s_cm.note_effects_row = (int)psx_mod_read_word(s_cm.list[P_EFFECTS] + N_CURSOR_Y);
 }
 
+/* The game's own "Is this OK?" line, found once in text table 4. */
+static uint32_t pe_find_is_this_ok(void) {
+    static const char want[] = "Is this OK";
+    if (s_is_this_ok) return s_is_this_ok;
+    for (unsigned id = 0; id < 256; ++id) {
+        const uint32_t s = pe_text_entry(0x04u, id);
+        if (!s) break;
+        unsigned k = 0;
+        while (want[k] && psx_mod_read_byte(s + k) == pe_glyph(want[k])) ++k;
+        if (!want[k]) return s_is_this_ok = s;
+    }
+    return 0;
+}
+
+static void pe_open_dialog(Row r, int row) {
+    if (pe_free_nodes() < 2) { pe_note("Can't ask now"); return; }
+    PeText first;
+    memset(&first, 0, sizeof first);
+    memset(s_dlg_text, 0, sizeof s_dlg_text);
+    s_dlg_lines = 0;
+    pe_t_str(&first, pe_fx_name(r.which, r.effect));
+    pe_t_str(&first, " will be installed");
+    PeText *l = &s_dlg_text[s_dlg_lines++];
+    pe_t_str(l, "for ");
+    pe_t_num(l, (unsigned)pe_cat_price(r.which, r.effect));
+    pe_t_str(l, pe_cat_needs_tool(r.which, r.effect) ? " Junk and a Tool" : " Junk");
+    int out[4];
+    const int k = pe_cat_replaces(r.which, r.slot, r.effect, out, 2);
+    if (k == 1) {
+        l = &s_dlg_text[s_dlg_lines++];
+        pe_t_str(l, pe_fx_name(r.which, out[0]));
+        pe_t_str(l, " will be taken out");
+    } else if (k == 2) {
+        l = &s_dlg_text[s_dlg_lines++];
+        pe_t_str(l, pe_fx_name(r.which, out[0]));
+        pe_t_str(l, " and ");
+        pe_t_str(l, pe_fx_name(r.which, out[1]));
+        pe_t_str(&s_dlg_text[s_dlg_lines++], "will be taken out");
+    }
+    const uint32_t ok = pe_find_is_this_ok();
+    if (ok) {
+        l = &s_dlg_text[s_dlg_lines++];
+        for (unsigned i = 0; i < 40 && psx_mod_read_byte(ok + i) != G_END; ++i) pe_t_byte(l, psx_mod_read_byte(ok + i));
+    }
+    /* First line: the game prints it from the label buffer. */
+    for (unsigned i = 0; i < first.n && i < 0x3Eu; ++i) psx_mod_write_byte(PE_ITEM_LABEL_BUF + i, first.b[i]);
+    psx_mod_write_byte(PE_ITEM_LABEL_BUF + (first.n < 0x3Eu ? first.n : 0x3Eu), G_END);
+    psx_mod_write_word(PE_ITEM_PRIM_HANDLES, 0);
+    int width = pe_text_width(first.b, first.n);
+    for (int i = 0; i < s_dlg_lines; ++i) {
+        const int w = pe_text_width(s_dlg_text[i].b, s_dlg_text[i].n);
+        if (w > width) width = w;
+    }
+    if (width < 120) width = 120;
+    const int height = 50 + 14 * s_dlg_lines;
+
+    /* MenuWidget_CreateSimpleNode(0x29, effects list, 0, 1) */
+    const uint32_t sd = PE_SIMPLE_DESC + PE_DIALOG * 0x10u, gd = PE_GRID_DESC + PE_DIALOG * 0x20u;
+    const uint32_t dlg = pe_node_alloc();
+    const uint32_t list = pe_node_alloc();
+    if (!dlg || !list) { if (list) pe_node_free(list); if (dlg) pe_node_free(dlg); return; }
+    psx_mod_write_word(dlg + N_PARENT, s_cm.list[P_EFFECTS]);
+    psx_mod_write_word(dlg + N_MODE, 1);
+    psx_mod_write_word(dlg + N_SELECTED, PE_DIALOG);
+    psx_mod_write_word(dlg + N_GRID_W, (uint32_t)(width + 20));
+    psx_mod_write_word(dlg + N_ROWS, (uint32_t)height);
+    psx_mod_write_word(dlg + N_X, (uint32_t)((300 - width) >> 1));
+    {
+        const int dx = (int)psx_mod_read_word(sd + 0u), dy = (int)psx_mod_read_word(sd + 4u);
+        psx_mod_write_word(dlg + N_Y, (uint32_t)(dx ? dy : (dy ? 0x50 : 0x78) - (height >> 1)));
+    }
+    psx_mod_write_word(dlg + N_CURSOR_X, 1);  /* the others dim, as for any dialog */
+    psx_mod_write_word(dlg + N_DRAW, PE_FN_DRAW_ITEM_LABEL);
+    psx_mod_write_word(dlg + N_UPDATE, PE_FN_CONFIRM_DIALOG);
+    /* MenuWidget_CreateNode(0x29, dialog, dialog) */
+    psx_mod_write_word(list + N_PARENT, dlg);
+    psx_mod_write_word(dlg + N_CHILD0, list);
+    psx_mod_write_word(list + N_MODE, 2);
+    psx_mod_write_word(list + N_SELECTED, PE_DIALOG);
+    psx_mod_write_word(list + N_AUX, PE_DIALOG);
+    psx_mod_write_word(list + N_UPDATE, PE_FN_STEP_SCROLL);
+    psx_mod_write_word(list + N_DRAW, PE_FN_OPTION_LIST);
+    psx_mod_write_word(list + N_GRID_W, psx_mod_read_word(gd + 0x08u));
+    psx_mod_write_word(list + N_X_LIMIT, psx_mod_read_word(gd + 0x08u));
+    psx_mod_write_word(list + N_ROWS, psx_mod_read_word(gd + 0x0Cu));
+    psx_mod_write_word(list + N_ROW_CAP, psx_mod_read_word(gd + 0x0Cu));
+    psx_mod_write_word(list + N_Y_LIMIT, psx_mod_read_word(gd + 0x10u));
+    psx_mod_write_word(list + N_CELL_W, psx_mod_read_word(gd + 0x14u));
+    psx_mod_write_word(list + N_ROW_H, psx_mod_read_word(gd + 0x18u));
+    psx_mod_write_word(list + N_LAYOUT, psx_mod_read_word(gd + 0x1Cu));
+    psx_mod_write_word(list + N_TARGET_X, 0xFFFFFFFFu);
+    psx_mod_write_word(list + N_TARGET_Y, 0xFFFFFFFFu);
+    psx_mod_write_word(list + N_X, (uint32_t)((width + 20 - 0x80) >> 1));
+    psx_mod_write_word(list + N_Y, (uint32_t)(height - 0x14));
+    psx_mod_write_word(PE_ACTION_TEXT_BASE, 5);
+    psx_mod_write_word(PE_CONFIRM_CALLBACK, PE_FN_SAY_YES);
+    psx_mod_write_word(PE_CURRENT_NODE, list);
+    s_cm.dlg = dlg;
+    s_cm.dlg_list = list;
+    s_cm.confirm = 1;
+    s_cm.confirm_row = row;
+    s_cm.confirm_effect = r.effect;
+    s_cm.note[0] = '\0';
+}
+
 static void pe_pick_effect(void) {
     char msg[48], why[48];
     const int row = (int)psx_mod_read_word(s_cm.list[P_EFFECTS] + N_CURSOR_Y);
@@ -824,14 +936,16 @@ static void pe_pick_effect(void) {
     if (r.kind == R_LOCKED) { pe_note("Dismantle gear that has it"); return; }
     if (r.kind != R_EFFECT) return;
     const char *blocked = pe_effect_blocker(r, why, sizeof why);
-    if (!blocked[0] && (!s_cm.confirm || s_cm.confirm_row != row || s_cm.confirm_effect != r.effect)) {
-        s_cm.confirm = 1;                     /* ask first; Cross again installs */
-        s_cm.confirm_row = row;
-        s_cm.confirm_effect = r.effect;
-        s_cm.note[0] = '\0';
-        return;
-    }
-    s_cm.confirm = 0;
+    if (!blocked[0]) { pe_open_dialog(r, row); return; }   /* OK installs (pe_install_row) */
+    pe_note(blocked);
+}
+
+/* The dialog said OK: install the effect on `row`, if it still can go in. */
+static void pe_install_row(int row) {
+    char msg[48], why[48];
+    const Row r = pe_effect_row(row);
+    if (r.kind != R_EFFECT || r.effect != s_cm.confirm_effect) return;
+    const char *blocked = pe_effect_blocker(r, why, sizeof why);
     if (blocked[0] || pe_cat_install(r.which, r.slot, r.effect, 0) != PE_CAT_OK) {
         pe_note(blocked[0] ? blocked : "Can't install now");
         return;
@@ -862,11 +976,7 @@ static void pe_act(uint32_t buttons) {
             pe_fit_list(P_EFFECTS);
         }
     } else {
-        if (buttons & (IN_CANCEL | IN_LEFT)) {
-            if (s_cm.confirm) { s_cm.confirm = 0; return; }   /* "no": back to the list */
-            pe_focus(P_SLOTS);
-            return;
-        }
+        if (buttons & (IN_CANCEL | IN_LEFT)) { pe_focus(P_SLOTS); return; }
         if (buttons & IN_CONFIRM) pe_pick_effect();
     }
 }
@@ -909,14 +1019,17 @@ static void pe_on_frame(struct CPUState *cpu, uint32_t address) {
         memset(&s_cm, 0, sizeof s_cm);
         return;
     }
+    if (s_cm.confirm) {                       /* the dialog: it reports through our hook */
+        if (cur == s_cm.dlg_list && psx_mod_read_word(s_cm.dlg + N_UPDATE) == PE_FN_CONFIRM_DIALOG) return;
+        s_cm.confirm = 0;                     /* gone some other way */
+        if (cur == s_cm.dlg_list) psx_mod_write_word(PE_CURRENT_NODE, s_cm.list[P_EFFECTS]);
+        return;
+    }
     if (cur != s_cm.list[P_SLOTS] && cur != s_cm.list[P_EFFECTS]) { pe_close(); return; }
     const uint32_t buttons = s_cm.pending;
     s_cm.pending = 0;
     if (buttons) pe_act(buttons);
     if (!s_cm.open) return;
-    if (s_cm.confirm && (s_cm.focus != P_EFFECTS ||
-                         (int)psx_mod_read_word(s_cm.list[P_EFFECTS] + N_CURSOR_Y) != s_cm.confirm_row))
-        s_cm.confirm = 0;
     pe_skip_names();
     pe_fit_list(P_EFFECTS);
 }
@@ -970,6 +1083,14 @@ static void pe_on_item_action(struct CPUState *cpu, uint32_t address) {
     (void)address;
     if (!s_cm.open) return;
     const uint32_t ra = cpu->gpr[31];
+    if (s_cm.confirm && ra >= PE_FN_CONFIRM_DIALOG && ra < PE_FN_CONFIRM_DIALOG_END) {
+        /* g_MenuConfirmCallback(node, ok): the dialog has freed its nodes. */
+        s_cm.confirm = 0;
+        psx_mod_write_word(PE_CONFIRM_CALLBACK, 0);
+        psx_mod_write_word(PE_CURRENT_NODE, s_cm.list[P_EFFECTS]);
+        if (cpu->gpr[5]) pe_install_row(s_cm.confirm_row);
+        return;
+    }
     if (ra < PE_FN_STEP_SCROLL || ra >= PE_FN_STEP_SCROLL_END) return;
     if (psx_mod_read_word(PE_CURRENT_NODE) != s_cm.list[s_cm.focus]) return;
     s_cm.pending |= IN_CONFIRM;
@@ -1002,6 +1123,18 @@ static void pe_on_centered_text(struct CPUState *cpu, uint32_t address) {
         psx_mod_write_word(PE_TEXT_COLOR, s_saved_color);
         psx_mod_write_word(PE_TEXT_COLOR_DIM, s_saved_color_dim);
         s_color_saved = 0;
+    }
+    if (s_cm.confirm && cpu->gpr[4] == PE_ITEM_LABEL_BUF) {   /* our dialog: the other lines */
+        const uint32_t x0 = psx_mod_read_word(PE_TEXT_X), y0 = psx_mod_read_word(PE_TEXT_Y);
+        const int box = (int)cpu->gpr[5];
+        const uint32_t color = psx_mod_read_word(PE_TEXT_COLOR);
+        for (int i = 0; i < s_dlg_lines; ++i) {
+            const PeText *l = &s_dlg_text[i];
+            uint32_t x = x0 + (uint32_t)((box - (pe_text_width(l->b, l->n) + 4)) >> 1);
+            for (unsigned k = 0; k < l->n; ++k)
+                x += (uint32_t)(pe_emit_glyph(l->b[k], x, y0 + 14u * (uint32_t)(i + 1), color) + 1);
+        }
+        return;
     }
     if (!s_drawing || s_drawing_row < 0) return;
     const int p = pe_our_list(s_drawing);
@@ -1053,9 +1186,7 @@ static void pe_on_help_text(struct CPUState *cpu, uint32_t address) {
 static uint32_t pe_description(void) {
     PeText t;
     memset(&t, 0, sizeof t);
-    if (s_cm.confirm) {
-        pe_t_str(&t, "Cross: install    Circle: cancel");
-    } else if (s_cm.focus == P_EFFECTS) {
+    if (s_cm.focus == P_EFFECTS) {
         const Row r = pe_effect_row((int)psx_mod_read_word(s_cm.list[P_EFFECTS] + N_CURSOR_Y));
         if (r.kind == R_EFFECT) return pe_fx_description(r.which, r.effect);
         if (r.kind == R_REMOVE) pe_t_str(&t, "Take the mod out of this slot");
