@@ -42,8 +42,11 @@
  *
  * Slots show the game's own mod badges (sprites 0x22 + effect for guns,
  * 0x36 + effect for armor, 0x46 empty; 32x12), written into the frame's
- * packet arena as Draw_AllocSprite does; our economy armor effects (17-20)
- * have no badge and show their name. Sounds come from the game: the focused
+ * packet arena as Draw_AllocSprite does. Our economy armor effects (17-20)
+ * have no badge art, so they get a text badge in the same 32x12 spot: a
+ * framed box (two flat rectangles) and a short label ("Barg", "Scav",
+ * "Luck", "Salv") in the menu font, its glyphs built as
+ * Draw_AllocTexturedQuad builds them, one pixel tighter. Sounds come from the game: the focused
  * list keeps a dummy swap mark one column to the right of its cursor, so
  * Menu_StepScrollCursor treats Cross as a swap and calls the list's
  * itemAction -- MenuWidget_GetCurrentNode (nonzero: the confirm sound) when
@@ -54,7 +57,7 @@
  *
  * Vanilla screens draw an armor mod's badge as 0x36 + effect too
  * (Menu_DrawActionCodeItem), which for 17-20 is Aya's portrait and other
- * sprites: those draw the blank sprite 0x79 instead.
+ * sprites: those draw the blank sprite 0x79 and our text badge instead.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -90,6 +93,10 @@
 #define PE_TEXT_X             0x8009D124u   /* g_TextCursorX */
 #define PE_TEXT_Y             0x8009D128u
 #define PE_GLYPH_DESC_SLOT    0x800A8030u   /* resident directory +0x08 */
+#define PE_MENU_FONT_CLUT     0x089Cu       /* Draw_AllocTexturedQuad's font */
+#define PE_MENU_FONT_TPAGE    0x0005u       /* GetTPage(0, 0, 0x140, 0) */
+#define PE_BADGE_FRAME        0x00707070u   /* text badge colours (BBGGRR) */
+#define PE_BADGE_FILL         0x00402814u
 #define PE_SPRITE_BP          0x5Eu         /* action 8's icon */
 #define PE_SPRITE_ROW9        0x5Fu         /* what our row draws */
 #define PE_ACTIVE_WIDGET      0x8009CEF4u   /* g_MenuActiveWidget: list being drawn */
@@ -309,6 +316,18 @@ static uint32_t pe_fx_description(int which, int e) {
     return pe_text_entry(0x10u, (unsigned)(which == WHICH_GUN ? e - 1 : e + 19));
 }
 
+/* Our text badges for the economy armor effects. */
+static const char *pe_text_badge(int which, int e) {
+    if (which != WHICH_ARMOR) return 0;
+    switch (e) {
+    case 17: return "Barg";
+    case 18: return "Scav";
+    case 19: return "Luck";
+    case 20: return "Salv";
+    default: return 0;
+    }
+}
+
 /* The game's badge for an effect, or 0 (our economy armor effects). */
 static uint32_t pe_badge(int which, int e) {
     if (e <= 0) return PE_SPRITE_NO_MOD;
@@ -414,7 +433,6 @@ static void pe_row_text(int panel, int i, PeText *left, PeText *right, int *dim,
             const int e = pe_cat_slot_effect(r.which, r.slot);
             pe_t_str(left, " ");
             pe_t_num(left, (unsigned)r.slot + 1u);
-            if (!pe_badge(r.which, e)) { pe_t_str(left, "  "); pe_t_str(left, pe_fx_name(r.which, e)); }
             *dim = pe_cat_is_bag_mod(r.which, e);
             break;
         }
@@ -495,6 +513,77 @@ static void pe_emit_sprite(uint32_t index, uint32_t x, uint32_t y, int dim) {
     psx_mod_write_word(PE_PACKET_CURSOR, cursor + 28u);
 }
 
+
+/* Link a packet of `words` words (tag included) into the current ordering
+ * entry; returns its address, or 0 when the arena is full. */
+static uint32_t pe_packet(uint32_t words) {
+    const uint32_t cursor = psx_mod_read_word(PE_PACKET_CURSOR);
+    const uint32_t arena = psx_mod_read_word(PE_PACKET_ARENA);
+    const uint32_t ot = psx_mod_read_word(PE_ORDERING_ENTRY);
+    if (!pe_ram_pointer(cursor) || !pe_ram_pointer(ot) || cursor + words * 4u >= arena + 0x4000u) return 0;
+    const uint32_t link = psx_mod_read_word(ot);
+    psx_mod_write_word(cursor, ((words - 1u) << 24) | (link & 0x00FFFFFFu));
+    psx_mod_write_word(ot, (link & 0xFF000000u) | (cursor & 0x00FFFFFFu));
+    psx_mod_write_word(PE_PACKET_CURSOR, cursor + words * 4u);
+    return cursor;
+}
+
+static void pe_emit_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
+    const uint32_t p = pe_packet(4);
+    if (!p) return;
+    psx_mod_write_word(p + 4u, (color & 0x00FFFFFFu) | 0x60000000u);  /* TILE */
+    psx_mod_write_half(p + 8u, (uint16_t)x);
+    psx_mod_write_half(p + 10u, (uint16_t)y);
+    psx_mod_write_half(p + 12u, (uint16_t)w);
+    psx_mod_write_half(p + 14u, (uint16_t)h);
+}
+
+/* One menu-font glyph at (x, y); returns its advance, one pixel tighter. */
+static int pe_emit_glyph(uint8_t glyph, uint32_t x, uint32_t y, uint32_t color) {
+    const uint32_t metrics = PE_STR_ORIGIN + psx_mod_read_word(PE_GLYPH_METRICS_SLOT);
+    const int m = psx_mod_read_byte(metrics + glyph);
+    const int width = (m >> 4) & 15, left = m & 15;
+    const int spacing = (glyph < 10 || glyph == 15) ? 2 : 1;
+    if (glyph != 0x0F) {
+        const uint32_t p = pe_packet(10);
+        if (!p) return width + spacing - 1;
+        const uint32_t u = (uint32_t)((glyph % 21) * 12 + left), v = (uint32_t)((glyph / 21) * 12);
+        const uint32_t x0 = x + (uint32_t)(spacing >> 1), y0 = y + 1u;
+        psx_mod_write_word(p + 4u, (color & 0x00FFFFFFu) | 0x2C000000u);  /* POLY_FT4 */
+        const uint32_t xs[4] = { x0, x0 + (uint32_t)width, x0, x0 + (uint32_t)width };
+        const uint32_t ys[4] = { y0, y0, y0 + 12u, y0 + 12u };
+        const uint32_t us[4] = { u, u + (uint32_t)width, u, u + (uint32_t)width };
+        const uint32_t vs[4] = { v, v, v + 12u, v + 12u };
+        for (uint32_t k = 0; k < 4; ++k) {
+            psx_mod_write_half(p + 8u + k * 8u, (uint16_t)xs[k]);
+            psx_mod_write_half(p + 10u + k * 8u, (uint16_t)ys[k]);
+            psx_mod_write_byte(p + 12u + k * 8u, (uint8_t)us[k]);
+            psx_mod_write_byte(p + 13u + k * 8u, (uint8_t)vs[k]);
+        }
+        psx_mod_write_half(p + 14u, PE_MENU_FONT_CLUT);
+        psx_mod_write_half(p + 22u, PE_MENU_FONT_TPAGE);
+    }
+    return width + spacing - 1;
+}
+
+/* A text badge in a 32x12 badge spot at (x, y). Packets draw in the reverse
+ * of linking, so the label goes in first and the frame last. */
+static void pe_emit_text_badge(const char *label, uint32_t x, uint32_t y, int dim) {
+    uint8_t g[8];
+    unsigned n = 0;
+    int width = 0;
+    for (; label[n] && n < sizeof g; ++n) {
+        g[n] = pe_glyph(label[n]);
+        const int m = psx_mod_read_byte(PE_STR_ORIGIN + psx_mod_read_word(PE_GLYPH_METRICS_SLOT) + g[n]);
+        width += ((m >> 4) & 15) + ((g[n] < 10 || g[n] == 15) ? 2 : 1) - 1;
+    }
+    const uint32_t text = psx_mod_read_word(dim ? PE_TEXT_COLOR_DIM : PE_TEXT_COLOR);
+    const uint32_t shade = dim ? 1u : 0u;
+    uint32_t cx = x + (uint32_t)((32 - width) / 2);
+    for (unsigned i = 0; i < n; ++i) cx += (uint32_t)pe_emit_glyph(g[i], cx, y - 1u, text);
+    pe_emit_rect(x + 1u, y + 1u, 30u, 10u, (PE_BADGE_FILL >> shade) & 0x7F7F7Fu);
+    pe_emit_rect(x, y, 32u, 12u, (PE_BADGE_FRAME >> shade) & 0x7F7F7Fu);
+}
 
 /* ---- the widget pool -------------------------------------------------------------- */
 static int pe_free_nodes(void) {
@@ -851,7 +940,11 @@ static void pe_on_code_item(struct CPUState *cpu, uint32_t address) {
     if (!pe_ram_pointer(data) || psx_mod_read_word(PE_ITEM_IS_GUN)) return;
     const uint32_t row = cpu->gpr[4];
     if (row >= psx_mod_read_byte(data + 0x14u)) return;
-    if ((psx_mod_read_byte(data + 0x15u + row) & 0x1Fu) >= 17u) s_blank_badge = 1;
+    const char *label = pe_text_badge(WHICH_ARMOR, psx_mod_read_byte(data + 0x15u + row) & 0x1F);
+    if (!label) return;
+    s_blank_badge = 1;
+    pe_emit_text_badge(label, psx_mod_read_word(PE_TEXT_X), psx_mod_read_word(PE_TEXT_Y),
+                       (int)psx_mod_read_word(PE_TEXT_DIMMED));
 }
 
 static void pe_on_option_row(struct CPUState *cpu, uint32_t address) {
@@ -889,9 +982,11 @@ static void pe_on_centered_text(struct CPUState *cpu, uint32_t address) {
     if (p == P_SLOTS) {
         const Row r = pe_slot_row(row);
         const uint32_t badge = r.kind == R_SLOT ? pe_badge(r.which, pe_cat_slot_effect(r.which, r.slot)) : 0;
-        if (badge)
-            pe_emit_sprite(badge, psx_mod_read_word(PE_TEXT_X) + 20u, psx_mod_read_word(PE_TEXT_Y) + 1u,
-                           dim || psx_mod_read_word(PE_TEXT_DIMMED));
+        const uint32_t bx = psx_mod_read_word(PE_TEXT_X) + 20u, by = psx_mod_read_word(PE_TEXT_Y) + 1u;
+        const int bdim = dim || psx_mod_read_word(PE_TEXT_DIMMED);
+        const char *label = r.kind == R_SLOT ? pe_text_badge(r.which, pe_cat_slot_effect(r.which, r.slot)) : 0;
+        if (badge) pe_emit_sprite(badge, bx, by, bdim);
+        else if (label) pe_emit_text_badge(label, bx, by, bdim);
     }
     pe_put(s_rowbuf, &left);
     cpu->gpr[4] = s_rowbuf;
