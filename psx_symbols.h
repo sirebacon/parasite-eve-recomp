@@ -1909,8 +1909,8 @@
 #define func_80045110 Menu_OnItemDiscardConfirm  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_800451D0 0x800451D0u
-#define func_800451D0 func_800451D0  /* alias */
+#define PSX_FN_Menu_CreateAmmoSpendPanel 0x800451D0u
+#define func_800451D0 Menu_CreateAmmoSpendPanel  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_CreateEquipItemSelectionView 0x8004542Cu
@@ -1961,8 +1961,8 @@
 #define func_80046ABC Menu_CreateSkillActionScreen  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_80046B58 0x80046B58u
-#define func_80046B58 func_80046B58  /* alias */
+#define PSX_FN_Menu_SkillActionHandler 0x80046B58u
+#define func_80046B58 Menu_SkillActionHandler  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_StepItemDetailPanel2 0x80046C20u
@@ -1977,12 +1977,12 @@
 #define func_80046DFC Menu_CreateInvSwapView  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_800471BC 0x800471BCu
-#define func_800471BC func_800471BC  /* alias */
+#define PSX_FN_Menu_DrawEquipOptionsList 0x800471BCu
+#define func_800471BC Menu_DrawEquipOptionsList  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_800471E4 0x800471E4u
-#define func_800471E4 func_800471E4  /* alias */
+#define PSX_FN_Menu_EquipOptionsInputHandler 0x800471E4u
+#define func_800471E4 Menu_EquipOptionsInputHandler  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_EquipGridHandler 0x80047354u
@@ -2029,8 +2029,8 @@
 #define func_80047C50 Menu_DrawEquipStats  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_80047D74 0x80047D74u
-#define func_80047D74 func_80047D74  /* alias */
+#define PSX_FN_Menu_EquipStatsInputHandler 0x80047D74u
+#define func_80047D74 Menu_EquipStatsInputHandler  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_CreateItemDetailView 0x80047E94u
@@ -2077,8 +2077,8 @@
 #define func_8004905C Menu_DrawBonusPointSlotValue  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_800490B0 0x800490B0u
-#define func_800490B0 func_800490B0  /* alias */
+#define PSX_FN_Menu_ExitBonusPointAllocation 0x800490B0u
+#define func_800490B0 Menu_ExitBonusPointAllocation  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_StatSlotInputHandler 0x800491C8u
@@ -2129,8 +2129,8 @@
 #define func_8004B970 Menu_DrawExpReviewPanel  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_8004BB80 0x8004BB80u
-#define func_8004BB80 func_8004BB80  /* alias */
+#define PSX_FN_Menu_ConfirmExpAllocation 0x8004BB80u
+#define func_8004BB80 Menu_ConfirmExpAllocation  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_CreateLevelUpBanner 0x8004BC80u
@@ -2185,8 +2185,8 @@
 #define func_8004D030 Menu_HandleDeferredCallbackInput  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_8004D18C 0x8004D18Cu
-#define func_8004D18C func_8004D18C  /* alias */
+#define PSX_FN_Menu_OpenStartupMemCardDialog 0x8004D18Cu
+#define func_8004D18C Menu_OpenStartupMemCardDialog  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_MemCard_GetDialogMode 0x8004D27Cu
@@ -2221,8 +2221,8 @@
 #define func_8004DAA4 Menu_StepItemGrid2  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_8004DCA4 0x8004DCA4u
-#define func_8004DCA4 func_8004DCA4  /* alias */
+#define PSX_FN_Menu_OpenSaveLoadEntryPoint 0x8004DCA4u
+#define func_8004DCA4 Menu_OpenSaveLoadEntryPoint  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Menu_OpenRenameScreen 0x8004DD64u
@@ -2761,8 +2761,8 @@
 #define func_80057C54 Inv_SwapSlots  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_80057D18 0x80057D18u
-#define func_80057D18 func_80057D18  /* alias */
+#define PSX_FN_Inv_ClearActiveListSlot 0x80057D18u
+#define func_80057D18 Inv_ClearActiveListSlot  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Inv_RemoveActiveListItem 0x80057D30u
@@ -3353,8 +3353,8 @@
 #define func_800649D0 MenuWidget_SetColumnLayoutMode  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_80064A54 0x80064A54u
-#define func_80064A54 func_80064A54  /* alias */
+#define PSX_FN_MenuWidget_SaveColumnLayout 0x80064A54u
+#define func_80064A54 MenuWidget_SaveColumnLayout  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_MenuWidget_ApplyColumnLayout 0x80064AC0u
@@ -3705,8 +3705,8 @@
 #define func_8006E7E8 CdRom_PollReady  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
-#define PSX_FN_func_8006E834 0x8006E834u
-#define func_8006E834 func_8006E834  /* alias */
+#define PSX_FN_CdRom_LoadInitialImage 0x8006E834u
+#define func_8006E834 CdRom_LoadInitialImage  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_Draw_InitDisplay 0x8006E9A0u
@@ -6929,6 +6929,10 @@
 #define func_800C6B90 FieldFx_IsPlayerWithinRadius  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_RegisterOwnerContact 0x800C6C18u
+#define func_800C6C18 FieldFx_RegisterOwnerContact  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_GetStatus 0x800C6CE0u
 #define func_800C6CE0 FieldFx_GetStatus  /* alias */
 
@@ -7067,6 +7071,10 @@
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_GlowEffect_UpdateCoreGlow 0x800C8C80u
 #define func_800C8C80 GlowEffect_UpdateCoreGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_GlowEffect_UpdateGroundGlow 0x800C8CBCu
+#define func_800C8CBC GlowEffect_UpdateGroundGlow  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_GlowEffect_UpdateHaloGlow 0x800C8CF8u
@@ -7301,6 +7309,10 @@
 #define func_800CBBBC FourLayerGlow_UpdateFlareLayers  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FourLayerGlow_UpdateTwinGlow 0x800CBBF0u
+#define func_800CBBF0 FourLayerGlow_UpdateTwinGlow  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FourLayerGlow_UpdateGroundGlow 0x800CBC2Cu
 #define func_800CBC2C FourLayerGlow_UpdateGroundGlow  /* alias */
 
@@ -7393,6 +7405,10 @@
 #define func_800CC974 PointSprite_UpdateRadialParticles  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_PointSprite_UpdateGroundRing 0x800CCA40u
+#define func_800CCA40 PointSprite_UpdateGroundRing  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_PointSprite_UpdateBillboardFlash 0x800CCA78u
 #define func_800CCA78 PointSprite_UpdateBillboardFlash  /* alias */
 
@@ -7435,6 +7451,10 @@
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_BurstEffect_InitTarget 0x800CCFA0u
 #define func_800CCFA0 BurstEffect_InitTarget  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_BurstEffect_InitGroundGlow 0x800CD07Cu
+#define func_800CD07C BurstEffect_InitGroundGlow  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_InitRandomOffsetPairs 0x800CD0BCu
@@ -7817,6 +7837,10 @@
 #define func_800D4EA4 FieldFx_PulsingStarFan  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_ScatterBurstSprite 0x800D5010u
+#define func_800D5010 FieldFx_ScatterBurstSprite  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_ScatterBurstEmitter 0x800D5290u
 #define func_800D5290 FieldFx_ScatterBurstEmitter  /* alias */
 
@@ -7847,6 +7871,10 @@
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_RingPulse 0x800D6A1Cu
 #define func_800D6A1C FieldFx_RingPulse  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_BouncingSpinSprite 0x800D6C58u
+#define func_800D6C58 FieldFx_BouncingSpinSprite  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_BouncingSpinEmitter 0x800D6E3Cu
@@ -8063,6 +8091,10 @@
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_PointEmitter 0x800DF9B0u
 #define func_800DF9B0 FieldFx_PointEmitter  /* alias */
+
+/* confirmed: decomp:sym.main.txt */
+#define PSX_FN_FieldFx_LoopLinkedAnimation 0x800DFB20u
+#define func_800DFB20 FieldFx_LoopLinkedAnimation  /* alias */
 
 /* confirmed: decomp:sym.main.txt */
 #define PSX_FN_FieldFx_IsOwnerBusy 0x800DFB78u
