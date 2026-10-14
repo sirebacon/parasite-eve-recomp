@@ -52,6 +52,15 @@
  * Like the game's own screens it hides Aya's status panels (0x12, 0x18, 0x2D:
  * hidden while cursor_y is set, MenuWidget_UpdateAndDraw) and the HP overlay.
  *
+ * KEY ITEMS (2026-10-14): a second extra row opens a Key Items screen in the
+ * same panels: the key item pocket (pe_key_items.c), one item a row with its
+ * own inventory icon (base record +0 iconId - 1, as Menu_DrawSlotRow draws
+ * it) and name, and its game description in the title bar. View only. Every
+ * row past the menu's last action draws action 9 (Menu_DrawItemSlot stops at
+ * index 9), so the order is: ..., Mod Catalog, Key Items, Distribute Bonus
+ * Points (the BP row is handed to the game as its own row); the row's icon is
+ * the Dressing Room Key's.
+ *
  * Slots show the game's own mod badges (sprites 0x22 + effect for guns,
  * 0x36 + effect for armor, 0x46 empty; 32x12), written into the frame's
  * packet arena as Draw_AllocSprite does. Our economy armor effects (17-20)
@@ -129,6 +138,10 @@
 #define PE_TITLE_ACTION9      0x31u         /* Str_LookupTable10 index row 9 would show */
 #define PE_TITLE_BP           0x30u         /* "Distribute Bonus Points" */
 #define PE_HEADER_COLOR       0x00308CA8u   /* yellow, as the menus' labels */
+#define PE_ITEM_TABLE_BASE    0x800A8034u   /* Item_LookupBaseData: base records, 0x20 each */
+#define PE_KEY_ROW_ITEM       0xC8u         /* Dressing Room Key: the Key Items row's icon */
+#define PE_KEY_ICON_INDENT    "     "        /* room for an item icon before the name */
+enum { MODE_CATALOG, MODE_KEYS };
 #define PE_FN_DRAW_ITEM_LABEL 0x80044E14u   /* Menu_DrawItemLabel: a dialog's text */
 #define PE_FN_CONFIRM_DIALOG  0x80044E98u   /* Menu_ConfirmDialogHandler */
 #define PE_FN_CONFIRM_DIALOG_END 0x80044F8Cu
@@ -186,7 +199,9 @@ enum { R_NONE, R_HEADER, R_SLOT, R_NOSLOTS, R_REMOVE, R_EFFECT, R_LOCKED, R_TEXT
 
 typedef struct { uint8_t kind, which; int8_t slot; uint8_t effect; } Row;
 
-static const struct { int x, y, w, h, rows; } s_layout[P_COUNT] = {
+typedef struct { int x, y, w, h, rows; } PeLayout;
+static const PeLayout s_layout_keys_list = { 32, 32, 280, 132, 8 };
+static const PeLayout s_layout[P_COUNT] = {
     { 32, 32, 116, 132, 8 },                /* slots: where Aya's status panel was */
     { 152, 32, 160, 132, 8 },               /* effects */
     { 32, 168, 280, 36, 2 },                /* info */
@@ -194,6 +209,7 @@ static const struct { int x, y, w, h, rows; } s_layout[P_COUNT] = {
 
 static struct {
     int open;
+    int mode;                                 /* MODE_CATALOG / MODE_KEYS */
     uint32_t panel[P_COUNT];
     uint32_t list[P_COUNT];
     uint32_t main_list;                       /* to go back to */
@@ -249,14 +265,40 @@ static uint32_t pe_main_list(void) {
     return node;
 }
 
+/* Rows we add after the game's: Mod Catalog, and Key Items while the pocket is on. */
+static int pe_extra_rows(void) { return pe_keys_enabled() ? 2 : 1; }
+
 static int pe_has_our_row(uint32_t list) {
-    return (int)psx_mod_read_word(list + N_Y_LIMIT) == pe_vanilla_rows() + 1;
+    return (int)psx_mod_read_word(list + N_Y_LIMIT) == pe_vanilla_rows() + pe_extra_rows();
 }
 
 /* Our row sits above Distribute Bonus Points when that is on the menu. */
 static int pe_swapped(void) { return (psx_mod_read_word(PE_CONTEXT_FLAGS) >> 8) & 1u; }
 
 static int pe_catalog_row(void) { return pe_vanilla_rows() - (pe_swapped() ? 1 : 0); }
+
+/* What a main menu row is, with our rows in. With BP on the menu (its last
+ * action): ..., [base-1] Mod Catalog, [base] Key Items, [last] BP. */
+enum { ROLE_VANILLA, ROLE_CATALOG, ROLE_KEYS, ROLE_BP };
+static int pe_row_role(int row) {
+    const int base = pe_vanilla_rows(), extra = pe_extra_rows();
+    if (row == pe_catalog_row()) return ROLE_CATALOG;
+    if (pe_swapped()) {
+        if (extra == 2 && row == base) return ROLE_KEYS;
+        if (row == base + extra - 1) return ROLE_BP;
+    } else if (extra == 2 && row == base + 1) {
+        return ROLE_KEYS;
+    }
+    return ROLE_VANILLA;
+}
+
+/* An item's inventory icon (Menu_DrawSlotRow: Draw_AllocSprite(iconId - 1)). */
+static uint32_t pe_item_icon_sprite(uint16_t id) {
+    const uint32_t base = psx_mod_read_word(PE_ITEM_TABLE_BASE);
+    if (!id || !base) return PE_SPRITE_ROW9;
+    const uint32_t icon = psx_mod_read_byte(PE_STR_ORIGIN + base + (uint32_t)(id - 1u) * 0x20u);
+    return icon ? icon - 1u : PE_SPRITE_ROW9;
+}
 
 static int pe_cursor_row(uint32_t list) {
     return (int)psx_mod_read_word(list + N_GRID_W) * (int)psx_mod_read_word(list + N_CURSOR_Y)
@@ -276,12 +318,25 @@ static void pe_on_alloc_sprite(struct CPUState *cpu, uint32_t address) {
         s_blank_badge = 0;
         if (cpu->gpr[4] > PE_SPRITE_NO_MOD) { cpu->gpr[4] = PE_SPRITE_BLANK; return; }
     }
+    static int s_extra_seen;                  /* action-9 rows drawn since a vanilla row */
     const uint32_t sprite = cpu->gpr[4];
-    if (sprite != PE_SPRITE_BP && sprite != PE_SPRITE_ROW9) return;
+    if (sprite < 0x56u || sprite > PE_SPRITE_ROW9) return;
     const uint32_t list = psx_mod_read_word(PE_ACTIVE_WIDGET);
     if (!pe_ram_pointer(list) || psx_mod_read_word(list + N_DRAW) != PE_DRAW_ITEM_LIST) return;
-    if (!pe_has_our_row(list) || !pe_swapped()) return;
-    cpu->gpr[4] = sprite == PE_SPRITE_BP ? PE_SPRITE_ROW9 : PE_SPRITE_BP;
+    if (!pe_has_our_row(list)) return;
+    if (sprite != PE_SPRITE_ROW9) {           /* a vanilla row's icon */
+        s_extra_seen = 0;
+        if (sprite == PE_SPRITE_BP && pe_swapped()) cpu->gpr[4] = PE_SPRITE_ROW9;   /* BP spot: Catalog */
+        return;
+    }
+    const int n = ++s_extra_seen;             /* 1st / 2nd row past the game's last */
+    const int keys = pe_extra_rows() == 2;
+    if (pe_swapped()) {
+        if (n == 1) cpu->gpr[4] = keys ? pe_item_icon_sprite(PE_KEY_ROW_ITEM) : PE_SPRITE_BP;
+        else if (n == 2) cpu->gpr[4] = PE_SPRITE_BP;
+    } else if (n == 2 && keys) {
+        cpu->gpr[4] = pe_item_icon_sprite(PE_KEY_ROW_ITEM);
+    }
 }
 
 static void pe_on_set_rows(struct CPUState *cpu, uint32_t address) {
@@ -291,9 +346,10 @@ static void pe_on_set_rows(struct CPUState *cpu, uint32_t address) {
     if (!pe_row_wanted()) return;
     const int rows = pe_vanilla_rows();
     if ((int)cpu->gpr[5] != rows) return;
-    if ((int)psx_mod_read_word(node + N_ROW_CAP) < rows + 1)
-        psx_mod_write_word(node + N_ROW_CAP, (uint32_t)(rows + 1));
-    cpu->gpr[5] = (uint32_t)(rows + 1);
+    const int extra = pe_extra_rows();
+    if ((int)psx_mod_read_word(node + N_ROW_CAP) < rows + extra)
+        psx_mod_write_word(node + N_ROW_CAP, (uint32_t)(rows + extra));
+    cpu->gpr[5] = (uint32_t)(rows + extra);
 }
 
 /* ---- text ----------------------------------------------------------------------- */
@@ -412,6 +468,7 @@ static Row pe_effect_row(int i) {
 
 static int pe_row_count(int panel) {
     Row rows[PE_ROWS_MAX];
+    if (s_cm.mode == MODE_KEYS) return panel == P_SLOTS ? (pe_keys_count() ? pe_keys_count() : 1) : 2;
     if (panel == P_SLOTS) return pe_slot_rows(rows, PE_ROWS_MAX);
     if (panel == P_EFFECTS) return pe_effect_rows(rows, PE_ROWS_MAX);
     return 2;
@@ -449,6 +506,19 @@ static void pe_row_text(int panel, int i, PeText *left, PeText *right, int *dim,
     char buf[48];
     *dim = 0;
     *header = 0;
+    if (s_cm.mode == MODE_KEYS) {
+        if (panel == P_SLOTS) {
+            const uint16_t id = pe_keys_item(i);
+            if (id) { pe_t_str(left, PE_KEY_ICON_INDENT); pe_t_item(left, id); }
+            else { pe_t_str(left, "No key items"); *dim = 1; }
+        } else if (i == 0) {
+            pe_t_str(left, "Key items ");
+            pe_t_num(left, (unsigned)pe_keys_count());
+        } else {
+            pe_t_str(left, "Kept out of your bag");
+        }
+        return;
+    }
     if (panel == P_SLOTS) {
         const Row r = pe_slot_row(i);
         switch (r.kind) {
@@ -650,15 +720,20 @@ static void pe_node_free(uint32_t node) {
     psx_mod_write_word(PE_WIDGET_FREE_HEAD, cur);
 }
 
+static const PeLayout *pe_lay(int p) {
+    return s_cm.mode == MODE_KEYS && p == P_SLOTS ? &s_layout_keys_list : &s_layout[p];
+}
+
 static int pe_build_panel(int p) {
+    const PeLayout *L = pe_lay(p);
     const uint32_t panel = pe_node_alloc();
     if (!panel) return 0;
     psx_mod_write_word(panel + N_MODE, 1);
     psx_mod_write_word(panel + N_SELECTED, PE_OUR_PANEL);
-    psx_mod_write_word(panel + N_X, (uint32_t)s_layout[p].x);
-    psx_mod_write_word(panel + N_Y, (uint32_t)s_layout[p].y);
-    psx_mod_write_word(panel + N_GRID_W, (uint32_t)s_layout[p].w);
-    psx_mod_write_word(panel + N_ROWS, (uint32_t)s_layout[p].h);
+    psx_mod_write_word(panel + N_X, (uint32_t)L->x);
+    psx_mod_write_word(panel + N_Y, (uint32_t)L->y);
+    psx_mod_write_word(panel + N_GRID_W, (uint32_t)L->w);
+    psx_mod_write_word(panel + N_ROWS, (uint32_t)L->h);
     if (p != P_INFO) psx_mod_write_word(panel + N_UPDATE, PE_FN_ITEM_SELECT);
     s_cm.panel[p] = panel;
 
@@ -675,10 +750,10 @@ static int pe_build_panel(int p) {
     psx_mod_write_word(list + N_DRAW, PE_FN_OPTION_LIST);
     psx_mod_write_word(list + N_GRID_W, 1);
     psx_mod_write_word(list + N_X_LIMIT, 1);
-    psx_mod_write_word(list + N_ROWS, (uint32_t)s_layout[p].rows);
-    psx_mod_write_word(list + N_ROW_CAP, (uint32_t)s_layout[p].rows);
+    psx_mod_write_word(list + N_ROWS, (uint32_t)L->rows);
+    psx_mod_write_word(list + N_ROW_CAP, (uint32_t)L->rows);
     psx_mod_write_word(list + N_Y_LIMIT, 1);
-    psx_mod_write_word(list + N_CELL_W, (uint32_t)(s_layout[p].w - 4));
+    psx_mod_write_word(list + N_CELL_W, (uint32_t)(L->w - 4));
     psx_mod_write_word(list + N_ROW_H, PE_ROW_H);
     psx_mod_write_word(list + N_CURSOR_X, p == P_SLOTS ? 0u : 0xFFFFFFFFu);
     psx_mod_write_word(list + N_TARGET_X, 0xFFFFFFFFu);
@@ -692,6 +767,7 @@ static int pe_build_panel(int p) {
 /* Rows changed: the list's length, cursor and scroll follow. */
 static void pe_fit_list(int p) {
     const uint32_t list = s_cm.list[p];
+    if (!list) return;                        /* the Key Items screen has no effects list */
     int count = pe_row_count(p);
     if (count < 1) count = 1;
     psx_mod_write_word(list + N_Y_LIMIT, (uint32_t)count);
@@ -699,7 +775,7 @@ static void pe_fit_list(int p) {
     if (cursor >= count) cursor = count - 1;
     if (cursor < 0) cursor = 0;
     psx_mod_write_word(list + N_CURSOR_Y, (uint32_t)cursor);
-    const int rows = s_layout[p].rows;
+    const int rows = pe_lay(p)->rows;
     int scroll = (int)psx_mod_read_word(list + N_SCROLL_Y);
     if (cursor < scroll) scroll = cursor;
     if (cursor >= scroll + rows) scroll = cursor - rows + 1;
@@ -716,7 +792,7 @@ static void pe_focus(int p) {
         psx_mod_write_word(s_cm.list[P_EFFECTS] + N_CURSOR_X, 0);
         psx_mod_write_word(s_cm.list[P_EFFECTS] + N_CURSOR_Y, 0);
         psx_mod_write_word(s_cm.list[P_EFFECTS] + N_SCROLL_Y, 0);
-    } else {
+    } else if (s_cm.list[P_EFFECTS]) {
         psx_mod_write_word(s_cm.list[P_EFFECTS] + N_CURSOR_X, 0xFFFFFFFFu);
     }
     psx_mod_write_word(PE_CURRENT_NODE, s_cm.list[p]);
@@ -768,16 +844,20 @@ static void pe_close(void) {
     memset(&s_cm, 0, sizeof s_cm);
 }
 
-static void pe_open(uint32_t main_list) {
+static void pe_open(uint32_t main_list, int mode) {
     if (pe_free_nodes() < 2 * P_COUNT + 1) return;
     memset(&s_cm, 0, sizeof s_cm);
+    s_cm.mode = mode;
     s_cm.main_list = main_list;
-    for (int p = 0; p < P_COUNT; ++p)
+    for (int p = 0; p < P_COUNT; ++p) {
+        if (mode == MODE_KEYS && p == P_EFFECTS) continue;     /* list + info only */
         if (!pe_build_panel(p)) { s_cm.open = 1; pe_close(); return; }
+    }
     s_cm.open = 1;
     s_cm.note_effects_row = -1;
-    /* Start on the first slot (row 0 is the gun's name). */
-    psx_mod_write_word(s_cm.list[P_SLOTS] + N_CURSOR_Y, pe_slot_row(1).kind == R_SLOT ? 1u : 0u);
+    /* Catalog: start on the first slot (row 0 is the gun's name). */
+    psx_mod_write_word(s_cm.list[P_SLOTS] + N_CURSOR_Y,
+                       mode == MODE_CATALOG && pe_slot_row(1).kind == R_SLOT ? 1u : 0u);
     s_cm.prev_slot_row = (int)psx_mod_read_word(s_cm.list[P_SLOTS] + N_CURSOR_Y);
     for (int p = 0; p < P_COUNT; ++p) pe_fit_list(p);
     pe_hide_panels();
@@ -799,14 +879,16 @@ static void pe_on_item_select(struct CPUState *cpu, uint32_t address) {
     if (!pe_ram_pointer(list) || psx_mod_read_word(list + N_DRAW) != PE_DRAW_ITEM_LIST) return;
     if (!pe_has_our_row(list)) return;
     const int row = pe_cursor_row(list);
-    if (row == pe_catalog_row()) {
+    const int role = pe_row_role(row);
+    if (role == ROLE_CATALOG || role == ROLE_KEYS) {
         cpu->gpr[5] = 0;                      /* not the game's BP screen, nor nothing */
-        pe_open(list);
-    } else if (pe_swapped() && row == pe_vanilla_rows()) {
-        /* The BP row, moved down: the game knows it as the row above. */
+        pe_open(list, role == ROLE_KEYS ? MODE_KEYS : MODE_CATALOG);
+    } else if (role == ROLE_BP) {
+        /* The BP row, moved down: the game knows it as its last action row. */
         s_bp_restore_list = list;
         s_bp_restore_row = psx_mod_read_word(list + N_CURSOR_Y);
-        psx_mod_write_word(list + N_CURSOR_Y, s_bp_restore_row - 1u);
+        psx_mod_write_word(list + N_CURSOR_Y,
+                           s_bp_restore_row - (uint32_t)(row - (pe_vanilla_rows() - 1)));
     }
 }
 
@@ -963,6 +1045,10 @@ static void pe_install_row(int row) {
 }
 
 static void pe_act(uint32_t buttons) {
+    if (s_cm.mode == MODE_KEYS) {             /* view only */
+        if (buttons & IN_CANCEL) pe_close();
+        return;
+    }
     if (s_cm.focus == P_SLOTS) {
         if (buttons & IN_CANCEL) { pe_close(); return; }
         if (buttons & (IN_CONFIRM | IN_RIGHT)) {
@@ -1030,6 +1116,7 @@ static void pe_on_frame(struct CPUState *cpu, uint32_t address) {
     s_cm.pending = 0;
     if (buttons) pe_act(buttons);
     if (!s_cm.open) return;
+    if (s_cm.mode == MODE_KEYS) { pe_fit_list(P_SLOTS); return; }
     pe_skip_names();
     pe_fit_list(P_EFFECTS);
 }
@@ -1044,6 +1131,7 @@ static int pe_our_list(uint32_t node) {
 /* Can the focused list's row be picked? (Its Cross sound.) */
 static int pe_row_ok(int p) {
     char why[48];
+    if (s_cm.mode == MODE_KEYS) return 0;     /* nothing to pick: the error sound */
     if (p == P_SLOTS) {
         const Row s = pe_chosen_slot();
         return s.kind == R_SLOT && !pe_cat_is_bag_mod(s.which, pe_cat_slot_effect(s.which, s.slot));
@@ -1155,7 +1243,11 @@ static void pe_on_centered_text(struct CPUState *cpu, uint32_t address) {
         for (; gap >= sw; gap -= sw) pe_t_byte(&left, space);
         for (unsigned i = 0; i < right.n; ++i) pe_t_byte(&left, right.b[i]);
     }
-    if (p == P_SLOTS) {
+    if (p == P_SLOTS && s_cm.mode == MODE_KEYS) {
+        const uint16_t id = pe_keys_item(row);
+        if (id) pe_emit_sprite(pe_item_icon_sprite(id), psx_mod_read_word(PE_TEXT_X),
+                               psx_mod_read_word(PE_TEXT_Y), dim || psx_mod_read_word(PE_TEXT_DIMMED));
+    } else if (p == P_SLOTS) {
         const Row r = pe_slot_row(row);
         const uint32_t badge = r.kind == R_SLOT ? pe_badge(r.which, pe_cat_slot_effect(r.which, r.slot)) : 0;
         const uint32_t bx = psx_mod_read_word(PE_TEXT_X) + 20u, by = psx_mod_read_word(PE_TEXT_Y) + 1u;
@@ -1186,7 +1278,12 @@ static void pe_on_help_text(struct CPUState *cpu, uint32_t address) {
 static uint32_t pe_description(void) {
     PeText t;
     memset(&t, 0, sizeof t);
-    if (s_cm.focus == P_EFFECTS) {
+    if (s_cm.mode == MODE_KEYS) {
+        const uint16_t id = pe_keys_item((int)psx_mod_read_word(s_cm.list[P_SLOTS] + N_CURSOR_Y));
+        const uint32_t d = id ? pe_text_entry(0x0Cu, (unsigned)id - 1u) : 0;  /* item descriptions */
+        if (d) return d;
+        pe_t_str(&t, "Key Items");
+    } else if (s_cm.focus == P_EFFECTS) {
         const Row r = pe_effect_row((int)psx_mod_read_word(s_cm.list[P_EFFECTS] + N_CURSOR_Y));
         if (r.kind == R_EFFECT) return pe_fx_description(r.which, r.effect);
         if (r.kind == R_REMOVE) pe_t_str(&t, "Take the mod out of this slot");
@@ -1218,14 +1315,25 @@ static void pe_on_print_raw_text(struct CPUState *cpu, uint32_t address) {
     }
     const uint32_t list = pe_main_list();
     if (!list || !pe_has_our_row(list)) return;
-    const int row = pe_cursor_row(list);
-    if (pe_swapped() && row == pe_vanilla_rows() &&
-        cpu->gpr[4] == pe_text_entry(0x10u, PE_TITLE_ACTION9)) {
-        cpu->gpr[4] = pe_text_entry(0x10u, PE_TITLE_BP);      /* the BP row, moved down */
+    const int role = pe_row_role(pe_cursor_row(list));
+    const uint32_t row9 = pe_text_entry(0x10u, PE_TITLE_ACTION9), bp = pe_text_entry(0x10u, PE_TITLE_BP);
+    if (role == ROLE_BP && cpu->gpr[4] == row9) {
+        cpu->gpr[4] = bp;                                     /* the BP row, moved down */
         return;
     }
-    if (row != pe_catalog_row() ||
-        cpu->gpr[4] != pe_text_entry(0x10u, pe_swapped() ? PE_TITLE_BP : PE_TITLE_ACTION9)) return;
+    if (role == ROLE_KEYS && cpu->gpr[4] == row9) {
+        static uint32_t s_keys_title;
+        if (!s_keys_title) {
+            if (!pe_mem(&s_keys_title, 16)) return;
+            PeText t;
+            memset(&t, 0, sizeof t);
+            pe_t_str(&t, "Key Items");
+            pe_put(s_keys_title, &t);
+        }
+        cpu->gpr[4] = s_keys_title;
+        return;
+    }
+    if (role != ROLE_CATALOG || cpu->gpr[4] != (pe_swapped() ? bp : row9)) return;
     if (!s_title) {
         if (!pe_mem(&s_title, 16)) return;
         PeText t;

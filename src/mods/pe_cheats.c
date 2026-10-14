@@ -33,12 +33,6 @@
  * Finished, as reaching the movie's last frame would. The play log gets a
  * fmv_watchdog row.
  *
- * KEY POCKET TEST (Debug, research 2026-10-14): "Take out key items" moves key
- * items (0xC8-0xDC keys/story items, 0x38-0x3E Chrysler keys; not the charms
- * 0xCB-0xCD) from Aya's bag into a list held here, and "Put key items back"
- * returns them. With them out, trying a locked door shows whether doors check
- * the bag or a story flag. Session only, not saved: put them back before saving.
- *
  * INFINITE AMMO (decomp: Inv_DrawSlotItemIcon, BattleCmd_CommitAmmoAndUpdate,
  * Battle_StatusPrimitiveFlow's ammo counter):
  *   - Spare rounds live in one of three pools (ItemDataRecord[3] at
@@ -125,39 +119,6 @@ static int pe_set_event_skip(int value) {
         (uint16_t)(value ? (v | PE_EVENT_SKIP_BIT) : (v & ~PE_EVENT_SKIP_BIT)));
     s_force_event_skip = value ? 1 : 0;
     return 1;
-}
-
-/* ---- key pocket test ------------------------------------------------------- */
-static uint16_t s_key_held[50];
-static int s_key_held_count;
-
-static int pe_is_key_item(uint16_t v) {
-    if (v >= 0x38u && v <= 0x3Eu) return 1;                       /* Chrysler keys */
-    return v >= 0xC8u && v <= 0xDCu && !(v >= 0xCBu && v <= 0xCDu);  /* not the charms */
-}
-
-static void pe_key_take_out(void) {
-    if (!pe_loaded()) return;
-    for (uint32_t i = 0; i < 50u && s_key_held_count < 50; ++i) {
-        const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
-        const uint16_t v = psx_mod_read_half(a);
-        if (!pe_is_key_item(v)) continue;
-        s_key_held[s_key_held_count++] = v;
-        psx_mod_write_half(a, 0);
-    }
-    pe_log("keytest", "out=%d", s_key_held_count);
-}
-
-static void pe_key_put_back(void) {
-    if (!pe_loaded()) return;
-    int back = 0;
-    for (uint32_t i = 0; i < 50u && back < s_key_held_count; ++i) {
-        const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
-        if (psx_mod_read_half(a) == 0) psx_mod_write_half(a, s_key_held[back++]);
-    }
-    for (int k = back; k < s_key_held_count; ++k) s_key_held[k - back] = s_key_held[k];
-    s_key_held_count -= back;
-    pe_log("keytest", "back=%d still_out=%d", back, s_key_held_count);
 }
 
 /* ---- movie watchdog ---------------------------------------------------------- */
@@ -278,10 +239,6 @@ void pe_cheats_menu_register(void) {
     (void)pe_menu_register_tick(pe_no_battles_tick);
     (void)pe_menu_register_toggle(0, "Unstick movies",
         "Ends a movie stuck for 5 s.", &s_fmv_watchdog, 0);
-    (void)pe_menu_register_action("Debug", "Take out key items (test)",
-        "Keys leave the bag; put back to save.", pe_key_take_out);
-    (void)pe_menu_register_action("Debug", "Put key items back (test)",
-        "Returns keys taken out to the bag.", pe_key_put_back);
     (void)pe_menu_register_live_choice("Debug", "Event skip (test)",
         "Game's own debug event skip. Saved.", off_on, 2,
         pe_get_event_skip, pe_set_event_skip);

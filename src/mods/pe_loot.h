@@ -65,6 +65,10 @@ int pe_cat_needs_tool(int which, int e);
 int pe_cat_is_bag_mod(int which, int e);
 int pe_cat_install(int which, int slot, int e, int dry_run);  /* PE_CAT_* */
 int pe_cat_remove(int which, int slot, int dry_run);
+/* pe_key_items.c: the key item pocket */
+int pe_keys_enabled(void);
+int pe_keys_count(void);
+uint16_t pe_keys_item(int i);
 int pe_cat_replaces(int which, int slot, int e, int *out, int max);  /* effects an install takes out */
 
 #ifdef __cplusplus
