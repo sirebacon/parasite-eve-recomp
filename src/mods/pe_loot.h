@@ -70,6 +70,9 @@ int pe_keys_enabled(void);
 int pe_keys_count(void);
 uint16_t pe_keys_item(int i);
 int pe_cat_replaces(int which, int slot, int e, int *out, int max);  /* effects an install takes out */
+/* pe_bag_sort.c: Sort in Use Item, the bag kept sorted */
+int pe_bag_sort_hide_row(void);
+void pe_bag_sort_screen_seen(void);
 
 #ifdef __cplusplus
 }

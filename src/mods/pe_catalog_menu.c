@@ -343,6 +343,8 @@ static void pe_on_set_rows(struct CPUState *cpu, uint32_t address) {
     (void)address;
     const uint32_t node = cpu->gpr[4];
     if (!pe_ram_pointer(node) || psx_mod_read_word(node + N_DRAW) != PE_DRAW_ITEM_LIST) return;
+    if (pe_loaded() && psx_mod_read_word(PE_BATTLE_EQUIP_MODE) == 0 && pe_bag_sort_hide_row())
+        cpu->gpr[5] -= 1;                     /* Sort lives in Use Item now (pe_bag_sort.c) */
     if (!pe_row_wanted()) return;
     const int rows = pe_vanilla_rows();
     if ((int)cpu->gpr[5] != rows) return;
@@ -1084,9 +1086,124 @@ static void pe_skip_names(void) {
     pe_fit_list(P_SLOTS);
 }
 
+/* ---- Sort from Use Item ---------------------------------------------------------- */
+/* Square on the Use Item list opens the game's own Sort screen (main menu
+ * action 6, whose row pe_bag_sort.c takes off the menu). Use Item and Sort
+ * open from the same main menu state (CLOSE_SELECT_VIEWS), so swapping one
+ * for the other is: free Use Item's nodes (its header 0x1B, panel 1 and list,
+ * as its own Cancel does) and build what Menu_CreateInvSwapView(main list, 0)
+ * builds -- a mode-1 node 0x3A stepped by Menu_EquipOptionsInputHandler and a
+ * mode-2 list 0x3A drawn by Menu_DrawEquipOptionsList -- with view mode 0.
+ * From there it is all the game: a sort comes back to Use Item
+ * (Menu_OpenInventoryOrSwapView(1)), Cancel to the main menu. */
+#define PE_FIELD_PAD          0x8009D26Cu   /* g_FieldPadBits: bit 31 Square */
+#define PE_FN_INV_INPUT       0x80044444u   /* Menu_InventoryInputHandler */
+#define PE_DRAW_EQUIP_SLOTS   0x8004F8D0u   /* Menu_DrawSelectableEquipSlotList */
+#define PE_FN_SORT_INPUT      0x800471E4u   /* Menu_EquipOptionsInputHandler */
+#define PE_DRAW_SORT_LIST     0x800471BCu   /* Menu_DrawEquipOptionsList */
+#define PE_SUBMENU_OPEN       0x8009CF00u   /* g_MenuActionSubmenuOpen */
+#define PE_INV_SELECTED       0x8009CF8Cu   /* g_InvSelectedItemIndex */
+#define PE_MENU_EQUIP_MODE    0x8009CF0Cu   /* g_MenuEquipMode: Wayne's */
+#define PE_INV_VIEW_MODE      0x8009CFB8u   /* g_MenuInventoryViewMode */
+#define PE_SORT_SCREEN        0x3Au
+#define PE_USE_ITEM_HEADER    0x1Bu
+
+/* MenuWidget_DestroyNodeRecursive, minus the column layout it saves. */
+static void pe_node_destroy(uint32_t node, int depth) {
+    if (!pe_ram_pointer(node) || depth > 4) return;
+    for (uint32_t i = 0; i < 4u; ++i) {
+        const uint32_t c = psx_mod_read_word(node + N_CHILD0 + i * 4u);
+        if (c) pe_node_destroy(c, depth + 1);
+    }
+    pe_node_free(node);
+    for (uint32_t n = psx_mod_read_word(PE_WIDGET_LIST_HEAD), guard = 0; pe_ram_pointer(n) && guard < 64;
+         n = psx_mod_read_word(n + N_NEXT), ++guard) {
+        if (psx_mod_read_word(n + N_PARENT) == node) psx_mod_write_word(n + N_PARENT, 0);
+        for (uint32_t i = 0; i < 4u; ++i)
+            if (psx_mod_read_word(n + N_CHILD0 + i * 4u) == node) psx_mod_write_word(n + N_CHILD0 + i * 4u, 0);
+    }
+}
+
+static uint32_t pe_find_panel(uint32_t selected) {
+    for (uint32_t n = psx_mod_read_word(PE_WIDGET_LIST_HEAD), guard = 0; pe_ram_pointer(n) && guard < 64;
+         n = psx_mod_read_word(n + N_NEXT), ++guard)
+        if (psx_mod_read_word(n + N_MODE) == 1 && psx_mod_read_word(n + N_SELECTED) == selected) return n;
+    return 0;
+}
+
+static void pe_sort_from_use_item(void) {
+    static int s_square_was;
+    const int square = (psx_mod_read_word(PE_FIELD_PAD) & 0x80000000u) != 0;
+    const int pressed = square && !s_square_was;
+    s_square_was = square;
+    if (pe_find_panel(PE_SORT_SCREEN)) {
+        const uint32_t n = pe_find_panel(PE_SORT_SCREEN);
+        if (psx_mod_read_word(n + N_UPDATE) == PE_FN_SORT_INPUT) pe_bag_sort_screen_seen();
+    }
+    if (!pressed || s_cm.open || !pe_loaded()) return;
+    const uint32_t list = psx_mod_read_word(PE_CURRENT_NODE);
+    if (!pe_ram_pointer(list) || psx_mod_read_word(list + N_DRAW) != PE_DRAW_EQUIP_SLOTS) return;
+    const uint32_t panel = psx_mod_read_word(list + N_PARENT);
+    if (!pe_ram_pointer(panel) || psx_mod_read_word(panel + N_MODE) != 1 ||
+        psx_mod_read_word(panel + N_SELECTED) != 1 || psx_mod_read_word(panel + N_UPDATE) != PE_FN_INV_INPUT)
+        return;
+    const uint32_t main_list = psx_mod_read_word(panel + N_PARENT);
+    if (!pe_ram_pointer(main_list) || psx_mod_read_word(main_list + N_DRAW) != PE_DRAW_ITEM_LIST) return;
+    if (psx_mod_read_word(PE_SUBMENU_OPEN) || (int32_t)psx_mod_read_word(PE_INV_SELECTED) >= 0 ||
+        (int32_t)psx_mod_read_word(list + N_TARGET_X) >= 0 || psx_mod_read_word(PE_MENU_EQUIP_MODE) ||
+        psx_mod_read_word(PE_BATTLE_EQUIP_MODE))
+        return;                               /* mid-action, mid-move, Wayne's or battle */
+    const uint32_t sd = PE_SIMPLE_DESC + PE_SORT_SCREEN * 0x10u, gd = PE_GRID_DESC + PE_SORT_SCREEN * 0x20u;
+    if (psx_mod_read_word(gd + 0x0Cu) < psx_mod_read_word(gd + 0x10u)) return;   /* would need a scroll bar */
+
+    pe_node_destroy(panel, 0);                /* panel 1 and its list */
+    pe_node_destroy(pe_find_panel(PE_USE_ITEM_HEADER), 0);
+    if (pe_free_nodes() < 2) { psx_mod_write_word(PE_CURRENT_NODE, main_list); return; }
+
+    /* MenuWidget_CreateSimpleNode(0x3A, main list, 0, 0) */
+    const uint32_t node = pe_node_alloc();
+    psx_mod_write_word(node + N_PARENT, main_list);
+    psx_mod_write_word(node + N_MODE, 1);
+    psx_mod_write_word(node + N_SELECTED, PE_SORT_SCREEN);
+    {
+        const int dx = (int)psx_mod_read_word(sd + 0u), dy = (int)psx_mod_read_word(sd + 4u);
+        const int w = (int)psx_mod_read_word(sd + 8u), h = (int)psx_mod_read_word(sd + 12u);
+        psx_mod_write_word(node + N_X, (uint32_t)(dx ? dx : 0xA0 - (w >> 1)));
+        psx_mod_write_word(node + N_Y, (uint32_t)(dx ? dy : (dy ? 0x50 : 0x78) - (h >> 1)));
+        psx_mod_write_word(node + N_GRID_W, (uint32_t)w);
+        psx_mod_write_word(node + N_ROWS, (uint32_t)h);
+    }
+    psx_mod_write_word(node + N_UPDATE, PE_FN_SORT_INPUT);
+    /* MenuWidget_CreateNode(0x3A, node, node) */
+    const uint32_t sl = pe_node_alloc();
+    psx_mod_write_word(sl + N_PARENT, node);
+    psx_mod_write_word(node + N_CHILD0, sl);
+    psx_mod_write_word(sl + N_MODE, 2);
+    psx_mod_write_word(sl + N_SELECTED, PE_SORT_SCREEN);
+    psx_mod_write_word(sl + N_AUX, PE_SORT_SCREEN);
+    psx_mod_write_word(sl + N_X, psx_mod_read_word(gd + 0x00u));
+    psx_mod_write_word(sl + N_Y, psx_mod_read_word(gd + 0x04u));
+    psx_mod_write_word(sl + N_UPDATE, PE_FN_STEP_SCROLL);
+    psx_mod_write_word(sl + N_DRAW, PE_DRAW_SORT_LIST);
+    psx_mod_write_word(sl + N_GRID_W, psx_mod_read_word(gd + 0x08u));
+    psx_mod_write_word(sl + N_X_LIMIT, psx_mod_read_word(gd + 0x08u));
+    psx_mod_write_word(sl + N_ROWS, psx_mod_read_word(gd + 0x0Cu));
+    psx_mod_write_word(sl + N_ROW_CAP, psx_mod_read_word(gd + 0x0Cu));
+    psx_mod_write_word(sl + N_Y_LIMIT, psx_mod_read_word(gd + 0x10u));
+    psx_mod_write_word(sl + N_CELL_W, psx_mod_read_word(gd + 0x14u));
+    psx_mod_write_word(sl + N_ROW_H, psx_mod_read_word(gd + 0x18u));
+    psx_mod_write_word(sl + N_LAYOUT, psx_mod_read_word(gd + 0x1Cu));
+    psx_mod_write_word(sl + N_TARGET_X, 0xFFFFFFFFu);
+    psx_mod_write_word(sl + N_TARGET_Y, 0xFFFFFFFFu);
+    psx_mod_write_word(PE_CURRENT_NODE, sl);
+    psx_mod_write_word(PE_INV_VIEW_MODE, 0);
+    pe_bag_sort_screen_seen();
+}
+
 /* Once a frame. */
 static void pe_on_frame(struct CPUState *cpu, uint32_t address) {
     (void)cpu; (void)address;
+    pe_sort_from_use_item();
     if (s_color_saved) {
         psx_mod_write_word(PE_TEXT_COLOR, s_saved_color);
         psx_mod_write_word(PE_TEXT_COLOR_DIM, s_saved_color_dim);
