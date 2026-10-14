@@ -537,11 +537,16 @@ static void pe_mod_menu_vblank(void) {
  * >= 0xA1. A round stick gate never gets an axis that far on a diagonal, so
  * sweeping through a turn dropped Aya to a walk (user report 2026-10-13). At
  * that function's entry, in free field movement, the stick bytes it is about to
- * read are reshaped (the pad buffer is refilled every frame): to run, the
- * larger axis is pushed to its edge (the other axis, and so the direction,
- * stays); to walk, both axes are kept inside full tilt. Run = Always run and
- * not holding the run button, or, with Always run off, the stick at least
- * ~80% out in any direction (round, not per axis).
+ * read are reshaped (the pad buffer is refilled every frame), both axes scaled
+ * together so the angle the game steers by (ratan2 of the stick, decomp
+ * Scene_UpdatePlayerEntity) is unchanged: to run, out until the larger axis
+ * reaches its edge; to walk, in until neither axis is at full tilt. Run =
+ * Always run and not holding the run button, or, with Always run off, the
+ * stick at least ~80% out in any direction (round, not per axis). Cross
+ * always walks: the game's own rule is that pressing Cross drops the run bit
+ * (so examining stops her), but in analog mode it rebuilds the run bit from
+ * the stick after that rule, so a full-tilt stick kept her running through
+ * the press and phones / objects didn't answer (user report 2026-10-13).
  *
  * Walk/run is decided from the raw pad (refreshed every frame) rather than the
  * field input word, whose value between frames is not reliable. */
@@ -697,8 +702,11 @@ static int pe_in_free_field(void) {
            !(psx_mod_read_word(PE_GAME_STATE_FLAGS) & 0xB600u);
 }
 
-/* Should a stick push run? (Always run: unless the run button is held.) */
+/* Should a stick push run? (Always run: unless the run button is held.)
+ * Never while Cross (internal 0x2000, examine / confirm) is held. */
+#define PE_PAD_CROSS 0x2000u
 static int pe_stick_runs(const PePad *p) {
+    if (p->bits & PE_PAD_CROSS) return 0;
     if (s_always_run) return !(p->bits & s_run_mask);
     const int dx = p->x - PE_STICK_CENTER, dy = p->y - PE_STICK_CENTER;
     return dx * dx + dy * dy >= PE_STICK_FULL_R2;
@@ -710,15 +718,20 @@ static void pe_on_field_pad(struct CPUState *cpu, uint32_t address) {
     if (!psx_mod_game_started() || !pe_in_free_field()) return;
     const PePad p = pe_read_pad();
     if (!p.analog || !p.stick) return;
-    int x = p.x, y = p.y;
-    if (pe_stick_runs(&p)) {
-        const int dx = x - PE_STICK_CENTER, dy = y - PE_STICK_CENTER;
-        if ((dx < 0 ? -dx : dx) >= (dy < 0 ? -dy : dy)) x = dx < 0 ? 0x00 : 0xFF;
-        else y = dy < 0 ? 0x00 : 0xFF;
-    } else {
-        if (x < 0x14) x = 0x14; else if (x > 0xE6) x = 0xE6;
-        if (y < 0x14) y = 0x14; else if (y > 0xE6) y = 0xE6;
-    }
+    /* Scale both axes by the same factor: the larger reaches `reach` (127:
+     * past full tilt both ways; 100: inside it, still past the direction
+     * thresholds of 0x5A / 0xA1), and the angle stays the same. */
+    const int dx = p.x - PE_STICK_CENTER, dy = p.y - PE_STICK_CENTER;
+    const int ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
+    const int big = ax > ay ? ax : ay;
+    const int run = pe_stick_runs(&p);
+    const int full = p.x < 0x14 || p.x >= 0xE7 || p.y < 0x14 || p.y >= 0xE7;
+    if (big <= 0 || run == full) return;            /* already what we want */
+    const int reach = run ? 127 : 100;
+    int x = PE_STICK_CENTER + (dx * reach + (dx < 0 ? -big / 2 : big / 2)) / big;
+    int y = PE_STICK_CENTER + (dy * reach + (dy < 0 ? -big / 2 : big / 2)) / big;
+    if (x < 0) x = 0; else if (x > 0xFF) x = 0xFF;
+    if (y < 0) y = 0; else if (y > 0xFF) y = 0xFF;
     if (x != p.x) psx_mod_write_byte(PE_PAD_STICK_X, (uint8_t)x);
     if (y != p.y) psx_mod_write_byte(PE_PAD_STICK_Y, (uint8_t)y);
 }
