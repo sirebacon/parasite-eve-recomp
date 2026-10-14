@@ -13,7 +13,7 @@ id = "bonus-points-floor"
 name = "Bonus Points Floor"
 description = "Keeps at least this many bonus points available to spend on Aya's stat growth screen at all times. Does not affect already-allocated stats, level, or EXP -- only the unspent points balance."
 group = "Quality of Life"
-default_enabled = true
+default_enabled = false
 
 [[option]]
 feature = "bonus-points-floor"

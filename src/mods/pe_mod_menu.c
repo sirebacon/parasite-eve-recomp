@@ -79,10 +79,18 @@ static void pe_watch_tick(void) {
 
 /* Every row not at its default, so a log shows what was already on (God mode,
  * No random battles, speeds...) when play started or a save loaded. */
+extern int g_pe_bp_floor_active;   /* pe_bonus_points_floor.c: launcher packages, */
+extern int g_pe_inv_floor_active;  /* pe_inventory_floor.c: not F1 rows */
+
 void pe_menu_log_settings(void) {
     char out[300];
     size_t n = 0;
     out[0] = 0;
+    if (g_pe_bp_floor_active)
+        n += (size_t)snprintf(out + n, sizeof out - n, "package/Bonus Points Floor=%d", g_pe_bp_floor_active);
+    if (g_pe_inv_floor_active)
+        n += (size_t)snprintf(out + n, sizeof out - n, "%spackage/Personal Inventory Floor=%d",
+                              n ? " " : "", g_pe_inv_floor_active);
     for (int i = 0; i < s_watch_count && n < sizeof out; ++i) {
         const PeWatch *w = &s_watch[i];
         const int v = *w->value;

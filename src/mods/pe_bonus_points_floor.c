@@ -54,8 +54,14 @@ static uint32_t pe_bonus_points_floor_value(void) {
     return value;
 }
 
+/* The floor while this package runs (the play log's settings row reads it;
+ * the plugin only runs while the package is enabled). Off by default since
+ * 2026-10-13: unlimited points skewed a balance playthrough. */
+int g_pe_bp_floor_active;
+
 static void pe_bonus_points_floor_vblank(void) {
     if (!psx_mod_game_started()) return;
+    g_pe_bp_floor_active = (int)pe_bonus_points_floor_value();
 
     /* See the file header: max_hp, not bonus_points itself, is the reliable
      * "a real character is loaded" signal here. */

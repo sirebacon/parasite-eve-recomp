@@ -13,7 +13,7 @@ id = "personal-inventory-floor"
 name = "Personal Inventory Floor (40)"
 description = "Guarantees Aya can carry at least this many personal items from New Game onward, instead of starting at the retail 10 and growing slowly with level. Does not affect NYPD/warehouse storage capacity (a separate system) and does not touch the natural progression once it grows past the floor on its own."
 group = "Quality of Life"
-default_enabled = true
+default_enabled = false
 
 [[option]]
 feature = "personal-inventory-floor"

@@ -64,8 +64,13 @@ static int pe_inventory_floor_slots(void) {
     return value;
 }
 
+/* The floor while this package runs (the play log's settings row reads it).
+ * Off by default since 2026-10-13: a 40-slot bag skewed a balance playthrough. */
+int g_pe_inv_floor_active;
+
 static void pe_inventory_floor_vblank(void) {
     if (!psx_mod_game_started()) return;
+    g_pe_inv_floor_active = pe_inventory_floor_slots();
 
     const uint8_t current = psx_mod_read_byte(PE_INV_SLOT_COUNT_ADDR);
     /* 0 means no save/character state has initialized this byte yet
