@@ -58,7 +58,7 @@ items), 0x37 Mod Permit, 0xEC-0xFF PE techniques. Gear in the bag is stored as
 |---|---|---|
 | `enemy` | an enemy's slot is freed | `slot id hp def exp bp=base/factor/hits drop steal boss died` (boss = status flags 2 & 0x40000, can't escape) |
 | `battle` | a battle ends | see below |
-| `loot` | a won battle pays out (loot overhaul) | `exp junk` (earned this battle) `hits` (hits Aya took) `vanilla` (game's own Junk) `steal` (empty-steal Junk) `shown` (the "Junk xN" line) `boss preset scav` (Scavenger) `rare_dry` (rare meter before the roll) `rolled` (0 none; 0x8000+n = economy mod n) `carried` (rare held over) `charm` (Lucky Charm battles left) |
+| `loot` | a won battle pays out (loot overhaul) | `exp junk` (earned this battle) `hits` (hits Aya took) `vanilla` (game's own Junk) `steal` (empty-steal Junk) `shown` (the "Junk xN" line) `boss preset scav` (Scavenger) `rare_dry` (rare meter before the roll) `rolled` (0 none; 0x8000+n = economy mod n) `carried` (rare held over) `charm` (Lucky Charm battles left) `path` (the cascade: `-name` skipped, `+name` the drop, `!` = by guarantee; `-` = no rare) |
 | `junk_take` / `junk_left` | the items-found "Junk xN" line taken / left behind (still paid, `paid=1`) | `n`, `paid` |
 | `rare_take` / `rare_left` | a rare drop taken / left | `item` |
 | `econ_unlock` / `econ_left` | an economy mod unlocked / left | `mod source=drop|bought` |

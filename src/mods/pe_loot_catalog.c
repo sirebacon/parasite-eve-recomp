@@ -16,7 +16,11 @@
  *                Effects seen on carried gear but not unlocked are listed as
  *                LOCKED ("dismantle to unlock").
  *   Rebuild      buy a dismantled item back: same item, same + bonuses and mod
- *                slots, empty slots; price = payout x 1.5, at most 150.
+ *                slots, empty slots; price = payout x 1.5, at most 150, but never
+ *                less than the rebuilt item could pay back: (5 + 2 x bonuses) x 1.5
+ *                + 1 (no Salvager / Rebuild Junk loop; loot cascade design
+ *                2026-10-14, section 6). A full list drops its oldest entry without
+ *                Mod Permit slots (slots above the base item's own) first.
  *
  * Records (decomp ItemDataRecord, as pe_item_editor.c): bag slot value
  * r + 256 -> record 0x800C0EAC + 0x20 r; +0 icon (0 = free record), +4 item
@@ -323,7 +327,7 @@ static uint32_t pe_salvage_payout(int which, int bonus_sum, const uint8_t *mods,
         if (pe_unlocked(which, e)) ++dupes; else ++unlocks;
     }
     payout += 2u * (uint32_t)dupes;           /* phase 7: was 5 (Chrysler leaned on it) */
-    if (pe_loot_armor_has(PE_FX_SALVAGER)) payout += payout / 4u;   /* C3 */
+    if (pe_loot_armor_has(PE_FX_SALVAGER)) payout += payout / 2u;   /* C3: +50% (cascade design 5) */
     if (payout > PE_PAYOUT_CAP) payout = PE_PAYOUT_CAP;
     if (unlocks_out) *unlocks_out = unlocks;
     return payout;
@@ -342,6 +346,21 @@ static uint32_t pe_dismantle_preview(uint32_t rec, int which, int *unlocks_out) 
     return pe_salvage_payout(which, pe_bonus_sum(rec), mods, n, unlocks_out);
 }
 
+/* The base item's own mod slot count (item table +0x14). */
+static unsigned pe_base_slots(uint8_t id) {
+    const uint32_t base = psx_mod_read_word(PE_ITEM_TABLE_BASE_ADDR);
+    const uint32_t end = psx_mod_read_word(PE_ITEM_TABLE_END_ADDR);
+    const uint32_t index = (uint32_t)id - 1u;
+    if (!id || end <= base || index >= ((end - base) >> 5)) return 0;
+    return psx_mod_read_byte(PE_ITEM_TABLE_ORIGIN + base + index * REC_SIZE + REC_MOD_COUNT);
+}
+
+/* Slots bought with Mod Permits: above the base item's own. */
+static unsigned pe_bought_slots(const PeRebuildEntry *r) {
+    const unsigned own = pe_base_slots(r->id);
+    return r->slots > own ? r->slots - own : 0u;
+}
+
 /* Unlock the effects in `mods` and put the item on the Rebuild list (newest first). */
 static void pe_record_salvage(int which, uint8_t id, uint8_t slots, const int16_t bonus[3],
                               const uint8_t *mods, int n, uint32_t payout) {
@@ -355,7 +374,16 @@ static void pe_record_salvage(int which, uint8_t id, uint8_t slots, const int16_
     }
     pe_log("dismantle", "item=0x%02X %s plus=%d/%d/%d mods=%d new=%d payout=%u", id,
            which ? "armor" : "gun", bonus[0], bonus[1], bonus[2], count, fresh, (unsigned)payout);
-    if (s_cat.rebuild_count == PE_REBUILD_MAX) --s_cat.rebuild_count;   /* drop oldest */
+    if (s_cat.rebuild_count == PE_REBUILD_MAX) {
+        /* Full: drop the oldest entry without bought slots (a built-up item is
+         * never lost); if every one has them, the oldest. */
+        int drop = PE_REBUILD_MAX - 1;
+        for (int k = PE_REBUILD_MAX - 1; k >= 0; --k)
+            if (!pe_bought_slots(&s_cat.rebuild[k])) { drop = k; break; }
+        memmove(&s_cat.rebuild[drop], &s_cat.rebuild[drop + 1],
+                sizeof(PeRebuildEntry) * (size_t)(PE_REBUILD_MAX - 1 - drop));
+        --s_cat.rebuild_count;
+    }
     memmove(&s_cat.rebuild[1], &s_cat.rebuild[0], sizeof(PeRebuildEntry) * s_cat.rebuild_count);
     s_cat.rebuild[0].id = id;
     s_cat.rebuild[0].slots = slots;
@@ -801,20 +829,40 @@ static int pe_top_tier(uint8_t id) {
     return psx_mod_read_byte(PE_ITEM_TABLE_ORIGIN + base + index * REC_SIZE + 0x07u) >= 100u;
 }
 
+/* The most dismantling the rebuilt item could pay back, plus 1: no mods, its
+ * + bonuses, the strongest Salvager (+50%), before the payout cap. */
+static uint32_t pe_rebuild_floor(const PeRebuildEntry *r) {
+    uint32_t b = 0;
+    for (uint32_t i = 0; i < 3; ++i) if (r->bonus[i] > 0) b += (uint32_t)r->bonus[i];
+    const uint32_t back = 5u + 2u * b;
+    return back + back / 2u + 1u;
+}
+
 static uint32_t pe_rebuild_price(const PeRebuildEntry *r) {
+    uint32_t p;
     if (pe_top_tier(r->id)) {                 /* phase 7: always the cap */
-        const uint32_t p = pe_loot_price(PE_REBUILD_CAP);
-        return p > PE_REBUILD_CAP ? PE_REBUILD_CAP : p;
+        p = pe_loot_price(PE_REBUILD_CAP);
+        if (p > PE_REBUILD_CAP) p = PE_REBUILD_CAP;
+    } else {
+        p = pe_loot_price((uint32_t)r->payout * (uint32_t)s_rebuild_markup / 100u);
+        if (p < r->payout) p = r->payout;     /* never below what dismantling paid */
+        if (p > PE_REBUILD_CAP) p = PE_REBUILD_CAP;
     }
-    uint32_t p = pe_loot_price((uint32_t)r->payout * (uint32_t)s_rebuild_markup / 100u);
-    if (p < r->payout) p = r->payout;         /* never below what dismantling paid */
-    return p > PE_REBUILD_CAP ? PE_REBUILD_CAP : p;
+    const uint32_t floor = pe_rebuild_floor(r);   /* above the cap if it must be */
+    return p < floor ? floor : p;
 }
 
 static unsigned pe_rb_list_count(void) {
     for (unsigned i = 0; i < s_cat.rebuild_count; ++i)
-        snprintf(s_rb_names[i], sizeof s_rb_names[0], "%s %u", pe_item_name(s_cat.rebuild[i].id),
-                 (unsigned)pe_rebuild_price(&s_cat.rebuild[i]));
+    {
+        const unsigned bought = pe_bought_slots(&s_cat.rebuild[i]);
+        if (bought)
+            snprintf(s_rb_names[i], sizeof s_rb_names[0], "%s +%u SLOTS %u", pe_item_name(s_cat.rebuild[i].id),
+                     bought, (unsigned)pe_rebuild_price(&s_cat.rebuild[i]));
+        else
+            snprintf(s_rb_names[i], sizeof s_rb_names[0], "%s %u", pe_item_name(s_cat.rebuild[i].id),
+                     (unsigned)pe_rebuild_price(&s_cat.rebuild[i]));
+    }
     return s_cat.rebuild_count ? s_cat.rebuild_count : 1;
 }
 
@@ -854,6 +902,9 @@ static int pe_create_item(uint8_t id, uint8_t slots, const int16_t bonus[3],
 /* pe_loot.h, for Wayne's in-game Workshop (pe_wayne_menu.c) and the F1 page. */
 int pe_rebuild_count(void) { return s_cat.rebuild_count; }
 uint8_t pe_rebuild_item(int i) { return i >= 0 && i < s_cat.rebuild_count ? s_cat.rebuild[i].id : 0; }
+unsigned pe_rebuild_bought_slots(int i) {
+    return i >= 0 && i < s_cat.rebuild_count ? pe_bought_slots(&s_cat.rebuild[i]) : 0u;
+}
 uint32_t pe_rebuild_price_index(int i) {
     return i >= 0 && i < s_cat.rebuild_count ? pe_rebuild_price(&s_cat.rebuild[i]) : 0;
 }

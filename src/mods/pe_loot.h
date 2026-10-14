@@ -46,6 +46,7 @@ int pe_shop_buy_index(int i, char *msg, size_t msg_size);
 int pe_rebuild_count(void);
 uint8_t pe_rebuild_item(int i);
 uint32_t pe_rebuild_price_index(int i);
+unsigned pe_rebuild_bought_slots(int i);   /* slots bought with Mod Permits */
 int pe_rebuild_index(int i, char *msg, size_t msg_size);
 
 /* The Mod Catalog (pe_loot_catalog.c) for the in-game menu (pe_catalog_menu.c).

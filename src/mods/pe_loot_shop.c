@@ -99,12 +99,13 @@ static const PeGood s_goods[] = {
 };
 #define PE_GOODS ((int)(sizeof s_goods / sizeof s_goods[0]))
 
-/* Economy mods for sale, in this order, until unlocked. */
-static const struct { int effect; const char *tile; const char *name; } s_econ[] = {
-    { PE_FX_BARGAIN,    "BARGAIN", "Bargain mod" },
-    { PE_FX_SCAVENGER,  "SCAVENG", "Scavenger mod" },
-    { PE_FX_LUCKY_FIND, "LUCKY",   "Lucky Find mod" },
-    { PE_FX_SALVAGER,   "SALVAGE", "Salvager mod" },
+/* Economy mods for sale, in this order, until unlocked. Priced by what they
+ * are worth over a run (loot cascade design 2026-10-14, section 5). */
+static const struct { int effect; const char *tile; const char *name; uint16_t price; } s_econ[] = {
+    { PE_FX_BARGAIN,    "BARGAIN", "Bargain mod",    125 },
+    { PE_FX_SCAVENGER,  "SCAVENG", "Scavenger mod",  300 },
+    { PE_FX_LUCKY_FIND, "LUCKY",   "Lucky Find mod", 225 },
+    { PE_FX_SALVAGER,   "SALVAGE", "Salvager mod",    75 },
 };
 #define PE_ECON_GOODS 4
 #define PE_SHOP_ECON_ID 0xF000u               /* pe_shop_item: 0xF000 | econ index */
@@ -112,7 +113,7 @@ static const struct { int effect; const char *tile; const char *name; } s_econ[]
 /* Tunable (Debug > Loot tuning). */
 static int s_price_pct = 100;
 static int s_tool_start = 40, s_tool_step = 10, s_tool_cap = 100;
-static int s_econ_price = 150;
+static int s_econ_price = 100;              /* percent of each mod's own price */
 
 #define PE_SHOP_STATE_VERSION 1u
 static struct {
@@ -243,7 +244,9 @@ static int pe_row(int i) {
     return i >= goods && i - goods < n ? -1 - econ[i - goods] : PE_GOODS;
 }
 
-static uint32_t pe_econ_price(void) { return pe_loot_price((uint32_t)s_econ_price); }
+static uint32_t pe_econ_price(int k) {
+    return pe_loot_price((uint32_t)s_econ[k].price * (uint32_t)s_econ_price / 100u);
+}
 
 /* ---- prices ----------------------------------------------------------------- */
 /* Prices go through the preset and Bargain (pe_loot_price); the Tool cap
@@ -323,7 +326,7 @@ static const char *pe_sel_name(unsigned i) {
     const int row = pe_row(s_grid);
     if (row < 0) {
         snprintf(s_sel_text, sizeof s_sel_text, "%s: %u (UNLOCKS IN MOD CATALOG)",
-                 s_econ[-1 - row].name, (unsigned)pe_econ_price());
+                 s_econ[-1 - row].name, (unsigned)pe_econ_price(-1 - row));
         return s_sel_text;
     }
     const PeGood *g = &s_goods[row < PE_GOODS ? row : 0];
@@ -354,7 +357,7 @@ const char *pe_shop_label(int i) {
 }
 uint32_t pe_shop_price_index(int i) {
     const int row = pe_row(i);
-    if (row < 0) return pe_econ_price();
+    if (row < 0) return pe_econ_price(-1 - row);
     return row < PE_GOODS ? pe_price(&s_goods[row]) : 0;
 }
 const char *pe_shop_blocked_index(int i) {
@@ -362,7 +365,7 @@ const char *pe_shop_blocked_index(int i) {
     if (row == PE_GOODS) return "No such goods";
     if (!pe_loaded()) return "Load a game first";
     if (!pe_loot_enabled()) return "Junk economy is off";
-    if (row < 0) return pe_loot_junk() < pe_econ_price() ? "Not enough Junk" : 0;
+    if (row < 0) return pe_loot_junk() < pe_econ_price(-1 - row) ? "Not enough Junk" : 0;
     return pe_blocked(&s_goods[row]);
 }
 
@@ -372,7 +375,7 @@ int pe_shop_buy_index(int i, char *msg, size_t msg_size) {
     if (why) { snprintf(msg, msg_size, "%s", why); return 0; }
     const int row = pe_row(i);
     if (row < 0) {                            /* an economy mod: unlock it */
-        const uint32_t price = pe_econ_price();
+        const uint32_t price = pe_econ_price(-1 - row);
         if (!pe_loot_spend_junk(price)) { snprintf(msg, msg_size, "Not enough Junk"); return 0; }
         pe_catalog_unlock_armor(s_econ[-1 - row].effect);
         pe_log("buy", "item=%s price=%u", s_econ[-1 - row].name, (unsigned)price);
@@ -515,8 +518,8 @@ void pe_loot_shop_menu_register(void) {
         "Added per Tool bought.", &s_tool_step, 0, 50, 1);
     (void)pe_menu_register_int(PE_TUNING_PAGE, "Tool price cap",
         "Most a Tool costs (decision: 100).", &s_tool_cap, 10, 100, 5);
-    (void)pe_menu_register_int(PE_TUNING_PAGE, "Economy mod price",
-        "Bargain, Scavenger, Lucky Find, Salvager.", &s_econ_price, 0, 500, 10);
+    (void)pe_menu_register_int(PE_TUNING_PAGE, "Economy mod price %",
+        "Of 75 Salvager / 125 Bargain / 225 Lucky / 300 Scav.", &s_econ_price, 0, 300, 10);
     (void)pe_menu_register_live_int(PE_TUNING_PAGE, "Tools bought",
         "Debug: sets the next Tool's price.", 0, 99, 1, pe_get_tools_bought, pe_set_tools_bought);
 

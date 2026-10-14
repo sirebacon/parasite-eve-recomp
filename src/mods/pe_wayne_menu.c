@@ -209,6 +209,11 @@ static void pe_build_list(PeText *t, int rebuild) {
         const char *label = rebuild ? 0 : pe_shop_label(i);
         if (label) pe_t_str(t, label);        /* an economy mod */
         else pe_t_item(t, rebuild ? pe_rebuild_item(i) : pe_shop_item(i));
+        if (rebuild && pe_rebuild_bought_slots(i)) {   /* built up with Mod Permits */
+            pe_t_str(t, " +");
+            pe_t_num(t, pe_rebuild_bought_slots(i));
+            pe_t_str(t, " slots");
+        }
         pe_t_str(t, "  ");
         pe_t_num(t, (unsigned)(rebuild ? pe_rebuild_price_index(i) : pe_shop_price_index(i)));
         if (red) { pe_t_byte(t, G_CODE); pe_t_byte(t, G_NORMAL); }

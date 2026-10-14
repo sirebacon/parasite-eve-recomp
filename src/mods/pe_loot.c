@@ -36,9 +36,11 @@
  *     placed Junk.
  *   - Phase 2, rare drops (decisions 18, 23): each won battle rolls a rare
  *     drop with soft pity (base %, +step % per dry battle, certain at the
- *     guarantee); a hit draws from the rare table (Tool 40, stat booster 35 by
- *     battle EXP tier, Super Junk 10, Duper Junk 5, Mod Permit 7, Super Tool
- *     3) and is appended to the reward list, so it shows on the game's own
+ *     guarantee); a hit walks the cascade (2026-10-14, bridge findings
+ *     pe-loot-cascade-design-2026-10-14.md: economy mod 15% tiered 1/2/4/3 with a
+ *     guarantee after 8 rares, Super Tool 6%, Mod Permit 15% skipped at 2 held with a
+ *     guarantee, Lucky Charm 8%, Duper 4%, Super 8%, Tool 85/65/40/20/10% by Tools
+ *     held, else a stat booster by battle EXP tier) and is appended to the reward list, so it shows on the game's own
  *     items-found screen, its name drawn in gold (Draw_PrintRawText hook, rows
  *     drawn by Sfx_DrawSlotRow while the items-found list is active); a full
  *     list carries it to the next battle.
@@ -135,13 +137,13 @@
 #define PE_CARD_BUFFER        0x8009EED0u  /* g_MemCardFileBuffer */
 #define PE_TAIL_OFFSET        0x1C90u
 #define PE_TAIL_MAGIC         0x544C4550u  /* "PELT" */
-#define PE_TAIL_VERSION       3u
+#define PE_TAIL_VERSION       4u
 
 #define PE_HANDIN_GUARD_FRAMES 120u        /* no sweep this soon after a count */
 #define PE_HANDIN_MAX          999u        /* Junk per hand-in */
 
 /* ---- state ---------------------------------------------------------------- */
-#define PE_LOOT_STATE_VERSION 3u
+#define PE_LOOT_STATE_VERSION 4u
 static struct {
     uint32_t junk;
     uint16_t steal_bank;          /* Junk stolen this battle, paid on a win */
@@ -153,8 +155,12 @@ static struct {
     uint16_t charm_left;          /* won battles of Lucky Charm left */
     uint8_t preset;               /* 0 Relaxed, 1 Normal, 2 Grind (39) */
     uint8_t disabled;             /* "Junk economy" switched off for this game */
+    /* v4: the cascade's guarantees (rares since the last of each) */
+    uint8_t econ_since, permit_since;
+    uint16_t pad4;
 } s_st = { .preset = 1 };
 #define PE_LOOT_STATE_V2_SIZE 28u
+#define PE_LOOT_STATE_V3_SIZE 32u
 
 static int s_enabled = 1;          /* "Junk economy", on by default (28) */
 static int s_handin_mode;          /* 0 = up to Wayne's next gun, 1 = all */
@@ -166,6 +172,8 @@ static int s_tune_nohit_bonus = 25;/* decision 32, percent */
 static int s_tune_rare_base = 4;   /* decision 18: soft pity, percent */
 static int s_tune_rare_step = 1;   /* + percent per dry battle */
 static int s_tune_rare_guarantee = 25; /* certain by this many battles */
+static int s_tune_econ_guarantee = 8;  /* cascade: rares until an economy mod is certain */
+static int s_tune_permit_guarantee = 8;/* ... a Mod Permit */
 static int s_tune_empty_steal = 2; /* decision 19: Junk for an empty steal */
 
 /* Presets (39): battle Junk %, rare guarantee %, price %. */
@@ -286,22 +294,31 @@ uint32_t pe_loot_price(uint32_t base) {
 /* ---- rare drops (phase 2) ---------------------------------------------------- */
 #define PE_RARE_BOOSTER 0u                 /* table marker: pick a stat booster */
 #define PE_RARE_ECON    1u                 /* table marker: unlock an economy mod */
-static const struct { uint8_t weight; uint16_t item; } s_rare_table[] = {
-    { 40, 0x16u },              /* Tool */
-    { 35, PE_RARE_BOOSTER },    /* stat booster, tier by battle EXP */
-    {  4, 0x0Bu },              /* Super Junk: worth 75 Junk (2026-10-13: was 10) */
-    {  2, 0x0Cu },              /* Duper Junk: worth 150 Junk (was 5) */
-    {  7, 0x37u },              /* Mod Permit */
-    {  3, 0x17u },              /* Super Tool */
-    {  6, PE_RARE_ECON },       /* C5: Scavenger, Lucky Find, Salvager, Bargain */
-    {  5, PE_ITEM_LUCKY_CHARM },/* C7 */
+/* Cascading rare drops (bridge findings pe-loot-cascade-design-2026-10-14.md):
+ * once the pity gate passes, walk this list from the top; an entry whose skip
+ * check says it is no use now is passed over (its share falls through), the
+ * first entry to pass its check and its roll (or its guarantee) is the drop,
+ * and the stat booster at the end always hits. Rarest and most valuable first. */
+enum { RC_ECON, RC_SUPER_TOOL, RC_PERMIT, RC_CHARM, RC_DUPER, RC_SUPER, RC_TOOL, RC_BOOSTER, RC_COUNT };
+static const struct { uint8_t chance; uint16_t item; const char *name; } s_cascade[RC_COUNT] = {
+    [RC_ECON]       = { 15, PE_RARE_ECON,        "econ" },    /* tiered, guarantee */
+    [RC_SUPER_TOOL] = {  6, 0x17u,               "supertool" },
+    [RC_PERMIT]     = { 15, 0x37u,               "permit" },  /* guarantee */
+    [RC_CHARM]      = {  8, PE_ITEM_LUCKY_CHARM, "charm" },
+    [RC_DUPER]      = {  4, 0x0Cu,               "duper" },   /* worth 150 Junk */
+    [RC_SUPER]      = {  8, 0x0Bu,               "super" },   /* worth 75 Junk */
+    [RC_TOOL]       = {  0, 0x16u,               "tool" },    /* chance by Tools held */
+    [RC_BOOSTER]    = {100, PE_RARE_BOOSTER,     "booster" },
 };
-static const struct { int effect; const char *name; } s_econ_mods[] = {
-    { PE_FX_SCAVENGER, "Scavenger mod" },
-    { PE_FX_LUCKY_FIND, "Lucky Find mod" },
-    { PE_FX_SALVAGER, "Salvager mod" },
-    { PE_FX_BARGAIN, "Bargain mod" },
+static const uint8_t s_tool_chance[5] = { 85, 65, 40, 20, 10 };   /* by Tools held; 5+: skipped */
+/* Economy mods, with drop weights by worth (Salvager most often). */
+static const struct { int effect; const char *name; uint8_t weight; } s_econ_mods[] = {
+    { PE_FX_SCAVENGER, "Scavenger mod", 1 },
+    { PE_FX_LUCKY_FIND, "Lucky Find mod", 2 },
+    { PE_FX_SALVAGER, "Salvager mod", 4 },
+    { PE_FX_BARGAIN, "Bargain mod", 3 },
 };
+static char s_cascade_path[96];             /* the last pick, for the play log */
 #define PE_ITEM_MOD_PERMIT 0x37u           /* carries an economy mod on the items-found screen */
 #define PE_ECON_DROP       0x8000u         /* a rare "add": 0x8000 | econ index */
 #define PE_ECON_COUNT 4
@@ -332,30 +349,78 @@ static int pe_carried(uint16_t v) {
     return 0;
 }
 
+/* Count of item value v in the bag and Wayne's storage. */
+static uint32_t pe_held(uint16_t v) {
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT; ++i) n += psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == v;
+    for (uint32_t i = 0; i < PE_STORAGE_COUNT; ++i) n += psx_mod_read_half(PE_STORAGE_ADDR + i * 2u) == v;
+    return n;
+}
+
+/* An economy mod not unlocked yet, weighted by worth. */
+static int pe_pick_econ(const int *missing, int n) {
+    uint32_t total = 0;
+    for (int i = 0; i < n; ++i) total += s_econ_mods[missing[i]].weight;
+    uint32_t r = pe_rand() % (total ? total : 1u);
+    for (int i = 0; i < n; ++i) {
+        if (r < s_econ_mods[missing[i]].weight) return missing[i];
+        r -= s_econ_mods[missing[i]].weight;
+    }
+    return missing[0];
+}
+
+/* Is cascade entry k of no use now? Its chance in *pct (Tools: by Tools held). */
+static int pe_cascade_skip(int k, int econ_missing, uint32_t *pct) {
+    *pct = s_cascade[k].chance;
+    switch (k) {
+    case RC_ECON:       return econ_missing == 0;
+    case RC_SUPER_TOOL: return pe_carried(0x36u);                    /* Super Tool Kit */
+    case RC_PERMIT:     return pe_held(0x37u) >= 2u;                  /* spend one first */
+    case RC_CHARM:      return pe_carried(PE_ITEM_LUCKY_CHARM) || s_st.charm_left;
+    case RC_TOOL: {
+        if (pe_carried(0x35u) || pe_carried(0x36u)) return 1;         /* either kit: Tools are free */
+        const uint32_t held = pe_held(0x16u);
+        if (held >= 5u) return 1;
+        *pct = s_tool_chance[held];
+        return 0;
+    }
+    default:            return 0;
+    }
+}
+
 static uint16_t pe_pick_rare(uint32_t exp) {
     int missing[PE_ECON_COUNT];
     const int econ = pe_econ_missing(missing);
-    uint32_t total = 0;
-    for (size_t i = 0; i < sizeof s_rare_table / sizeof s_rare_table[0]; ++i)
-        if (s_rare_table[i].item != PE_RARE_ECON || econ) total += s_rare_table[i].weight;
-    uint32_t r = pe_rand() % total;
-    for (size_t i = 0; i < sizeof s_rare_table / sizeof s_rare_table[0]; ++i) {
-        if (s_rare_table[i].item == PE_RARE_ECON && !econ) continue;   /* all found */
-        if (r < s_rare_table[i].weight) {
-            if (s_rare_table[i].item == PE_RARE_ECON)   /* shown as "<mod> mod", taken to unlock */
-                return (uint16_t)(PE_ECON_DROP | (uint32_t)missing[pe_rand() % (uint32_t)econ]);
-            uint16_t item = s_rare_table[i].item;
-            /* A Tool is wasted with the Tool Kit (either kit makes Tools free),
-             * a Super Tool with the Super Tool Kit: a stat booster instead. */
-            if (item == 0x16u && (pe_carried(0x35u) || pe_carried(0x36u))) item = PE_RARE_BOOSTER;
-            if (item == 0x17u && pe_carried(0x36u)) item = PE_RARE_BOOSTER;
-            if (item != PE_RARE_BOOSTER) return item;
-            const uint32_t tier = exp < 20u ? 0u : exp < 60u ? 1u : exp < 150u ? 2u : 3u;
-            return (uint16_t)(s_booster_base[pe_rand() % 6u] + tier);
+    int hit = RC_BOOSTER;
+    unsigned o = 0;
+    s_cascade_path[0] = '\0';
+    for (int k = 0; k < RC_COUNT; ++k) {
+        uint32_t pct;
+        if (pe_cascade_skip(k, econ, &pct)) {
+            if (o < sizeof s_cascade_path - 12u)
+                o += (unsigned)snprintf(s_cascade_path + o, sizeof s_cascade_path - o, "-%s", s_cascade[k].name);
+            continue;
         }
-        r -= s_rare_table[i].weight;
+        uint32_t guarantee = 0, since = 0;
+        if (k == RC_ECON) { guarantee = (uint32_t)s_tune_econ_guarantee; since = s_st.econ_since; }
+        if (k == RC_PERMIT) { guarantee = (uint32_t)s_tune_permit_guarantee; since = s_st.permit_since; }
+        const int certain = guarantee && since + 1u >= guarantee;
+        if (k == RC_BOOSTER || certain || pe_rand() % 100u < pct) {
+            hit = k;
+            if (o < sizeof s_cascade_path - 16u)
+                snprintf(s_cascade_path + o, sizeof s_cascade_path - o, "+%s%s", s_cascade[k].name, certain ? "!" : "");
+            break;
+        }
     }
-    return 0x16u;
+    /* Guarantees count rares without the entry, only while it isn't skipped. */
+    if (econ) s_st.econ_since = hit == RC_ECON ? 0 : (uint8_t)(s_st.econ_since < 250 ? s_st.econ_since + 1 : 250);
+    if (pe_held(0x37u) < 2u)
+        s_st.permit_since = hit == RC_PERMIT ? 0 : (uint8_t)(s_st.permit_since < 250 ? s_st.permit_since + 1 : 250);
+    if (hit == RC_ECON)                           /* shown as "<mod> mod", taken to unlock */
+        return (uint16_t)(PE_ECON_DROP | (uint32_t)pe_pick_econ(missing, econ));
+    if (hit != RC_BOOSTER) return s_cascade[hit].item;
+    const uint32_t tier = exp < 20u ? 0u : exp < 60u ? 1u : exp < 150u ? 2u : 3u;
+    return (uint16_t)(s_booster_base[pe_rand() % 6u] + tier);
 }
 
 /* Rare guarantee after the preset (39). */
@@ -453,10 +518,11 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
         pe_charm_battle_won();
         const unsigned dry_before = s_st.rare_dry, carried = s_st.rare_carry;
         const uint16_t rolled = pe_roll_rare(exp);
-        pe_log("loot", "exp=%u junk=%u hits=%u vanilla=%u steal=%u shown=%u boss=%d preset=%u scav=%d rare_dry=%u rolled=0x%04X carried=0x%04X charm=%u",
+        pe_log("loot", "exp=%u junk=%u hits=%u vanilla=%u steal=%u shown=%u boss=%d preset=%u scav=%d rare_dry=%u rolled=0x%04X carried=0x%04X charm=%u path=%s",
                (unsigned)exp, (unsigned)earned, (unsigned)hits, (unsigned)vanilla,
                (unsigned)s_st.steal_bank, (unsigned)s_found.junk_shown, s_boss_battle, (unsigned)s_st.preset,
-               pe_loot_armor_has(PE_FX_SCAVENGER), dry_before, rolled, carried, (unsigned)s_st.charm_left);
+               pe_loot_armor_has(PE_FX_SCAVENGER), dry_before, rolled, carried, (unsigned)s_st.charm_left,
+               rolled ? s_cascade_path : "-");
         const uint16_t adds[2] = { s_st.rare_carry, rolled };
         s_st.rare_carry = 0;
         s_found.rare_shown[0] = s_found.rare_shown[1] = 0;
@@ -722,6 +788,9 @@ static void pe_on_save_serialize(struct CPUState *cpu, uint32_t address) {
                            ((uint32_t)(s_st.disabled & 1u) << 24);
     psx_mod_write_word(at + 16u, extra);
     psx_mod_write_word(at + 20u, s_st.junk ^ packed ^ extra ^ 0xA5A5A5A5u);
+    const uint32_t since = (uint32_t)s_st.econ_since | ((uint32_t)s_st.permit_since << 8);   /* v4 */
+    psx_mod_write_word(at + 24u, since);
+    psx_mod_write_word(at + 28u, since ^ 0x5A5A5A5Au);
 }
 
 static void pe_on_save_deserialize(struct CPUState *cpu, uint32_t address) {
@@ -743,7 +812,7 @@ static void pe_on_save_deserialize(struct CPUState *cpu, uint32_t address) {
         s_st.junk = junk;
         s_st.rare_dry = (uint16_t)packed;
         s_st.rare_carry = (uint16_t)(packed >> 16);
-    } else if (version == 3u) {
+    } else if (version == 3u || version == 4u) {
         const uint32_t packed = psx_mod_read_word(at + 12u);
         const uint32_t extra = psx_mod_read_word(at + 16u);
         if ((junk ^ packed ^ extra ^ 0xA5A5A5A5u) != psx_mod_read_word(at + 20u)) return;
@@ -753,6 +822,11 @@ static void pe_on_save_deserialize(struct CPUState *cpu, uint32_t address) {
         s_st.charm_left = (uint16_t)extra;
         s_st.preset = (uint8_t)(extra >> 16) < 3 ? (uint8_t)(extra >> 16) : 1;
         s_st.disabled = (uint8_t)((extra >> 24) & 1u);
+        const uint32_t since = psx_mod_read_word(at + 24u);
+        if (version == 4u && (since ^ 0x5A5A5A5Au) == psx_mod_read_word(at + 28u)) {
+            s_st.econ_since = (uint8_t)since;
+            s_st.permit_since = (uint8_t)(since >> 8);
+        }
     }
     s_enabled = !s_st.disabled;      /* the save's own choice */
 }
@@ -1010,6 +1084,9 @@ static void pe_loot_state_loaded(int result, uint32_t saved_version,
      * without the Lucky Charm and the preset. */
     if (result == PSX_MOD_STATE_MISMATCH && saved_version == 1u && saved && saved_size >= 4u)
         memcpy(&s_st.junk, saved, sizeof s_st.junk);
+    if (result == PSX_MOD_STATE_MISMATCH && saved_version == 3u && saved &&
+        saved_size == PE_LOOT_STATE_V3_SIZE)
+        memcpy(&s_st, saved, PE_LOOT_STATE_V3_SIZE);
     if (result == PSX_MOD_STATE_MISMATCH && saved_version == 2u && saved &&
         saved_size == PE_LOOT_STATE_V2_SIZE)
         memcpy(&s_st, saved, PE_LOOT_STATE_V2_SIZE);
@@ -1146,6 +1223,10 @@ void pe_loot_menu_register(void) {
         "Added for each battle without one.", &s_tune_rare_step, 0, 50, 1);
     (void)pe_menu_register_int(PE_TUNING_PAGE, "Rare guarantee",
         "Battles until a rare drop is certain.", &s_tune_rare_guarantee, 1, 200, 1);
+    (void)pe_menu_register_int(PE_TUNING_PAGE, "Economy mod guarantee",
+        "Rares until an economy mod is certain.", &s_tune_econ_guarantee, 1, 50, 1);
+    (void)pe_menu_register_int(PE_TUNING_PAGE, "Mod Permit guarantee",
+        "Rares until a Mod Permit is certain.", &s_tune_permit_guarantee, 1, 50, 1);
     (void)pe_menu_register_int(PE_TUNING_PAGE, "Empty steal Junk",
         "Junk for stealing from an empty enemy.", &s_tune_empty_steal, 0, 20, 1);
     (void)pe_menu_register_action(PE_TUNING_PAGE, "Give 100 Junk",
