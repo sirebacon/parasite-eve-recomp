@@ -52,6 +52,8 @@
 #define PE_TEXTBOX_COUNT         4u
 #define TB_STATE   0x00u
 #define TB_MESSAGE 0x04u
+#define TB_STYLE   0x08u
+#define TB_BACKGROUND 0x09u
 #define TB_X       0x12u
 #define TB_Y       0x14u
 #define TB_W       0x16u
@@ -411,8 +413,13 @@ static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
                 const uint32_t e = PE_TEXTBOX_BASE + i * PE_TEXTBOX_STRIDE;
                 if (psx_mod_read_byte(e + TB_STATE) == 0) continue;
                 const uint32_t msg = psx_mod_read_word(e + TB_MESSAGE);
-                if (msg && msg != s_buf && msg != pe_field_wayne_text())
+                if (msg && msg != s_buf && msg != pe_field_wayne_text()) {
                     psx_mod_write_word(e + TB_MESSAGE, pe_field_wayne_text());
+                    /* his line is style 0, drawn at a fixed spot near the bottom (0x14, 0xAE);
+                     * a menu needs style 1: a window at the box's own x / y, like Wayne's */
+                    psx_mod_write_byte(e + TB_STYLE, 1);
+                    psx_mod_write_byte(e + TB_BACKGROUND, 0);
+                }
             }
         }
         for (uint32_t i = 0; i < PE_TEXTBOX_COUNT; ++i) {
