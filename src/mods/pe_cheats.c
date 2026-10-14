@@ -19,6 +19,20 @@
  * outright or on a button, is what the toggle is for finding out (2026-10-14).
  * Same live-view handling as No random battles, and also saved with the game.
  *
+ * MOVIE WATCHDOG (main page, on by default): some story movies stop getting
+ * frames partway (\FMV004.STR stalls at frame 439 of 561, every time,
+ * 2026-10-14): the stream library stops taking sectors, StGetNext never
+ * returns a frame and MenuCardFirst_UpdateVideoFrame (0x80121270, menu_memcard
+ * overlay, decomp video_frame.inc) spins forever while the game re-reads the
+ * same stretch of disc. Root cause still open (bridge findings
+ * fmv-freeze-overlay-cache-2026-10-14.md). The watchdog uses the game's own
+ * exit: while that player is loaded (its first two instructions match) and a
+ * movie is running (g_MenuCardVideoFinished 0x801223F5 is 0, the entry pointer
+ * g_MenuCardVideoEntry 0x801227E4 is set), a last frame
+ * (g_MenuCardVideoLastTime 0x801227E8) that hasn't moved for 5 seconds sets
+ * Finished, as reaching the movie's last frame would. The play log gets a
+ * fmv_watchdog row.
+ *
  * INFINITE AMMO (decomp: Inv_DrawSlotItemIcon, BattleCmd_CommitAmmoAndUpdate,
  * Battle_StatusPrimitiveFlow's ammo counter):
  *   - Spare rounds live in one of three pools (ItemDataRecord[3] at
@@ -33,11 +47,19 @@
  */
 #include "mod_plugins.h"
 #include "pe_mod_menu.h"
+#include "pe_log.h"
 
 #define PE_BATTLE_SKIP_ADDR   0x800A781Au
 #define PE_BATTLE_SKIP_BIT    0x8000u
 #define PE_EVENT_SKIP_ADDR    0x800A77F0u   /* script variable 0 */
 #define PE_EVENT_SKIP_BIT     0x0004u
+#define PE_FMV_PLAYER_FN      0x80121270u   /* MenuCardFirst_UpdateVideoFrame */
+#define PE_FMV_PLAYER_SIG0    0x27BDFFD0u   /* its first two instructions */
+#define PE_FMV_PLAYER_SIG1    0xAFB10024u
+#define PE_FMV_FINISHED       0x801223F5u   /* u8 g_MenuCardVideoFinished */
+#define PE_FMV_ENTRY          0x801227E4u   /* VideoEntry *g_MenuCardVideoEntry */
+#define PE_FMV_LAST_TIME      0x801227E8u   /* last frame shown */
+#define PE_FMV_STUCK_TICKS    300u          /* 5 s of 60 Hz ticks */
 
 #define PE_MAX_HP_ADDR        0x800C0E06u
 #define PE_WEAPON_SLOT_ADDR   0x800C0E20u
@@ -99,8 +121,40 @@ static int pe_set_event_skip(int value) {
     return 1;
 }
 
+/* ---- movie watchdog ---------------------------------------------------------- */
+static int s_fmv_watchdog = 1;
+
+static void pe_fmv_watchdog_tick(void) {
+    static uint32_t s_last = 0xFFFFFFFFu, s_entry, s_stuck;
+    if (!s_fmv_watchdog || psx_mod_read_word(PE_FMV_PLAYER_FN) != PE_FMV_PLAYER_SIG0 ||
+        psx_mod_read_word(PE_FMV_PLAYER_FN + 4u) != PE_FMV_PLAYER_SIG1) {
+        s_stuck = 0; s_last = 0xFFFFFFFFu; return;
+    }
+    const uint32_t entry = psx_mod_read_word(PE_FMV_ENTRY);
+    if (entry < 0x80120000u || entry >= 0x80130000u || psx_mod_read_byte(PE_FMV_FINISHED)) {
+        s_stuck = 0; s_last = 0xFFFFFFFFu; return;
+    }
+    const uint32_t last = psx_mod_read_word(PE_FMV_LAST_TIME);
+    if (entry != s_entry || last != s_last) { s_entry = entry; s_last = last; s_stuck = 0; return; }
+    if (++s_stuck < PE_FMV_STUCK_TICKS) return;
+    char name[20];
+    const uint32_t np = psx_mod_read_word(entry);
+    unsigned i = 0;
+    for (; i < sizeof name - 1 && np >= 0x80000000u && np < 0x80200000u; ++i) {
+        const char c = (char)psx_mod_read_byte(np + i);
+        if (!c) break;
+        name[i] = (c > 32 && c < 127 && c != ',') ? c : '_';
+    }
+    name[i] = 0;
+    pe_log("fmv_watchdog", "movie=%s frame=%u end=%d", name, (unsigned)last,
+           (int)(int16_t)psx_mod_read_half(entry + 8u));
+    psx_mod_write_byte(PE_FMV_FINISHED, 1);       /* the game's own end of movie */
+    s_stuck = 0;
+}
+
 /* Both switches: keep a bit a script cleared set, for this session. */
 static void pe_no_battles_tick(void) {
+    pe_fmv_watchdog_tick();                       /* runs from the boot movies on */
     if (!pe_loaded()) return;
     if (s_force_no_battles) {
         const uint16_t v = psx_mod_read_half(PE_BATTLE_SKIP_ADDR);
@@ -183,6 +237,8 @@ void pe_cheats_menu_register(void) {
         "Stops random battles. Saved with game.", off_on, 2,
         pe_get_no_battles, pe_set_no_battles);
     (void)pe_menu_register_tick(pe_no_battles_tick);
+    (void)pe_menu_register_toggle(0, "Unstick movies",
+        "Ends a movie stuck for 5 s.", &s_fmv_watchdog, 0);
     (void)pe_menu_register_live_choice("Debug", "Event skip (test)",
         "Game's own debug event skip. Saved.", off_on, 2,
         pe_get_event_skip, pe_set_event_skip);
