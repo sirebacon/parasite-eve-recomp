@@ -12,6 +12,13 @@
  * it), turning it off clears it. A save made while it is on keeps battles off
  * until the row is turned off again.
  *
+ * EVENT SKIP (Debug page, experimental): bit 0x4 of the half at 0x800A77F0,
+ * script variable 0 (g_EventSkip in the decomp's symbol catalogue, from the
+ * old Action Replay code 800A77F0 0004, "Event Skip"). Room event scripts
+ * (overlay bytecode, not decompiled C) read it; what they do with it, skip
+ * outright or on a button, is what the toggle is for finding out (2026-10-14).
+ * Same live-view handling as No random battles, and also saved with the game.
+ *
  * INFINITE AMMO (decomp: Inv_DrawSlotItemIcon, BattleCmd_CommitAmmoAndUpdate,
  * Battle_StatusPrimitiveFlow's ammo counter):
  *   - Spare rounds live in one of three pools (ItemDataRecord[3] at
@@ -29,6 +36,8 @@
 
 #define PE_BATTLE_SKIP_ADDR   0x800A781Au
 #define PE_BATTLE_SKIP_BIT    0x8000u
+#define PE_EVENT_SKIP_ADDR    0x800A77F0u   /* script variable 0 */
+#define PE_EVENT_SKIP_BIT     0x0004u
 
 #define PE_MAX_HP_ADDR        0x800C0E06u
 #define PE_WEAPON_SLOT_ADDR   0x800C0E20u
@@ -73,11 +82,36 @@ static int pe_set_no_battles(int value) {
     return 1;
 }
 
+/* ---- event skip (experimental) ----------------------------------------------- */
+static int s_force_event_skip;
+
+static int pe_get_event_skip(void) {
+    if (!pe_loaded()) return 0;
+    return (psx_mod_read_half(PE_EVENT_SKIP_ADDR) & PE_EVENT_SKIP_BIT) ? 1 : 0;
+}
+
+static int pe_set_event_skip(int value) {
+    if (!pe_loaded()) return 0;
+    const uint16_t v = psx_mod_read_half(PE_EVENT_SKIP_ADDR);
+    psx_mod_write_half(PE_EVENT_SKIP_ADDR,
+        (uint16_t)(value ? (v | PE_EVENT_SKIP_BIT) : (v & ~PE_EVENT_SKIP_BIT)));
+    s_force_event_skip = value ? 1 : 0;
+    return 1;
+}
+
+/* Both switches: keep a bit a script cleared set, for this session. */
 static void pe_no_battles_tick(void) {
-    if (!s_force_no_battles || !pe_loaded()) return;
-    const uint16_t v = psx_mod_read_half(PE_BATTLE_SKIP_ADDR);
-    if (!(v & PE_BATTLE_SKIP_BIT))
-        psx_mod_write_half(PE_BATTLE_SKIP_ADDR, (uint16_t)(v | PE_BATTLE_SKIP_BIT));
+    if (!pe_loaded()) return;
+    if (s_force_no_battles) {
+        const uint16_t v = psx_mod_read_half(PE_BATTLE_SKIP_ADDR);
+        if (!(v & PE_BATTLE_SKIP_BIT))
+            psx_mod_write_half(PE_BATTLE_SKIP_ADDR, (uint16_t)(v | PE_BATTLE_SKIP_BIT));
+    }
+    if (s_force_event_skip) {
+        const uint16_t v = psx_mod_read_half(PE_EVENT_SKIP_ADDR);
+        if (!(v & PE_EVENT_SKIP_BIT))
+            psx_mod_write_half(PE_EVENT_SKIP_ADDR, (uint16_t)(v | PE_EVENT_SKIP_BIT));
+    }
 }
 
 /* ---- infinite ammo -------------------------------------------------------- */
@@ -149,6 +183,9 @@ void pe_cheats_menu_register(void) {
         "Stops random battles. Saved with game.", off_on, 2,
         pe_get_no_battles, pe_set_no_battles);
     (void)pe_menu_register_tick(pe_no_battles_tick);
+    (void)pe_menu_register_live_choice("Debug", "Event skip (test)",
+        "Game's own debug event skip. Saved.", off_on, 2,
+        pe_get_event_skip, pe_set_event_skip);
     (void)pe_menu_register_choice(0, "Infinite ammo",
         "Refill spare rounds, or never reload.",
         &s_ammo_mode, s_ammo_names, PE_AMMO_CHOICES);
