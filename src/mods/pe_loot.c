@@ -422,7 +422,10 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
     if (pe_loot_armor_has(PE_FX_SCAVENGER)) earned += earned / 2u;               /* C1 */
 
     /* Vanilla Junk leaves the reward list for the counter; the battle's whole
-     * Junk comes back as one "Junk xN" entry at the top (keeps it contiguous). */
+     * Junk comes back as one "Junk xN" entry at the end. Last, because Take all
+     * (Inv_TransferItemAlt) puts entries into free bag slots in list order: at
+     * the top it took the last free slot from a rare. Junk needs no slot, so if
+     * none is left for it, it is paid when the list closes all the same. */
     uint32_t vanilla = 0;
     s_junk_shown = 0;
     s_junk_list_seen = 0;
@@ -436,13 +439,6 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
             else keep[kept++] = entry;
         }
         const uint32_t shown = earned + vanilla + s_st.steal_bank;
-        if (shown && kept < PE_REWARD_SLOTS) {
-            for (uint32_t i = kept; i > 0; --i) keep[i] = keep[i - 1];
-            keep[0] = 0xFFFF0000u | PE_ITEM_JUNK;
-            ++kept;
-            s_junk_shown = shown;
-            s_bag_junk_before = pe_bag_junk_count();
-        }
         /* Rare drop (and one carried over from a full list) after the vanilla
          * items, as {id, extra = -1}. */
         pe_charm_battle_won();
@@ -484,6 +480,11 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
             } else {
                 s_st.rare_carry = id;                /* next battle (never an economy mod here) */
             }
+        }
+        if (shown && kept < PE_REWARD_SLOTS) {   /* no room: paid straight away, below */
+            keep[kept++] = 0xFFFF0000u | PE_ITEM_JUNK;
+            s_junk_shown = shown;
+            s_bag_junk_before = pe_bag_junk_count();
         }
         for (uint32_t i = 0; i < PE_REWARD_SLOTS; ++i)
             psx_mod_write_word(list + i * 4u, i < kept ? keep[i] : 0xFFFF0000u);
@@ -856,8 +857,9 @@ static void pe_loot_tick(void) {
         } else if (psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
             s_junk_list_seen = 1;
         } else if (s_junk_list_seen) {
-            pe_log("junk_left", "n=%u", (unsigned)s_junk_shown);
-            s_junk_shown = 0;                /* the list closed with it left behind: lost */
+            pe_log("junk_left", "n=%u paid=1", (unsigned)s_junk_shown);
+            pe_add_junk(s_junk_shown);       /* left behind (no slot, or Done): it needs no slot */
+            s_junk_shown = 0;
             s_junk_list_seen = 0;
         }
     }
