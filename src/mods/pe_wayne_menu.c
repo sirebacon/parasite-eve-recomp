@@ -93,7 +93,8 @@ static int pe_contains(const uint8_t *b, unsigned n, const char *ascii) {
 
 /* Is the message at `msg` Wayne's menu? Copies it into s_orig if so. */
 static int pe_is_wayne_menu(uint32_t msg) {
-    if (!pe_ram_pointer(msg)) return 0;
+    const int warner = msg && msg == pe_field_wayne_text();   /* Warner's (pe_field_wayne.c) */
+    if (!pe_ram_pointer(msg) && !warner) return 0;
     uint8_t b[PE_TEXT_MAX];
     unsigned n = 0, choice_at = PE_TEXT_MAX;
     while (n < PE_TEXT_MAX - 1) {
@@ -104,7 +105,7 @@ static int pe_is_wayne_menu(uint32_t msg) {
         ++n;
     }
     if (choice_at == PE_TEXT_MAX || n >= PE_TEXT_MAX - 1) return 0;
-    if (!pe_contains(b, n, s_discard_junk)) return 0;
+    if (!warner && !pe_contains(b, n, s_discard_junk)) return 0;
     const int count = b[choice_at] & 7;
     if (count < 2 || count >= 7) return 0;    /* no room for one more option */
     memcpy(s_orig, b, n + 1);
@@ -297,6 +298,15 @@ static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
     }
     if (s_ui.screen == SCR_NONE) {
         if (!pe_loot_enabled()) return;
+        if (pe_field_wayne_box_ours()) {       /* Warner's menu: his box shows our text */
+            for (uint32_t i = 0; i < PE_TEXTBOX_COUNT; ++i) {
+                const uint32_t e = PE_TEXTBOX_BASE + i * PE_TEXTBOX_STRIDE;
+                if (psx_mod_read_byte(e + TB_STATE) == 0) continue;
+                const uint32_t msg = psx_mod_read_word(e + TB_MESSAGE);
+                if (msg && msg != s_buf && msg != pe_field_wayne_text())
+                    psx_mod_write_word(e + TB_MESSAGE, pe_field_wayne_text());
+            }
+        }
         for (uint32_t i = 0; i < PE_TEXTBOX_COUNT; ++i) {
             const uint32_t e = PE_TEXTBOX_BASE + i * PE_TEXTBOX_STRIDE;
             if (psx_mod_read_byte(e + TB_STATE) != 2) continue;

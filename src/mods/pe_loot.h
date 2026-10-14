@@ -73,6 +73,9 @@ int pe_cat_replaces(int which, int slot, int e, int *out, int max);  /* effects 
 /* pe_bag_sort.c: Sort in Use Item, the bag kept sorted */
 int pe_bag_sort_hide_row(void);
 void pe_bag_sort_screen_seen(void);
+/* pe_field_wayne.c: Warner offers Wayne's services */
+uint32_t pe_field_wayne_text(void);
+int pe_field_wayne_box_ours(void);
 
 #ifdef __cplusplus
 }
