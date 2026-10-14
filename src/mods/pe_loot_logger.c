@@ -151,6 +151,8 @@
 #define EN_STEAL     0x9Fu
 #define EN_ENTITY_ID 0x07u
 #define EN_STATUS_FLAGS2 0xCCu             /* & 0x40000: can't escape (bosses) */
+#define EN_CHARGE_STEP   0x8Eu             /* ATB charge per tick */
+#define EN_POISON_DAMAGE 0x96u             /* hp lost per poison tick */
 
 #define REC_ITEM_ID  0x04u
 #define REC_AMMO     0x0Au
@@ -199,6 +201,9 @@ typedef struct {
     uint8_t entity_id;
     int start_hp, last_hp, boss;
     unsigned identity, exp, defense, bp_base, bp_factor, bp_hits, drop, steal;
+    uint32_t status2;                         /* resistances (mod effects overhaul doc) */
+    int poison;                               /* damage per poison tick */
+    unsigned charge;                          /* ATB charge per tick (full = 9000) */
 } PeEnemyTrack;
 static PeEnemyTrack s_enemy[PE_ENEMY_SLOTS];
 
@@ -342,9 +347,14 @@ void pe_log(const char *kind, const char *fmt, ...) {
 static void pe_log_enemy(int slot, int died) {
     const PeEnemyTrack *e = &s_enemy[slot];
     if (e->identity == 0) return;      /* an empty slot, not a real enemy */
-    pe_log("enemy", "slot=%d id=0x%04X hp=%d def=%u exp=%u bp=%u/%u/%u drop=0x%02X steal=0x%02X boss=%d died=%d",
+    /* Resist bits (2 each): 0 neutral / 50%, 1 resists / immune, 2 weak / always. */
+    const uint32_t s2 = e->status2;
+    pe_log("enemy", "slot=%d id=0x%04X hp=%d def=%u exp=%u bp=%u/%u/%u drop=0x%02X steal=0x%02X boss=%d died=%d"
+           " heat=%u frost=%u cyanide=%u acid=%u tranq=%u steal_r=%u poison=%d charge=%u",
            slot, e->identity, e->start_hp, e->defense, e->exp, e->bp_base, e->bp_factor,
-           e->bp_hits, e->drop, e->steal, e->boss, died);
+           e->bp_hits, e->drop, e->steal, e->boss, died,
+           (unsigned)(s2 >> 14) & 3u, (unsigned)(s2 >> 16) & 3u, (unsigned)s2 & 3u, (unsigned)(s2 >> 2) & 3u,
+           (unsigned)(s2 >> 4) & 3u, (unsigned)(s2 >> 12) & 3u, e->poison, e->charge);
 }
 
 static unsigned pe_equipped_id(int which) {
@@ -537,7 +547,10 @@ static void pe_track_enemies(void) {
         e->bp_hits = psx_mod_read_half(core + EN_BP_HITS);
         e->drop = psx_mod_read_byte(core + EN_DROP);
         e->steal = psx_mod_read_byte(core + EN_STEAL);
-        e->boss = (psx_mod_read_word(core + EN_STATUS_FLAGS2) & 0x40000u) != 0;
+        e->status2 = psx_mod_read_word(core + EN_STATUS_FLAGS2);
+        e->boss = (e->status2 & 0x40000u) != 0;
+        e->poison = (int16_t)psx_mod_read_half(core + EN_POISON_DAMAGE);
+        e->charge = psx_mod_read_half(core + EN_CHARGE_STEP);
         if (e->identity && e->boss) s_battle_boss = 1;
     }
 }
