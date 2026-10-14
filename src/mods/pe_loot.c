@@ -119,6 +119,8 @@
 
 #define PE_REWARD_SLOTS       10u
 #define PE_INV_OVERRIDE_LIST  0x8009D04Cu  /* g_InvActiveListOverride (items found) */
+#define PE_FOUND_ITEMS        0x800A1FD4u  /* g_InvActiveListItems: the items-found list */
+#define PE_FOUND_COUNT        0x8009D078u  /* g_InvActiveListCount */
 #define PE_DRAW_COLOR         0x8009D110u  /* g_DrawPrimColor (Draw_SetColor) */
 #define PE_DRAW_COLOR_SHADED  0x8009D114u  /* g_DrawColorShaded = (color >> 1) & 0x7F7F7F */
 #define PE_RARE_COLOR         0x0030A8D0u  /* gold (0xBBGGRR, 0x80 = normal) */
@@ -175,6 +177,23 @@ static const uint16_t s_preset_pity_step[3] = { 150, 100, 60 };  /* step % */
 static const uint16_t s_preset_price[3] = { 75, 100, 125 };
 
 static int s_in_battle;
+
+/* The items-found screen this battle: what our entries are. Kept in save
+ * states ("pe.loot.found"), so a state loaded on that screen still draws the
+ * rare in gold and pays the "Junk xN" line. */
+#define PE_FOUND_STATE_VERSION 1u
+static struct {
+    uint16_t rare_shown[2];        /* rare drops to draw in gold this battle */
+    uint32_t rare_before[2];       /* bag count of each shown rare (play log) */
+    int32_t rare_is_econ[2];
+    int32_t rare_list_seen;        /* the items-found list has been shown */
+    uint32_t junk_shown;           /* this battle's Junk, shown as "Junk xN" */
+    int32_t junk_list_seen;        /* ... and its items-found list has been open */
+    uint32_t bag_junk_before;      /* Junk in the bag when the battle paid out */
+    int32_t econ_shown;            /* economy mod index on the list (as a Mod Permit), or -1 */
+    uint32_t permits_before;       /* Mod Permits in the bag when it was listed */
+    int32_t econ_list_seen;
+} s_found = { .econ_shown = -1 };
 static uint32_t s_frames, s_last_count_frame;
 static int s_handin_active;
 static uint32_t s_handin_left;     /* removals still to feed this hand-in */
@@ -182,21 +201,13 @@ static uint32_t s_scratch_list;   /* guest list of Junk the count reads */
 static uint32_t s_saved_limit;
 static int s_list_redirected;
 static uint32_t s_free_frames;     /* consecutive frames of free movement */
-static uint16_t s_rare_shown[2];   /* rare drops to draw in gold this battle */
-static int s_rare_list_seen;       /* the items-found list has been shown */
 static int s_color_saved;
 static uint32_t s_saved_color, s_saved_color_shaded;
 static int s_boss_battle;          /* an enemy this fight can't be escaped from */
 static int s_wayne_waiting;        /* a hand-in reached 300 and he built nothing (before Day 4) */
 static uint16_t s_wayne_prev;      /* Wayne's count during a hand-in */
 static int s_wayne_dropped;        /* ... it went down: he made a gun */
-static uint32_t s_junk_shown;      /* this battle's Junk, shown as "Junk xN" */
-static int s_junk_list_seen;       /* ... and its items-found list has been open */
-static uint32_t s_bag_junk_before; /* Junk in the bag when the battle paid out */
 static uint32_t s_junk_label;      /* "Junk xN" in game text, mod memory */
-static int s_econ_shown = -1;      /* economy mod index on the list (as a Mod Permit) */
-static uint32_t s_permits_before;  /* Mod Permits in the bag when it was listed */
-static int s_econ_list_seen;
 static uint32_t s_econ_label;      /* "<mod> mod" in game text, mod memory */
 static uint16_t s_steal_item;      /* Aya just stole this; highlight its name */
 static uint32_t s_steal_frame;
@@ -400,8 +411,6 @@ static uint32_t pe_bag_count_of(uint16_t v) {
 
 static uint32_t pe_bag_junk_count(void) { return pe_bag_count_of(PE_ITEM_JUNK); }
 
-static uint32_t s_rare_before[2];          /* bag count of each shown rare (play log) */
-static int s_rare_is_econ[2];
 
 /* ---- battle end ------------------------------------------------------------ */
 static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
@@ -427,8 +436,8 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
      * the top it took the last free slot from a rare. Junk needs no slot, so if
      * none is left for it, it is paid when the list closes all the same. */
     uint32_t vanilla = 0;
-    s_junk_shown = 0;
-    s_junk_list_seen = 0;
+    s_found.junk_shown = 0;
+    s_found.junk_list_seen = 0;
     if (pe_ram_pointer(list)) {
         uint32_t keep[PE_REWARD_SLOTS];
         uint32_t kept = 0;
@@ -446,14 +455,14 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
         const uint16_t rolled = pe_roll_rare(exp);
         pe_log("loot", "exp=%u junk=%u hits=%u vanilla=%u steal=%u shown=%u boss=%d preset=%u scav=%d rare_dry=%u rolled=0x%04X carried=0x%04X charm=%u",
                (unsigned)exp, (unsigned)earned, (unsigned)hits, (unsigned)vanilla,
-               (unsigned)s_st.steal_bank, (unsigned)s_junk_shown, s_boss_battle, (unsigned)s_st.preset,
+               (unsigned)s_st.steal_bank, (unsigned)s_found.junk_shown, s_boss_battle, (unsigned)s_st.preset,
                pe_loot_armor_has(PE_FX_SCAVENGER), dry_before, rolled, carried, (unsigned)s_st.charm_left);
         const uint16_t adds[2] = { s_st.rare_carry, rolled };
         s_st.rare_carry = 0;
-        s_rare_shown[0] = s_rare_shown[1] = 0;
-        s_rare_list_seen = 0;
-        s_econ_shown = -1;
-        s_econ_list_seen = 0;
+        s_found.rare_shown[0] = s_found.rare_shown[1] = 0;
+        s_found.rare_list_seen = 0;
+        s_found.econ_shown = -1;
+        s_found.econ_list_seen = 0;
         for (int a = 0; a < 2; ++a) {
             if (!adds[a]) continue;
             uint16_t id = adds[a];
@@ -464,27 +473,27 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
                 id = pe_pick_rare(exp);
             if (id & PE_ECON_DROP) {
                 /* Carried by a Mod Permit entry: never next to a real one, never two. */
-                if (s_econ_shown >= 0 || adds[1 - a] == PE_ITEM_MOD_PERMIT || kept >= PE_REWARD_SLOTS) {
+                if (s_found.econ_shown >= 0 || adds[1 - a] == PE_ITEM_MOD_PERMIT || kept >= PE_REWARD_SLOTS) {
                     if (!s_st.rare_carry) s_st.rare_carry = id;
                     continue;
                 }
-                s_econ_shown = (int)(id & 0xFFu) % PE_ECON_COUNT;
-                s_permits_before = pe_bag_count_of(PE_ITEM_MOD_PERMIT);
+                s_found.econ_shown = (int)(id & 0xFFu) % PE_ECON_COUNT;
+                s_found.permits_before = pe_bag_count_of(PE_ITEM_MOD_PERMIT);
                 id = PE_ITEM_MOD_PERMIT;
             }
             if (kept < PE_REWARD_SLOTS) {
                 keep[kept++] = 0xFFFF0000u | id;
-                s_rare_shown[a] = id;                /* drawn in gold */
-                s_rare_before[a] = pe_bag_count_of(id);
-                s_rare_is_econ[a] = id == PE_ITEM_MOD_PERMIT && s_econ_shown >= 0;
+                s_found.rare_shown[a] = id;                /* drawn in gold */
+                s_found.rare_before[a] = pe_bag_count_of(id);
+                s_found.rare_is_econ[a] = id == PE_ITEM_MOD_PERMIT && s_found.econ_shown >= 0;
             } else {
                 s_st.rare_carry = id;                /* next battle (never an economy mod here) */
             }
         }
         if (shown && kept < PE_REWARD_SLOTS) {   /* no room: paid straight away, below */
             keep[kept++] = 0xFFFF0000u | PE_ITEM_JUNK;
-            s_junk_shown = shown;
-            s_bag_junk_before = pe_bag_junk_count();
+            s_found.junk_shown = shown;
+            s_found.bag_junk_before = pe_bag_junk_count();
         }
         for (uint32_t i = 0; i < PE_REWARD_SLOTS; ++i)
             psx_mod_write_word(list + i * 4u, i < kept ? keep[i] : 0xFFFF0000u);
@@ -492,7 +501,7 @@ static void pe_on_set_total_exp(struct CPUState *cpu, uint32_t address) {
 
     const uint32_t total = earned + vanilla + s_st.steal_bank;
     s_st.steal_bank = 0;
-    if (!s_junk_shown) pe_add_junk(total);   /* else paid when the "Junk xN" entry is taken */
+    if (!s_found.junk_shown) pe_add_junk(total);   /* else paid when the "Junk xN" entry is taken */
 }
 
 /* ---- gold names for rare drops on the items-found screen ---------------------- */
@@ -553,23 +562,23 @@ static uint32_t pe_junk_label(uint32_t n) {
 static void pe_on_print_raw_text(struct CPUState *cpu, uint32_t address) {
     (void)address;
     pe_restore_text_color();
-    if (!s_rare_shown[0] && !s_rare_shown[1] && !s_junk_shown) return;
+    if (!s_found.rare_shown[0] && !s_found.rare_shown[1] && !s_found.junk_shown) return;
     const uint32_t ra = cpu->gpr[31];
     if (ra < PE_FN_SLOT_ROW_START || ra >= PE_FN_SLOT_ROW_END) return;
     const uint32_t override = psx_mod_read_word(PE_INV_OVERRIDE_LIST);
     if (!override || psx_mod_read_word(PE_ACTIVE_LIST_PTR) != override) return;
     const uint32_t text = cpu->gpr[4];
-    if (s_junk_shown && text == pe_item_name_text(PE_ITEM_JUNK)) {
-        const uint32_t label = pe_junk_label(s_junk_shown);
+    if (s_found.junk_shown && text == pe_item_name_text(PE_ITEM_JUNK)) {
+        const uint32_t label = pe_junk_label(s_found.junk_shown);
         if (label) cpu->gpr[4] = label;
         return;
     }
-    if (s_econ_shown >= 0 && text == pe_item_name_text(PE_ITEM_MOD_PERMIT)) {
-        const uint32_t label = pe_ascii_label(&s_econ_label, s_econ_mods[s_econ_shown].name);
+    if (s_found.econ_shown >= 0 && text == pe_item_name_text(PE_ITEM_MOD_PERMIT)) {
+        const uint32_t label = pe_ascii_label(&s_econ_label, s_econ_mods[s_found.econ_shown].name);
         if (label) cpu->gpr[4] = label;      /* and gold, below */
     }
     for (int a = 0; a < 2; ++a) {
-        if (!s_rare_shown[a] || pe_item_name_text(s_rare_shown[a]) != text) continue;   /* text: before any swap */
+        if (!s_found.rare_shown[a] || pe_item_name_text(s_found.rare_shown[a]) != text) continue;   /* text: before any swap */
         s_saved_color = psx_mod_read_word(PE_DRAW_COLOR);
         s_saved_color_shaded = psx_mod_read_word(PE_DRAW_COLOR_SHADED);
         psx_mod_write_word(PE_DRAW_COLOR, PE_RARE_COLOR);
@@ -596,10 +605,10 @@ static void pe_on_inv_add_item(struct CPUState *cpu, uint32_t address) {
     }
     if (!s_enabled || !pe_game_loaded() || cpu->gpr[4] != PE_ITEM_JUNK) return;
     cpu->gpr[4] = 0;   /* Inv_AddItem(0): adds nothing, returns success */
-    if (s_junk_shown && psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
-        pe_log("junk_take", "n=%u", (unsigned)s_junk_shown);
-        pe_add_junk(s_junk_shown);           /* the "Junk xN" entry taken */
-        s_junk_shown = 0;
+    if (s_found.junk_shown && psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
+        pe_log("junk_take", "n=%u", (unsigned)s_found.junk_shown);
+        pe_add_junk(s_found.junk_shown);           /* the "Junk xN" entry taken */
+        s_found.junk_shown = 0;
         return;
     }
     if (ra >= PE_FN_RESOLVE_HIT_START && ra < PE_FN_RESOLVE_HIT_END) {
@@ -750,7 +759,7 @@ static void pe_on_save_deserialize(struct CPUState *cpu, uint32_t address) {
 
 /* ---- per frame -------------------------------------------------------------- */
 static void pe_sweep(void) {
-    if (s_junk_shown) return;                /* the items-found Junk line is still settling */
+    if (s_found.junk_shown) return;                /* the items-found Junk line is still settling */
     uint32_t moved = 0;
     for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT + PE_STORAGE_COUNT; ++i) {
         const uint32_t a = i < PE_AYA_SLOT_COUNT ? PE_AYA_SLOTS_ADDR + i * 2u
@@ -806,9 +815,9 @@ static void pe_loot_switched_off(void) {
     pe_restore_active_list();                /* never leave a hand-in redirect behind */
     s_handin_active = 0;                     /* a started hand-in still gets its Junk */
     s_st.steal_bank = 0;
-    s_rare_shown[0] = s_rare_shown[1] = 0;
-    s_junk_shown = 0;
-    s_econ_shown = -1;
+    s_found.rare_shown[0] = s_found.rare_shown[1] = 0;
+    s_found.junk_shown = 0;
+    s_found.econ_shown = -1;
     pe_restore_text_color();
     s_in_battle = 0;
     if (!pe_game_loaded()) return;
@@ -827,6 +836,25 @@ static void pe_loot_switched_on(void) {
         psx_mod_osd_message("Junk economy on: Junk in the bag and trunk joins the counter");
 }
 
+/* Junk last on the items-found list (see pe_on_set_total_exp), also for a list
+ * built before this rule (a save state on that screen). */
+static void pe_junk_entry_last(void) {
+    if (psx_mod_read_word(PE_INV_OVERRIDE_LIST) != PE_FOUND_ITEMS) return;
+    uint32_t n = psx_mod_read_word(PE_FOUND_COUNT);
+    if (n > 10u) n = 10u;
+    uint16_t items[10];
+    uint32_t last = 0, junk = n;
+    for (uint32_t i = 0; i < n; ++i) {
+        items[i] = psx_mod_read_half(PE_FOUND_ITEMS + i * 2u);
+        if (items[i]) last = i;
+        if (items[i] == PE_ITEM_JUNK && junk == n) junk = i;
+    }
+    if (junk >= last) return;                /* none, or already last */
+    for (uint32_t i = junk; i < last; ++i) items[i] = items[i + 1];
+    items[last] = PE_ITEM_JUNK;
+    for (uint32_t i = junk; i <= last; ++i) psx_mod_write_half(PE_FOUND_ITEMS + i * 2u, items[i]);
+}
+
 static void pe_loot_tick(void) {
     static int s_was_enabled = -1;
     ++s_frames;
@@ -840,63 +868,64 @@ static void pe_loot_tick(void) {
     if (!s_enabled || !pe_game_loaded()) { s_in_battle = 0; return; }
 
     pe_restore_text_color();
-    if (s_junk_shown) {                      /* the "Junk xN" entry, not taken yet */
+    pe_junk_entry_last();
+    if (s_found.junk_shown) {                      /* the "Junk xN" entry, not taken yet */
         /* Taken into the bag: straight back out, and all N into the counter. */
         uint32_t extra = pe_bag_junk_count();
-        extra = extra > s_bag_junk_before ? extra - s_bag_junk_before : 0u;
+        extra = extra > s_found.bag_junk_before ? extra - s_found.bag_junk_before : 0u;
         int taken = 0;
         for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT && extra; ++i) {
             const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
             if (psx_mod_read_half(a) == PE_ITEM_JUNK) { psx_mod_write_half(a, 0); --extra; taken = 1; }
         }
         if (taken) {
-            pe_log("junk_take", "n=%u", (unsigned)s_junk_shown);
-            pe_add_junk(s_junk_shown);
-            s_junk_shown = 0;
-            s_junk_list_seen = 0;
+            pe_log("junk_take", "n=%u", (unsigned)s_found.junk_shown);
+            pe_add_junk(s_found.junk_shown);
+            s_found.junk_shown = 0;
+            s_found.junk_list_seen = 0;
         } else if (psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
-            s_junk_list_seen = 1;
-        } else if (s_junk_list_seen) {
-            pe_log("junk_left", "n=%u paid=1", (unsigned)s_junk_shown);
-            pe_add_junk(s_junk_shown);       /* left behind (no slot, or Done): it needs no slot */
-            s_junk_shown = 0;
-            s_junk_list_seen = 0;
+            s_found.junk_list_seen = 1;
+        } else if (s_found.junk_list_seen) {
+            pe_log("junk_left", "n=%u paid=1", (unsigned)s_found.junk_shown);
+            pe_add_junk(s_found.junk_shown);       /* left behind (no slot, or Done): it needs no slot */
+            s_found.junk_shown = 0;
+            s_found.junk_list_seen = 0;
         }
     }
-    if (s_econ_shown >= 0) {                 /* the "<mod> mod" entry, not taken yet */
-        if (pe_bag_count_of(PE_ITEM_MOD_PERMIT) > s_permits_before) {
+    if (s_found.econ_shown >= 0) {                 /* the "<mod> mod" entry, not taken yet */
+        if (pe_bag_count_of(PE_ITEM_MOD_PERMIT) > s_found.permits_before) {
             for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT; ++i) {
                 const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
                 if (psx_mod_read_half(a) == PE_ITEM_MOD_PERMIT) { psx_mod_write_half(a, 0); break; }
             }
-            pe_catalog_unlock_armor(s_econ_mods[s_econ_shown].effect);
-            pe_log("econ_unlock", "mod=%s source=drop", s_econ_mods[s_econ_shown].name);
-            s_econ_shown = -1;
+            pe_catalog_unlock_armor(s_econ_mods[s_found.econ_shown].effect);
+            pe_log("econ_unlock", "mod=%s source=drop", s_econ_mods[s_found.econ_shown].name);
+            s_found.econ_shown = -1;
         } else if (psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0) {
-            s_econ_list_seen = 1;
-        } else if (s_econ_list_seen) {
-            pe_log("econ_left", "mod=%s", s_econ_mods[s_econ_shown].name);
-            s_econ_shown = -1;               /* left behind: lost (it can roll again) */
+            s_found.econ_list_seen = 1;
+        } else if (s_found.econ_list_seen) {
+            pe_log("econ_left", "mod=%s", s_econ_mods[s_found.econ_shown].name);
+            s_found.econ_shown = -1;               /* left behind: lost (it can roll again) */
         }
     }
-    if (s_rare_shown[0] || s_rare_shown[1]) {
+    if (s_found.rare_shown[0] || s_found.rare_shown[1]) {
         const int listed = psx_mod_read_word(PE_INV_OVERRIDE_LIST) != 0;
-        if (listed) s_rare_list_seen = 1;
-        else if (s_rare_list_seen) {
+        if (listed) s_found.rare_list_seen = 1;
+        else if (s_found.rare_list_seen) {
             for (int a = 0; a < 2; ++a) {
-                if (!s_rare_shown[a] || s_rare_is_econ[a]) continue;
-                const int took = pe_bag_count_of(s_rare_shown[a]) > s_rare_before[a];
-                pe_log(took ? "rare_take" : "rare_left", "item=0x%02X", (unsigned)s_rare_shown[a]);
+                if (!s_found.rare_shown[a] || s_found.rare_is_econ[a]) continue;
+                const int took = pe_bag_count_of(s_found.rare_shown[a]) > s_found.rare_before[a];
+                pe_log(took ? "rare_take" : "rare_left", "item=0x%02X", (unsigned)s_found.rare_shown[a]);
             }
-            s_rare_shown[0] = s_rare_shown[1] = 0;
+            s_found.rare_shown[0] = s_found.rare_shown[1] = 0;
         }
     }
 
     const int battle = pe_in_battle();
     if (battle && !s_in_battle) {            /* a battle starts */
-        s_rare_shown[0] = s_rare_shown[1] = 0;
-        s_junk_shown = 0;
-        s_econ_shown = -1;
+        s_found.rare_shown[0] = s_found.rare_shown[1] = 0;
+        s_found.junk_shown = 0;
+        s_found.econ_shown = -1;
         s_boss_battle = 0;
         s_st.steal_bank = 0;
         memset(s_st.hits, 0, sizeof s_st.hits);
@@ -964,6 +993,14 @@ static void pe_loot_state_loaded(int result, uint32_t saved_version,
         memcpy(&s_st, saved, PE_LOOT_STATE_V2_SIZE);
 }
 
+static void pe_found_state_loaded(int result, uint32_t saved_version,
+                                  const void *saved, uint32_t saved_size) {
+    (void)saved_version; (void)saved; (void)saved_size;
+    if (result == PSX_MOD_STATE_RESTORED) return;
+    memset(&s_found, 0, sizeof s_found);
+    s_found.econ_shown = -1;
+}
+
 static void pe_loot_restored(void) {
     /* A snapshot from the two frames of a hand-in count points Aya's list at
      * our scratch list, in mod memory that snapshots don't hold: back to the bag. */
@@ -977,10 +1014,7 @@ static void pe_loot_restored(void) {
     s_handin_active = 0;
     s_handin_left = 0;
     s_list_redirected = 0;
-    s_rare_shown[0] = s_rare_shown[1] = 0;
-    s_junk_shown = 0;
-    s_econ_shown = -1;
-    s_color_saved = 0;
+    s_color_saved = 0;                       /* the screen state rides in "pe.loot.found" */
 }
 
 /* ---- pe_loot.h: Wayne's row (pe_wayne_menu.c) ------------------------------- */
@@ -1120,5 +1154,7 @@ void pe_loot_hooks_register(void) {
         PE_FN_SAVE_DESERIALIZE, pe_on_save_deserialize);
     (void)psx_mod_register_state("pe.loot", PE_LOOT_STATE_VERSION,
         &s_st, sizeof s_st, pe_loot_state_loaded);
+    (void)psx_mod_register_state("pe.loot.found", PE_FOUND_STATE_VERSION,
+        &s_found, sizeof s_found, pe_found_state_loaded);
     (void)psx_mod_register_restore_callback(pe_loot_restored);
 }
