@@ -112,6 +112,7 @@ The `battle` row:
 | `pickup` | field count change of Junk / Tools / kits / cards / Mod Permit | `item delta` |
 | `add` | the game adding an item (chests, gifts, crafts) | `item bagfree` (free bag slots at that moment; 0 = it may not have fit) |
 | `invcmd` | a script inventory command | `cmd value other` |
+| `itemcheck` | a script asking how many of an item Aya has (door / event checks) | `item count list=bag|storage|other` |
 
 ### Snapshot (on `battle` and `room` rows)
 

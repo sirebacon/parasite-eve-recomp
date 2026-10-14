@@ -30,6 +30,11 @@
  *             Battle_ResolveHitOnTimer; item 0 = nothing left to steal).
  *   add       any other Inv_AddItem (chests, story gifts, Wayne's crafts).
  *   invcmd    a script inventory command (Inv_DispatchCommand).
+ *   itemcheck a script asking how many of an item Aya has
+ *             (Script_CountItemsByValue 0x800194F8 -> Inv_CountByValue, over the
+ *             active list g_InvItemPtr / g_InvSlotLimit): item, the count the
+ *             game gets, whether the list is Aya's bag. Door / event key checks
+ *             (research for a key-item pocket, 2026-10-14).
  *   wayne     Wayne's count moving (a hand-in, a craft's -300), one row once it
  *             settles: from -> to.
  *   levelup   Aya's level going up.
@@ -86,6 +91,9 @@
 
 #define PE_FN_INV_ADD_ITEM        0x80053D2Cu  /* game.toml mod_function_entry_funcs */
 #define PE_FN_INV_DISPATCH        0x8005D2B4u
+#define PE_FN_SCRIPT_COUNT_ITEMS  0x800194F8u  /* Script_CountItemsByValue(int **args) */
+#define PE_ACTIVE_LIST_PTR        0x8009D048u  /* g_InvItemPtr */
+#define PE_ACTIVE_LIST_LIMIT      0x8009D050u  /* g_InvSlotLimit */
 #define PE_FN_SAVE_SERIALIZE      0x8003F800u
 #define PE_FN_SAVE_DESERIALIZE    0x8003FBD8u
 #define PE_FN_DISCARD_CONFIRM     0x80045110u  /* Menu_OnItemDiscardConfirm(dialog, yes) */
@@ -735,6 +743,28 @@ static void pe_on_inv_dispatch(struct CPUState *cpu, uint32_t address) {
            (int)cpu->gpr[6]);
 }
 
+/* Script_CountItemsByValue(args) entry: *args[0] is the item; the game's
+ * answer is Inv_CountByValue over the active list, recomputed here the same
+ * way (gear values 0x100 + record counted by their item id). */
+static void pe_on_script_count_items(struct CPUState *cpu, uint32_t address) {
+    (void)address;
+    if (!s_logging || !pe_game_loaded()) return;
+    const uint32_t args = cpu->gpr[4];
+    if (args < 0x80000000u || args >= 0x80200000u) return;
+    const uint32_t vp = psx_mod_read_word(args);
+    if (vp < 0x80000000u || vp >= 0x80200000u) return;
+    const unsigned item = psx_mod_read_word(vp) & 0xFFFFu;
+    const uint32_t list = psx_mod_read_word(PE_ACTIVE_LIST_PTR);
+    uint32_t limit = psx_mod_read_word(PE_ACTIVE_LIST_LIMIT);
+    if (limit > 100u) limit = 100u;
+    int count = 0;
+    if (list >= 0x80000000u && list < 0x80200000u)
+        for (uint32_t i = 0; i < limit; ++i)
+            count += pe_value_item(psx_mod_read_half(list + i * 2u)) == item;
+    pe_log("itemcheck", "item=0x%02X count=%d list=%s", item, count,
+           list == PE_AYA_SLOTS_ADDR ? "bag" : list == PE_STORAGE_ADDR ? "storage" : "other");
+}
+
 /* Called from pe_debug_menu.c's page (appended after its rows). */
 void pe_loot_logger_menu_register(void) {
     (void)pe_menu_register_toggle("Debug", "Play log",
@@ -752,6 +782,8 @@ void pe_loot_logger_menu_register(void) {
         "Play log: a row per hit, turn, spell.", &s_combat_detail, 0);
     (void)psx_mod_register_function_entry_plugin("pe.loot-logger.spell",
         PE_FN_APPLY_SPELL, pe_on_apply_spell);
+    (void)psx_mod_register_function_entry_plugin("pe.loot-logger.itemcheck",
+        PE_FN_SCRIPT_COUNT_ITEMS, pe_on_script_count_items);
     (void)psx_mod_register_function_entry_plugin("pe.loot-logger.discard",
         PE_FN_DISCARD_CONFIRM, pe_on_discard_confirm);
     (void)psx_mod_register_restore_callback(pe_on_restored);
