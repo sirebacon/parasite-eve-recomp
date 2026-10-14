@@ -855,6 +855,27 @@ static void pe_junk_entry_last(void) {
     for (uint32_t i = junk; i <= last; ++i) psx_mod_write_half(PE_FOUND_ITEMS + i * 2u, items[i]);
 }
 
+/* Junk needs no bag slot, but the list only moves an entry into a free one:
+ * with the bag full, the "Junk xN" line is paid where it stands and leaves. */
+static void pe_junk_without_room(void) {
+    if (psx_mod_read_word(PE_INV_OVERRIDE_LIST) != PE_FOUND_ITEMS) return;
+    uint32_t limit = psx_mod_read_byte(0x800C0E0Cu) + psx_mod_read_word(0x8009D018u);
+    if (limit > PE_AYA_SLOT_COUNT) limit = PE_AYA_SLOT_COUNT;
+    if (pe_free_bag_slot(limit) >= 0) return;
+    uint32_t n = psx_mod_read_word(PE_FOUND_COUNT);
+    if (n > 10u) n = 10u;
+    for (uint32_t i = 0; i < n; ++i) {
+        if (psx_mod_read_half(PE_FOUND_ITEMS + i * 2u) != PE_ITEM_JUNK) continue;
+        psx_mod_write_half(PE_FOUND_ITEMS + i * 2u, 0);
+        const uint32_t pay = s_found.junk_shown ? s_found.junk_shown : 1u;   /* 1: a state from before the amount was kept */
+        pe_log("junk_take", "n=%u no_room=1", (unsigned)pay);
+        pe_add_junk(pay);
+        s_found.junk_shown = 0;
+        s_found.junk_list_seen = 0;
+        return;
+    }
+}
+
 static void pe_loot_tick(void) {
     static int s_was_enabled = -1;
     ++s_frames;
@@ -869,6 +890,7 @@ static void pe_loot_tick(void) {
 
     pe_restore_text_color();
     pe_junk_entry_last();
+    pe_junk_without_room();
     if (s_found.junk_shown) {                      /* the "Junk xN" entry, not taken yet */
         /* Taken into the bag: straight back out, and all N into the counter. */
         uint32_t extra = pe_bag_junk_count();
