@@ -51,7 +51,7 @@ static PeRow s_rows[] = {
     { "Half-bar turns", "Gold bar: chosen actions at half.", 0, 1, 0, 1, 1, &g_pe_half_enabled, 1 },
     { "Half bar: Items", "Use items from a half bar.", 0, 1, 0, 1, 1, &g_pe_half_allow[0], 1 },
     { "Half bar: PE quick powers", "Quick powers from a half bar.", 0, 1, 0, 1, 1, &g_pe_half_allow[1], 1 },
-    { "Half bar: change weapon", "Swap weapons from a half bar.", 0, 0, 0, 1, 1, &g_pe_half_allow[2], 1 },
+    { "Half bar: change weapon", "Swap weapons from a half bar.", 0, 1, 0, 1, 1, &g_pe_half_allow[2], 1 },
     { "Half bar: change armor", "Swap armor from a half bar.", 0, 0, 0, 1, 1, &g_pe_half_allow[3], 1 },
     { "Half bar: escape", "Try to escape from a half bar.", 0, 0, 0, 1, 1, &g_pe_half_allow[4], 1 },
     { "Heal 1 % of max HP", "0 = vanilla (+30 HP).", 0, 15, 0, 100, 5, &s_heal1, 0 },

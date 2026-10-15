@@ -95,7 +95,7 @@ enum { ACT_ITEM, ACT_PE, ACT_WEAPON, ACT_ARMOR, ACT_ESCAPE, ACT_COUNT,
 
 /* Settings (F1 > Items & Parasite Energy, pe_pe_balance.c). */
 int g_pe_half_enabled = 1;                      /* master switch */
-int g_pe_half_allow[ACT_COUNT] = { 1, 1, 0, 0, 0 };
+int g_pe_half_allow[ACT_COUNT] = { 1, 1, 1, 0, 0 };
 uint32_t g_pe_quick_mask = 0x59Bu;              /* Heal 1/2, Detox, Medic, Scan, Slow, Confuse */
 #define s_enabled g_pe_half_enabled
 #define s_allow g_pe_half_allow
