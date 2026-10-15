@@ -23,7 +23,9 @@
  * Per battle (VBlank tick): poison strength (each enemy's periodicDamage, +0x96, scaled once);
  * Quickdraw top-up at the start (the game's chance is Aya's stat22 %; we roll the difference up to
  * stat22 + bonus, max 90%); damage taken with Attack Down / Slow Active Time armor (HP refunded as
- * hits land). One "modfx" play-log row per battle counts what was changed.
+ * hits land); Counter (the game's roll reads Aya's agility, g_AyaStatAgility[0], only there:
+ * raised for the battle while Counter is on the gun, put back after and in save states). One
+ * "modfx" play-log row per battle counts what was changed.
  */
 #include <stdint.h>
 #include <string.h>
@@ -39,6 +41,7 @@
 #define PE_PLAYER_ENTITY      0x8009D254u   /* D_8009D254: Aya's entity; core at +0 */
 #define PE_GAME_BLOCK         0x8009D1A0u   /* & 2: in battle */
 #define PE_MAX_HP_ADDR        0x800C0E06u
+#define PE_AGILITY            0x800C0E28u   /* g_AyaStatAgility[0]: read only by the Counter roll */
 #define PE_ENEMY_SLOT_BASE    0x800A5D58u   /* 7 x { u8 active; pad[3]; EnemyCombatant } */
 #define PE_ENEMY_SLOT_STRIDE  0xDCu
 #define PE_ENEMY_SLOTS        7
@@ -68,7 +71,7 @@ static int s_rules = RULES_REBALANCED;
 static int s_rules_shown = -1;
 static int s_elem_neutral, s_elem_weak, s_elem_resist, s_elem_best;
 static int s_rof7, s_rof10, s_status_resist, s_status_average, s_poison, s_crit, s_quickdraw;
-static int s_guard_attack_down, s_guard_slow_at;
+static int s_guard_attack_down, s_guard_slow_at, s_counter;
 static PeRow s_rows[] = {
     { "Heat/Frost neutral %", "Damage vs enemies without a match.", 100, 115, 50, 200, 5, &s_elem_neutral, 0 },
     { "Heat/Frost weak %", "Damage vs enemies weak to it.", 150, 150, 50, 300, 5, &s_elem_weak, 0 },
@@ -80,9 +83,10 @@ static PeRow s_rows[] = {
     { "Acid/Tranq vs normal %", "Chance vs others (vanilla 50).", 50, 60, 0, 100, 5, &s_status_average, 0 },
     { "Poison strength %", "Acid poison damage per tick.", 100, 125, 50, 300, 5, &s_poison, 0 },
     { "Critical bonus points", "Crit chance the effect adds (20).", 20, 40, 0, 80, 5, &s_crit, 0 },
-    { "Quickdraw bonus points", "Added to the speed-stat chance.", 0, 30, 0, 90, 5, &s_quickdraw, 0 },
-    { "Attack Down dmg taken %", "Armor: damage Aya takes.", 100, 85, 50, 100, 5, &s_guard_attack_down, 0 },
-    { "Slow AT dmg taken %", "Armor: damage Aya takes.", 100, 80, 50, 100, 5, &s_guard_slow_at, 0 },
+    { "Quickdraw bonus points", "Added to the speed-stat chance.", 0, 15, 0, 90, 5, &s_quickdraw, 0 },
+    { "Counter chance %", "Of the game's (agility; ~2-8%).", 100, 500, 100, 1000, 50, &s_counter, 0 },
+    { "Attack Down dmg taken %", "Armor: damage Aya takes.", 100, 75, 50, 100, 5, &s_guard_attack_down, 0 },
+    { "Slow AT dmg taken %", "Armor: damage Aya takes.", 100, 85, 50, 100, 5, &s_guard_slow_at, 0 },
 };
 #define PE_ROWS ((int)(sizeof s_rows / sizeof s_rows[0]))
 
@@ -105,6 +109,15 @@ static int s_in_battle, s_battle_frames;
 static uint32_t s_rng = 0x51ED270Bu;
 static uint8_t s_poison_done[PE_ENEMY_SLOTS];
 static int s_prev_hp = -1, s_refund_frac;
+/* Counter: agility raised for the battle, the game's value kept here (save states too). */
+#define PE_FX_STATE_VERSION 1u
+static struct { uint32_t boosted; uint32_t agility; } s_fx;
+
+static void pe_agility_restore(void) {
+    if (!s_fx.boosted) return;
+    psx_mod_write_half(PE_AGILITY, (uint16_t)s_fx.agility);
+    s_fx.boosted = 0;
+}
 
 static uint32_t pe_rand(void) { s_rng ^= s_rng << 13; s_rng ^= s_rng >> 17; s_rng ^= s_rng << 5; return s_rng; }
 static int pe_roll(int pct) { return (int)(pe_rand() % 100u) < pct; }
@@ -254,6 +267,7 @@ static void pe_battle_start(void) {
 
 static void pe_battle_end(void) {
     pe_restore_hit();
+    pe_agility_restore();
     if (!pe_on()) return;
     pe_log("modfx", "rules=%s hits=%u elem=%u(n%u/w%u/r%u) rof_boost=%u status_on=%u status_off=%u crit_up=%u quickdraw=%u poison_scaled=%u hp_refunded=%u",
            s_rules_names[s_rules], s_bt.hits, s_bt.elem_hits, s_bt.elem_neutral, s_bt.elem_weak, s_bt.elem_resist,
@@ -275,6 +289,15 @@ static void pe_battle_tick(void) {
             psx_mod_write_half(aya + C_GAUGE, 9000);
             ++s_bt.quickdraw;
         }
+    }
+    /* Counter: the roll reads agility (chance ~ agility / 1000 .. / 5000 by rank). */
+    if (s_battle_frames == 2 && s_counter != 100 && !s_fx.boosted && pe_gun_has(14)) {
+        const unsigned a = psx_mod_read_half(PE_AGILITY);
+        unsigned na = a * (unsigned)s_counter / 100u;
+        if (na > 0xFFFFu) na = 0xFFFFu;
+        s_fx.agility = a;
+        s_fx.boosted = 1;
+        psx_mod_write_half(PE_AGILITY, (uint16_t)na);
     }
     /* Poison strength: each enemy's periodicDamage once. */
     if (s_poison != 100) {
@@ -349,9 +372,15 @@ static void pe_mod_effects_tick(void) {
     if (battle && pe_on()) pe_battle_tick();
 }
 
+static void pe_fx_state_loaded(int result, uint32_t saved_version, const void *saved, uint32_t saved_size) {
+    (void)saved_version; (void)saved; (void)saved_size;
+    if (result != PSX_MOD_STATE_RESTORED) memset(&s_fx, 0, sizeof s_fx);
+}
+
 static void pe_mod_effects_restored(void) {
     memset(&s_hit, 0, sizeof s_hit);              /* a save state brings its own memory back */
     s_in_battle = pe_loaded() && pe_in_battle();
+    if (!s_in_battle) pe_agility_restore();       /* a state saved mid-battle, loaded outside one */
     if (s_in_battle) pe_battle_start();
 }
 
@@ -372,5 +401,6 @@ void pe_mod_effects_register(void) {
     (void)pe_menu_register_tick(pe_mod_effects_tick);
     (void)psx_mod_register_function_entry_plugin("pe.mod-effects.damage", PE_FN_DAMAGE, pe_on_damage);
     (void)psx_mod_register_function_entry_plugin("pe.mod-effects.battle", PE_FN_BATTLE_UPDATE, pe_on_battle_update);
+    (void)psx_mod_register_state("pe.mod-effects", PE_FX_STATE_VERSION, &s_fx, sizeof s_fx, pe_fx_state_loaded);
     (void)psx_mod_register_restore_callback(pe_mod_effects_restored);
 }
