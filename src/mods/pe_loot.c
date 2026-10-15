@@ -376,7 +376,7 @@ static int pe_cascade_skip(int k, int econ_missing, uint32_t *pct) {
     case RC_ECON:       return econ_missing == 0;
     case RC_SUPER_TOOL: return pe_carried(0x36u);                    /* Super Tool Kit */
     case RC_PERMIT:     return pe_held(0x37u) >= 2u;                  /* spend one first */
-    case RC_CHARM:      return pe_carried(PE_ITEM_LUCKY_CHARM) || s_st.charm_left;
+    case RC_CHARM:      return 1;   /* removed 2026-10-15: item 0x19 is Panacea now */
     case RC_TOOL: {
         if (pe_carried(0x35u) || pe_carried(0x36u)) return 1;         /* either kit: Tools are free */
         const uint32_t held = pe_held(0x16u);
@@ -454,17 +454,10 @@ static uint16_t pe_roll_rare(uint32_t exp) {
     return 0;
 }
 
-/* A carried Lucky Charm is used up at a won battle when none is active. */
+/* The Lucky Charm is gone (2026-10-15: its item, 0x19, is Panacea, and a carried charm simply
+ * becomes one); a charm already running counts down its remaining battles. */
 static void pe_charm_battle_won(void) {
-    if (s_st.charm_left) { --s_st.charm_left; return; }
-    for (uint32_t i = 0; i < PE_AYA_SLOT_COUNT; ++i) {
-        const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
-        if (psx_mod_read_half(a) != PE_ITEM_LUCKY_CHARM) continue;
-        psx_mod_write_half(a, 0);
-        s_st.charm_left = PE_CHARM_BATTLES;      /* it leaves the bag; F1 shows the pity */
-        pe_log("charm_on", "battles=%u", (unsigned)PE_CHARM_BATTLES);
-        return;
-    }
+    if (s_st.charm_left) --s_st.charm_left;
 }
 
 static uint32_t pe_bag_count_of(uint16_t v) {
@@ -1165,7 +1158,6 @@ static int pe_set_preset(int v) {
     s_st.preset = (uint8_t)v;
     return 1;
 }
-static int pe_get_charm(void) { return s_st.charm_left; }
 static void pe_give_100_junk(void) {
     char msg[48];
     pe_add_junk(100);
@@ -1204,8 +1196,6 @@ void pe_loot_menu_register(void) {
     (void)pe_menu_register_live_choice(PE_WORKSHOP_PAGE, "Difficulty",
         "Junk, rare luck and prices. Any time.", s_preset_names, 3,
         pe_get_preset, pe_set_preset);
-    (void)pe_menu_register_live_int(PE_WORKSHOP_PAGE, "Lucky Charm battles",
-        "Battles of faster rare finds left.", 0, 99, 1, pe_get_charm, pe_set_junk_readonly);
 
     (void)pe_menu_register_int(PE_TUNING_PAGE, "Junk floor",
         "Junk for every won battle.", &s_tune_floor, 0, 10, 1);

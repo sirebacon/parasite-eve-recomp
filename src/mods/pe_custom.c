@@ -7,7 +7,8 @@
  *     descriptions, +0x10 mod descriptions: guns = entry effect - 1, armor =
  *     entry effect + 19). A Draw_PrintRawText entry hook swaps a pointer to
  *     one of these strings for our own text in mod memory:
- *       ITEM24 (0x18) -> Smoke Grenade, ITEM25 (0x19) -> Lucky Charm, with
+ *       ITEM24 (0x18) -> Smoke Grenade, ITEM25 (0x19) -> Panacea (was the Lucky Charm until
+ *       2026-10-15), with
  *       descriptions; the "dummy" mod texts of armor effects 17-20 -> the
  *       economy mods' PE-style descriptions (C12).
  *     Text is the game's glyph code: 'A'-'Z' 0x10-0x29, 'a'-'z' 0x30-0x49,
@@ -15,8 +16,11 @@
  *   - Use. Item flags (+0x05 of the base record: bit 0 field use, bit 1
  *     battle use) are set every half second: the Smoke Grenade is battle
  *     only, and greyed out in a battle it can't escape (the game's own way to
- *     say an item can't be used); the Lucky Charm can't be used (it works by
- *     being carried, pe_loot.c).
+ *     say an item can't be used); Panacea is used in battle and from the menu.
+ *   - Panacea (Items & Parasite Energy doc): Combine Medicine 4 + Full Cure (pe_native_menu.c).
+ *     Battle_ApplyDamage(0x19) cures every ailment here (as Full Cure: poison, confusion,
+ *     darkness, stiffness, unless immune, and state 0x1000) and is then handed to the game as
+ *     Medicine 4 (a0 = 9): +400 HP, the medicine effect, the HP clamp. Its icon is Medicine 4's.
  *   - Smoke Grenade (C6). A battle item resolves through Battle_ApplyDamage
  *     (0x80023E14, a0 = item id), right after Battle_ApplyPlayerHit sets the
  *     player's idle action mode -- the same thing a successful escape roll
@@ -54,7 +58,11 @@
 #define PE_ITEM_TABLE_END_ADDR  0x800A8038u
 
 #define PE_ITEM_SMOKE   0x18u
-#define PE_ITEM_CHARM   0x19u
+#define PE_ITEM_PANACEA 0x19u                 /* ITEM25 */
+#define PE_ITEM_MEDICINE_4 0x09u
+#define PE_PLAYER_ENTITY   0x8009D254u
+#define PE_FIELD_MOVE_FLAGS 0x8009D2E8u        /* & 0x10: confused movement */
+int g_pe_panacea = 1;                         /* F1 > Items & Parasite Energy */
 
 /* ---- text ------------------------------------------------------------------- */
 typedef struct {
@@ -67,9 +75,9 @@ typedef struct {
 
 static PeRelabel s_relabels[] = {
     { 0x08, PE_ITEM_SMOKE - 1, "Smoke Grenade", 0 },
-    { 0x08, PE_ITEM_CHARM - 1, "Lucky Charm", 0 },
+    { 0x08, PE_ITEM_PANACEA - 1, "Panacea", 0 },
     { 0x0C, PE_ITEM_SMOKE - 1, "Sure Escape from Battle", 0 },
-    { 0x0C, PE_ITEM_CHARM - 1, "Finds Rare Items Faster for 10 Battles", 0 },
+    { 0x0C, PE_ITEM_PANACEA - 1, "Restores 400 HP and Cures All Status", 0 },
     { 0x0C, 0x0B - 1, "Worth 75 Junk  a Quarter of a Wayne Gun", 0, 1 },   /* pe_loot.c bundles */
     { 0x0C, 0x0C - 1, "Worth 150 Junk  Half of a Wayne Gun", 0, 1 },
     { 0x10, PE_FX_BARGAIN + 19, "Lowers shop prices", 0 },
@@ -158,7 +166,11 @@ static void pe_custom_tick(void) {
     if (!pe_loaded()) return;
     const int battle = (psx_mod_read_word(PE_GAME_BLOCK_ADDR) & 0x2u) != 0;
     pe_set_item_flags(PE_ITEM_SMOKE, battle && pe_escape_blocked() ? 0x0u : 0x2u);   /* battle only */
-    pe_set_item_flags(PE_ITEM_CHARM, 0x0u);   /* carried, never used */
+    pe_set_item_flags(PE_ITEM_PANACEA, g_pe_panacea ? 0x3u : 0x0u);   /* field and battle */
+    {                                         /* Medicine 4's icon */
+        const uint32_t p = pe_base_record(PE_ITEM_PANACEA), m = pe_base_record(PE_ITEM_MEDICINE_4);
+        if (p && m && psx_mod_read_byte(p) != psx_mod_read_byte(m)) psx_mod_write_byte(p, psx_mod_read_byte(m));
+    }
 }
 
 /* ---- Smoke Grenade ---------------------------------------------------------- */
@@ -171,8 +183,25 @@ static int pe_escape_blocked(void) {
     return 0;
 }
 
+/* Panacea: every ailment Full Cure cures, then Medicine 4's heal. */
+static void pe_panacea(struct CPUState *cpu) {
+    const uint32_t ent = psx_mod_read_word(PE_PLAYER_ENTITY);
+    const uint32_t core = pe_ram_pointer(ent) ? psx_mod_read_word(ent) : 0;
+    if (pe_ram_pointer(core)) {
+        uint32_t s = psx_mod_read_word(core + 0x4Cu);
+        static const uint32_t masks[4] = { 0x03u, 0x0Cu, 0x30u, 0xC0u };   /* poison, confusion, darkness, stiffness */
+        for (int i = 0; i < 4; ++i)
+            if ((s & masks[i]) != masks[i]) s &= ~masks[i];                 /* all bits set = immune: kept */
+        s &= ~0x1000u;
+        psx_mod_write_word(core + 0x4Cu, s);
+        psx_mod_write_byte(PE_FIELD_MOVE_FLAGS, (uint8_t)(psx_mod_read_byte(PE_FIELD_MOVE_FLAGS) & ~0x10u));
+    }
+    cpu->gpr[4] = PE_ITEM_MEDICINE_4;
+}
+
 static void pe_on_apply_damage(struct CPUState *cpu, uint32_t address) {
     (void)address;
+    if (cpu->gpr[4] == PE_ITEM_PANACEA) { pe_panacea(cpu); return; }
     if (cpu->gpr[4] != PE_ITEM_SMOKE || !(psx_mod_read_word(PE_GAME_BLOCK_ADDR) & 0x2u)) return;
     if (pe_escape_blocked()) {
         uint32_t limit = psx_mod_read_byte(PE_SLOT_COUNT_ADDR) + psx_mod_read_word(PE_BONUS_SLOTS_ADDR);

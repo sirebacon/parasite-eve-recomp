@@ -59,7 +59,7 @@ static inline uint32_t pe_text_entry(uint32_t table_off, unsigned index) {
 /* The game's own name for an item (our names for the two relabelled ones). */
 static inline void pe_t_item(PeText *t, uint16_t id) {
     if (id == 0x18) { pe_t_str(t, "Smoke Grenade"); return; }
-    if (id == 0x19) { pe_t_str(t, "Lucky Charm"); return; }
+    if (id == 0x19) { pe_t_str(t, "Panacea"); return; }
     const uint32_t name = pe_text_entry(0x08u, (unsigned)id - 1u);
     if (!name) { pe_t_str(t, "?"); return; }
     for (unsigned i = 0; i < 24; ++i) {

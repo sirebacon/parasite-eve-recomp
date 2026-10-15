@@ -48,11 +48,17 @@
  *      rate back.
  *   The turn bookkeeping rides in save states, so loading an F7 state saved
  *   mid-borrow refunds and restores the tabs exactly as if play had continued.
+ *
+ * Parasite Energy (2026-10-15, pe_pe_balance.c): only the powers in g_pe_quick_mask (the
+ * queued command 0x183 + power index) cost half a bar; a full-bar power cast from a half bar
+ * empties the gauge and leaves a debt of half a bar that the next refill pays first, so it
+ * always costs a full bar. The settings live on F1 > Items & Parasite Energy.
  */
 #include <string.h>
 #include "cpu_state.h"
 #include "mod_plugins.h"
 #include "pe_mod_menu.h"
+#include "pe_log.h"
 
 #define PE_BATTLE_UPDATE       0x800299CCu
 #define PE_PLAYER_PTR_ADDR     0x8009D254u
@@ -87,14 +93,23 @@
 enum { ACT_ITEM, ACT_PE, ACT_WEAPON, ACT_ARMOR, ACT_ESCAPE, ACT_COUNT,
        ACT_NONE = -1, ACT_ATTACK = -2, ACT_OTHER = -3 };
 
-static int s_enabled = 1;                        /* master switch, on by default */
-static int s_allow[ACT_COUNT] = { 1, 0, 0, 0, 0 };
+/* Settings (F1 > Items & Parasite Energy, pe_pe_balance.c). */
+int g_pe_half_enabled = 1;                      /* master switch */
+int g_pe_half_allow[ACT_COUNT] = { 1, 1, 0, 0, 0 };
+uint32_t g_pe_quick_mask = 0x59Bu;              /* Heal 1/2, Detox, Medic, Scan, Slow, Confuse */
+#define s_enabled g_pe_half_enabled
+#define s_allow g_pe_half_allow
+static const char *const s_power_names[20] = {
+    "Heal1", "Heal2", "Heal3", "Detox", "Medic", "Barrier", "EnergyShot", "Scan", "Slow",
+    "Haste", "Confuse", "GeneHeal", "Preraise", "Mito14", "Mito15", "Mito16", "Mito17",
+    "Mito18", "FullRecover", "Liberate",
+};
 
 /* Bookkeeping that moves in step with guest RAM (the borrowed gauge, the
  * hidden tabs, the tinted bar). It is save-state data (psx_mod_register_state),
  * so an F7 state saved mid-turn loads with the bookkeeping that matches it.
  * Bump PE_ATB_STATE_VERSION when the layout changes. */
-#define PE_ATB_STATE_VERSION 2u
+#define PE_ATB_STATE_VERSION 3u
 static struct {
     int borrowed, borrow_pending, turn_active, track_full;
     unsigned saved_gauge;
@@ -106,6 +121,8 @@ static struct {
     uint8_t weapon_slot, armor_slot;
     uint8_t normal[2][4][3];                     /* the game's bar colours */
     int have_normal, tinted;
+    int pe_index;                                /* the PE power queued this turn, or -1 */
+    unsigned debt, last_gauge;                   /* half bar owed by a full power cast early */
 } s_st;
 
 static int pe_ram_pointer(uint32_t p) {
@@ -184,6 +201,7 @@ static void pe_snapshot(void) {
     s_st.weapon_slot = psx_mod_read_byte(PE_WEAPON_SLOT_ADDR);
     s_st.armor_slot = psx_mod_read_byte(PE_ARMOR_SLOT_ADDR);
     s_st.action = ACT_NONE;
+    s_st.pe_index = -1;
 }
 
 static int pe_classify(unsigned command) {
@@ -200,8 +218,9 @@ static int pe_classify(unsigned command) {
 static void pe_note_actions(void) {
     const unsigned count = psx_mod_read_byte(PE_QUEUE_COUNT);
     for (unsigned i = 0; i < count && i < 32; ++i) {
-        const int act = pe_classify(psx_mod_read_half(
-            PE_QUEUE_ADDR + i * PE_QUEUE_STRIDE + PE_QUEUE_COMMAND));
+        const unsigned command = psx_mod_read_half(PE_QUEUE_ADDR + i * PE_QUEUE_STRIDE + PE_QUEUE_COMMAND);
+        const int act = pe_classify(command);
+        if (act == ACT_PE) s_st.pe_index = (int)(command - 0x183u);
         if (act == ACT_ATTACK || s_st.action == ACT_NONE) s_st.action = act;
     }
     if (s_st.action == ACT_NONE) {
@@ -212,7 +231,15 @@ static void pe_note_actions(void) {
 }
 
 static int pe_action_allowed(int act) {
+    if (act == ACT_PE)                           /* only the quick powers */
+        return s_allow[ACT_PE] && s_st.pe_index >= 0 && s_st.pe_index < 20 &&
+               ((g_pe_quick_mask >> s_st.pe_index) & 1u);
     return act >= 0 && act < ACT_COUNT && s_allow[act];
+}
+
+static void pe_log_pe_turn(const char *cost, unsigned from, unsigned to) {
+    if (s_st.action != ACT_PE || s_st.pe_index < 0 || s_st.pe_index >= 20) return;
+    pe_log("pe_turn", "power=%s cost=%s gauge=%u->%u", s_power_names[s_st.pe_index], cost, from, to);
 }
 
 static void pe_restore_tabs(void) {
@@ -244,6 +271,7 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
     if (!(psx_mod_read_word(PE_GAME_BLOCK_ADDR) & PE_GAME_BLOCK_BATTLE)) {
         pe_reset();
         s_st.tinted = s_st.have_normal = 0;     /* HUD packets are rebuilt per battle */
+        s_st.debt = 0;
         return;
     }
     const uint32_t player = psx_mod_read_word(PE_PLAYER_PTR_ADDR);
@@ -280,10 +308,19 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
             if (s_st.action == ACT_NONE) gauge = s_st.saved_gauge;
             else if (pe_action_allowed(s_st.action))
                 gauge = s_st.saved_gauge > PE_GAUGE_HALF ? s_st.saved_gauge - PE_GAUGE_HALF : 0;
+            else if (s_st.action == ACT_PE) {    /* a full power from a half bar: the rest is owed */
+                const unsigned paid = s_st.saved_gauge;
+                s_st.debt = paid < PE_GAUGE_FULL ? PE_GAUGE_FULL - paid : 0;
+            }
             psx_mod_write_half(gauge_addr, (uint16_t)gauge);
+            pe_log_pe_turn(pe_action_allowed(s_st.action) ? "half" : "full_debt", s_st.saved_gauge, gauge);
         } else if (s_st.track_full && pe_action_allowed(s_st.action)) {
             psx_mod_write_half(gauge_addr, (uint16_t)PE_GAUGE_HALF);
+            pe_log_pe_turn("half", PE_GAUGE_FULL, PE_GAUGE_HALF);
+        } else if (s_st.track_full) {
+            pe_log_pe_turn("full", PE_GAUGE_FULL, 0);
         }
+        s_st.last_gauge = psx_mod_read_half(gauge_addr);
         pe_fix_rate(core, s_st.borrowed && s_st.action == ACT_NONE ? s_st.saved_rate : 0);
         pe_reset();
         return;
@@ -295,6 +332,17 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
         return;
     }
     pe_fix_rate(core, 0);                               /* every free moment */
+    {                                                   /* a debt is paid from the refill first */
+        unsigned g = psx_mod_read_half(gauge_addr);
+        if (s_st.debt && g > s_st.last_gauge && g < PE_GAUGE_FULL) {
+            unsigned take = g - s_st.last_gauge;
+            if (take > s_st.debt) take = s_st.debt;
+            g -= take;
+            s_st.debt -= take;
+            psx_mod_write_half(gauge_addr, (uint16_t)g);
+        }
+        s_st.last_gauge = g;
+    }
     if (!s_enabled || !pe_any_allowed()) return;
 
     const unsigned gauge = psx_mod_read_half(gauge_addr);
@@ -317,21 +365,8 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
 }
 
 /* Called from pe_mod_menu.c, which fixes the order of the PE page. */
-#define PE_HALF_BAR_PAGE "Half-bar ATB"
-void pe_atb_items_menu_register(void) {
-    (void)pe_menu_register_toggle(PE_HALF_BAR_PAGE, "Enabled",
-        "Gold bar: chosen actions at half cost.", &s_enabled, 0);
-    (void)pe_menu_register_toggle(PE_HALF_BAR_PAGE, "Items",
-        "Use items from a half bar.", &s_allow[ACT_ITEM], 0);
-    (void)pe_menu_register_toggle(PE_HALF_BAR_PAGE, "Parasite Energy",
-        "Use PE from a half bar.", &s_allow[ACT_PE], 0);
-    (void)pe_menu_register_toggle(PE_HALF_BAR_PAGE, "Change weapon",
-        "Swap weapons from a half bar.", &s_allow[ACT_WEAPON], 0);
-    (void)pe_menu_register_toggle(PE_HALF_BAR_PAGE, "Change armor",
-        "Swap armor from a half bar.", &s_allow[ACT_ARMOR], 0);
-    (void)pe_menu_register_toggle(PE_HALF_BAR_PAGE, "Escape",
-        "Try to escape from a half bar.", &s_allow[ACT_ESCAPE], 0);
-}
+/* The rows moved to F1 > Items & Parasite Energy (pe_pe_balance.c, 2026-10-15). */
+void pe_atb_items_menu_register(void) {}
 
 /* A state without our block (taken before this build, or an older layout) has
  * no bookkeeping that matches its RAM: start clean and leave the game alone. */

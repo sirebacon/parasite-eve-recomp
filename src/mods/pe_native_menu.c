@@ -22,6 +22,9 @@
  *     accepting it (Menu_StepEquipScreen with the cursor on row 3) combines
  *     the pair -- the selected medicine becomes the next one, the other goes
  *     -- and closes the list as a cancel would. Discard stays vanilla.
+ *     Panacea (2026-10-15): Medicine 4 with a Full Cure in the bag (either one selected)
+ *     combines into Panacea (item 0x19, pe_custom.c), while F1 > Items & Parasite Energy >
+ *     Panacea is on.
  *
  * Hooks: Util_AppendFFTerminatedBytes (0x80052C08) while the dialog label is
  * built (Menu_StepItemDetailPanel appends Str_LookupTable4(4) " will be
@@ -89,6 +92,10 @@
 
 #define PE_ITEM_MEDICINE_1 0x06u
 #define PE_ITEM_MEDICINE_3 0x08u
+#define PE_ITEM_MEDICINE_4 0x09u
+#define PE_ITEM_FULL_CURE  0x11u
+#define PE_ITEM_PANACEA    0x19u
+extern int g_pe_panacea;                  /* pe_custom.c */
 
 static int s_discard_dismantles = 1;     /* decision 25 via Discard (44) */
 static int s_combine_row = 1;            /* C10: the Combine action row */
@@ -206,9 +213,10 @@ static void pe_on_discard_confirm(struct CPUState *cpu, uint32_t address) {
 }
 
 /* ---- Combine row (C10) ------------------------------------------------------ */
-/* The bag slot of another medicine like the selected one, or -1 (only for
- * Medicine 1-3 selected in Aya's bag, outside battle, economy on). */
-static int pe_combine_pair(uint16_t *id_out) {
+/* The bag slot of the selected item's partner, or -1: another of the same for Medicine 1-3
+ * (into the next one), the other half for Medicine 4 + Full Cure (into Panacea). Aya's bag,
+ * outside battle, economy on. *result_out gets what they become. */
+static int pe_combine_pair(uint16_t *result_out) {
     if (!s_combine_row || !pe_loot_enabled() || !pe_loaded()) return -1;
     if (psx_mod_read_word(PE_GAME_BLOCK_ADDR) & 0x2u) return -1;
     if (psx_mod_read_word(PE_MENU_ACTIVE_LIST) != 0) return -1;
@@ -217,10 +225,14 @@ static int pe_combine_pair(uint16_t *id_out) {
     const uint32_t limit = pe_bag_limit();
     if (slot < 0 || (uint32_t)slot >= limit) return -1;
     const uint16_t v = psx_mod_read_half(PE_AYA_SLOTS_ADDR + (uint32_t)slot * 2u);
-    if (v < PE_ITEM_MEDICINE_1 || v > PE_ITEM_MEDICINE_3) return -1;
+    uint16_t partner, result;
+    if (v >= PE_ITEM_MEDICINE_1 && v <= PE_ITEM_MEDICINE_3) { partner = v; result = (uint16_t)(v + 1u); }
+    else if (g_pe_panacea && v == PE_ITEM_MEDICINE_4) { partner = PE_ITEM_FULL_CURE; result = PE_ITEM_PANACEA; }
+    else if (g_pe_panacea && v == PE_ITEM_FULL_CURE) { partner = PE_ITEM_MEDICINE_4; result = PE_ITEM_PANACEA; }
+    else return -1;
     for (uint32_t i = 0; i < limit; ++i)
-        if ((int)i != slot && psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == v) {
-            if (id_out) *id_out = v;
+        if ((int)i != slot && psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u) == partner) {
+            if (result_out) *result_out = result;
             return (int)i;
         }
     return -1;
@@ -338,15 +350,17 @@ static void pe_on_step_equip_screen(struct CPUState *cpu, uint32_t address) {
         return;
     }
     if (cell != PE_COMBINE_ROW) return;
-    uint16_t id = 0;
-    const int other = pe_combine_pair(&id);
+    uint16_t result = 0;
+    const int other = pe_combine_pair(&result);
     if (other < 0) return;
     const int slot = (int)psx_mod_read_word(PE_MENU_ACTIVE_SLOT);
-    psx_mod_write_half(PE_AYA_SLOTS_ADDR + (uint32_t)slot * 2u, (uint16_t)(id + 1u));
+    const uint16_t id = psx_mod_read_half(PE_AYA_SLOTS_ADDR + (uint32_t)slot * 2u);
+    psx_mod_write_half(PE_AYA_SLOTS_ADDR + (uint32_t)slot * 2u, result);
     psx_mod_write_half(PE_AYA_SLOTS_ADDR + (uint32_t)other * 2u, 0);
-    pe_log("combine", "from=0x%02X into=0x%02X", (unsigned)id, (unsigned)(id + 1u));
+    pe_log("combine", "from=0x%02X into=0x%02X", (unsigned)id, (unsigned)result);
     char msg[48];
-    snprintf(msg, sizeof msg, "Combined into Medicine %u", (unsigned)(id - PE_ITEM_MEDICINE_1 + 2u));
+    if (result == PE_ITEM_PANACEA) snprintf(msg, sizeof msg, "Combined into Panacea");
+    else snprintf(msg, sizeof msg, "Combined into Medicine %u", (unsigned)(result - PE_ITEM_MEDICINE_1 + 1u));
     psx_mod_osd_message(msg);
     s_extended_node = 0;
     cpu->gpr[5] = PE_INPUT_CANCEL;            /* the game closes the list */
@@ -378,7 +392,7 @@ void pe_native_menu_register(void) {
     (void)pe_menu_register_toggle(PE_WORKSHOP_PAGE, "Discard dismantles",
         "Discarding gear in Aya's menu pays Junk.", &s_discard_dismantles, 0);
     (void)pe_menu_register_toggle(PE_WORKSHOP_PAGE, "Combine medicine",
-        "Combine row: Medicine x2 -> next.", &s_combine_row, 0);
+        "Medicine x2 -> next; M4 + Full Cure.", &s_combine_row, 0);
     (void)psx_mod_register_function_entry_plugin("pe.native.append-text",
         PE_FN_APPEND_FF_TEXT, pe_on_append_text);
     (void)psx_mod_register_function_entry_plugin("pe.native.discard",
