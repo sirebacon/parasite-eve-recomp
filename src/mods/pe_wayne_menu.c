@@ -124,12 +124,17 @@ static int pe_is_wayne_menu(uint32_t msg) {
     if (choice_at == PE_TEXT_MAX || n >= PE_TEXT_MAX - 1) return 0;
     if (!warner && !pe_contains(b, n, s_discard_junk)) return 0;
     const int count = b[choice_at] & 7;
-    if (count < 2 || count + 2 > 7) return 0; /* room for Mod Permit and Workshop */
+    if (count < 2 || count + 1 > 7) return 0; /* room for Workshop (and Mod Permit, see pe_compact) */
     memcpy(s_orig, b, n + 1);
     s_orig_len = n;
     s_ui.wayne_count = count;
     return 1;
 }
+
+/* A choice holds at most 7 options (FB 09 n, 3 bits). Wayne's Chrysler menu has 6
+ * (Rare T Card collection), so there only Workshop is added and Mod Permit moves
+ * into the Workshop screen. */
+static int pe_compact(void) { return s_ui.wayne_count + 2 > 7; }
 
 /* Wayne's options with Workshop above Cancel and the Junk on Discard junk. */
 static void pe_build_wayne(PeText *t) {
@@ -139,14 +144,16 @@ static void pe_build_wayne(PeText *t) {
         ++i;
     }
     i += 3;                                   /* FB 09 n */
-    pe_t_choice(t, s_ui.wayne_count + 2);
+    pe_t_choice(t, s_ui.wayne_count + (pe_compact() ? 1 : 2));
     int option = 0;
     unsigned start = i;
     for (; i <= s_orig_len; ++i) {
         if (i < s_orig_len && s_orig[i] != G_NEWLINE) continue;
         if (option == s_ui.wayne_count - 1) { /* the last one is Cancel */
-            pe_t_str(t, "    Mod Permit");
-            pe_t_byte(t, G_NEWLINE);
+            if (!pe_compact()) {
+                pe_t_str(t, "    Mod Permit");
+                pe_t_byte(t, G_NEWLINE);
+            }
             pe_t_str(t, "    Workshop");
             pe_t_byte(t, G_NEWLINE);
         }
@@ -176,9 +183,10 @@ static void pe_title(PeText *t, const char *name) {
 
 static void pe_build_root(PeText *t) {
     pe_title(t, "Workshop");
-    pe_t_choice(t, 3);
+    pe_t_choice(t, pe_compact() ? 4 : 3);
     pe_t_option_start(t, 1); pe_t_str(t, "Requisition");
     pe_t_option_start(t, 0); pe_t_str(t, "Rebuild");
+    if (pe_compact()) { pe_t_option_start(t, 0); pe_t_str(t, "Mod Permit"); }
     pe_t_option_start(t, 0); pe_t_str(t, "Back");
 }
 
@@ -445,8 +453,10 @@ static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
 
     const uint32_t pressed = psx_mod_read_word(PE_PAD_PRESSED);
     const int cursor = (int8_t)psx_mod_read_byte(PE_CHOICE_CURSOR);
-    const int permit = s_ui.wayne_count - 1;  /* our two options sit where his Cancel was */
-    const int workshop = permit + 1;
+    /* our options sit where his Cancel was: Mod Permit, Workshop (compact: Workshop only) */
+    const int permit = pe_compact() ? -1 : s_ui.wayne_count - 1;
+    const int workshop = s_ui.wayne_count - (pe_compact() ? 1 : 0);
+    const int his_cancel = s_ui.wayne_count - 1;
     uint32_t taken = 0;
     switch (s_ui.screen) {
     case SCR_WAYNE:
@@ -461,7 +471,7 @@ static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
                 s_ui.note[0] = '\0';
                 pe_show(SCR_ROOT, 0);
             } else if (cursor == workshop + 1) {
-                psx_mod_write_byte(PE_CHOICE_CURSOR, (uint8_t)permit);    /* his Cancel */
+                psx_mod_write_byte(PE_CHOICE_CURSOR, (uint8_t)his_cancel);
             }
         }
         break;
@@ -484,12 +494,12 @@ static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
                 pe_show(SCR_PERMIT, 0);
             } else if (cursor == options - 1) {
                 s_ui.note[0] = '\0';
-                pe_show(SCR_WAYNE, permit);
+                if (pe_compact()) pe_show(SCR_ROOT, 2); else pe_show(SCR_WAYNE, permit);
             }
         } else if (pressed & PE_IN_CANCEL) {
             taken = PE_IN_CANCEL;
             s_ui.note[0] = '\0';
-            pe_show(SCR_WAYNE, permit);
+            if (pe_compact()) pe_show(SCR_ROOT, 2); else pe_show(SCR_WAYNE, permit);
         } else if ((pressed & (PE_IN_LEFT | PE_IN_RIGHT)) && pe_pages(count) > 1) {
             const int pages = pe_pages(count);
             s_ui.page = (s_ui.page + ((pressed & PE_IN_RIGHT) ? 1 : pages - 1)) % pages;
@@ -532,6 +542,7 @@ static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
             s_ui.note[0] = '\0';
             if (cursor == 0) pe_show(SCR_REQ, 0);
             else if (cursor == 1) pe_show(SCR_REB, 0);
+            else if (cursor == 2 && pe_compact()) { s_ui.page = 0; pe_show(SCR_PERMIT, 0); }
             else pe_show(SCR_WAYNE, workshop);
         } else if (pressed & PE_IN_CANCEL) {
             taken = PE_IN_CANCEL;
