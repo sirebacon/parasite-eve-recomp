@@ -34,6 +34,7 @@
 #include "pe_mod_menu.h"
 #include "pe_loot.h"
 #include "pe_log.h"
+#include <stdio.h>
 
 #define PE_FN_DAMAGE          0x80028574u   /* Battle_StepEnemyMovement */
 #define PE_FN_BATTLE_UPDATE   0x800299CCu   /* Battle_Update */
@@ -99,6 +100,40 @@ static struct {
     int def_set, power_set;
 } s_hit;
 
+/* Hit quality by distance (any rules): the reaction the game picked (core flags >> 15: 1 graze,
+ * 2 hit, 3 critical, 4 splash) per distance band, distance as % of the gun's range (as
+ * Battle_CheckEvasion: enemy aim point +0x268 / +0x26C vs Aya +0x2A / +0x32). */
+#define E_AIM_X   0x268u
+#define E_AIM_Z   0x26Cu
+#define P_POS_X   0x2Au
+#define P_POS_Z   0x32u
+#define A_RANGE   0x02u
+static const int s_band_edge[5] = { 50, 80, 100, 120, 150 };
+static unsigned s_hq[6][5];                       /* [band][reaction] */
+static unsigned s_hq_range, s_hq_gun;
+
+static int pe_ptr(uint32_t p);
+static unsigned pe_isqrt(unsigned v) { unsigned r = 0, b = 1u << 30; while (b > v) b >>= 2;
+    while (b) { if (v >= r + b) { v -= r + b; r = (r >> 1) + b; } else r >>= 1; b >>= 2; } return r; }
+
+static void pe_note_hit_quality(uint32_t entity, uint32_t enemy, uint32_t action) {
+    const uint32_t player = psx_mod_read_word(PE_PLAYER_ENTITY);
+    if (!pe_ptr(player)) return;
+    const int dx = (int16_t)psx_mod_read_half(entity + E_AIM_X) - (int16_t)psx_mod_read_half(player + P_POS_X);
+    const int dz = (int16_t)psx_mod_read_half(entity + E_AIM_Z) - (int16_t)psx_mod_read_half(player + P_POS_Z);
+    const int range = (int16_t)psx_mod_read_half(action + A_RANGE);
+    if (range <= 0) return;
+    const unsigned pct = pe_isqrt((unsigned)(dx * dx + dz * dz)) * 100u / (unsigned)range;
+    int band = 0;
+    while (band < 5 && pct >= (unsigned)s_band_edge[band]) ++band;
+    unsigned reaction = (psx_mod_read_word(enemy + C_CORE_FLAGS) >> 15) & 7u;
+    if (reaction > 4u) reaction = 0;
+    ++s_hq[band][reaction];
+    s_hq_range = (unsigned)range;
+    const uint32_t rec = pe_cat_record(0);
+    s_hq_gun = rec ? psx_mod_read_byte(rec + 4u) : 0;
+}
+
 /* Per-battle counters for the play log. */
 static struct {
     unsigned hits, elem_hits, elem_neutral, elem_weak, elem_resist, rof_boost;
@@ -162,7 +197,7 @@ static void pe_status(uint32_t *s2, uint32_t *mask, unsigned shift) {
 static void pe_on_damage(struct CPUState *cpu, uint32_t address) {
     (void)address;
     pe_restore_hit();
-    if (!pe_on() || !pe_loaded()) return;
+    if (!pe_loaded()) return;
     const uint32_t entity = cpu->gpr[4];
     if (!pe_ptr(entity)) return;
     const uint32_t enemy = psx_mod_read_word(entity);
@@ -171,6 +206,8 @@ static void pe_on_damage(struct CPUState *cpu, uint32_t address) {
     if (psx_mod_read_word(actor + C_STATE) & 0x180000u) return;      /* PE skills etc.: guns only */
     const uint32_t action = psx_mod_read_word(actor + C_ACTION);
     if (!pe_ptr(action)) return;
+    pe_note_hit_quality(entity, enemy, action);
+    if (!pe_on()) return;
     const uint32_t turn = psx_mod_read_word(action + A_TURN);
     const unsigned shots = turn & 0xFu;
     uint32_t s2 = psx_mod_read_word(enemy + C_STATUS2), mask = 0;
@@ -259,6 +296,7 @@ static int pe_gun_has(int effect) {
 
 static void pe_battle_start(void) {
     memset(&s_bt, 0, sizeof s_bt);
+    memset(s_hq, 0, sizeof s_hq);
     memset(s_poison_written, 0, sizeof s_poison_written);
     s_battle_frames = 0;
     s_prev_hp = -1;
@@ -268,6 +306,21 @@ static void pe_battle_start(void) {
 static void pe_battle_end(void) {
     pe_restore_hit();
     pe_agility_restore();
+    {                                             /* hit quality, under any rules */
+        unsigned total = 0;
+        for (int b = 0; b < 6; ++b) for (int r = 0; r < 5; ++r) total += s_hq[b][r];
+        if (total) {
+            static const char *const names[6] = { "lt50", "50_80", "80_100", "100_120", "120_150", "gt150" };
+            char buf[320];
+            int n = snprintf(buf, sizeof buf, "gun=0x%02X range=%u", s_hq_gun, s_hq_range);
+            for (int b = 0; b < 6 && n < (int)sizeof buf; ++b) {
+                const unsigned *q = s_hq[b];
+                if (q[0] + q[1] + q[2] + q[3] + q[4])
+                    n += snprintf(buf + n, sizeof buf - (size_t)n, " %s=%u/%u/%u/%u", names[b], q[2], q[1], q[3], q[4]);
+            }
+            pe_log("hitq", "%s", buf);
+        }
+    }
     if (!pe_on()) return;
     pe_log("modfx", "rules=%s hits=%u elem=%u(n%u/w%u/r%u) rof_boost=%u status_on=%u status_off=%u crit_up=%u quickdraw=%u poison_scaled=%u hp_refunded=%u",
            s_rules_names[s_rules], s_bt.hits, s_bt.elem_hits, s_bt.elem_neutral, s_bt.elem_weak, s_bt.elem_resist,

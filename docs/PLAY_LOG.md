@@ -57,6 +57,7 @@ items), 0x37 Mod Permit, 0xEC-0xFF PE techniques. Gear in the bag is stored as
 | kind | when | detail |
 |---|---|---|
 | `pe_turn` | a turn that cast a Parasite Energy power ends (half-bar turns on; pe_atb_items.c) | `power cost gauge=before->after` (cost: half = quick power, full = full bar, full_debt = full power from a half bar, the rest owed from the next refill) |
+| `hitq` | a battle with gun hits ends (any rules; pe_mod_effects.c) | `gun range` then per distance band (% of the gun's range: lt50, 50_80, 80_100, 100_120, 120_150, gt150) `hits/grazes/criticals/splash` counts |
 | `modfx` | a battle ends with the Mod Effects rules on (pe_mod_effects.c) | `rules hits elem=n(neutral/weak/resist) rof_boost status_on status_off crit_up quickdraw poison_scaled hp_refunded` (what the rebalance changed in that battle) |
 | `enemy` | an enemy's slot is freed | `slot id hp def exp bp=base/factor/hits drop steal boss died heat frost cyanide acid tranq steal_r poison charge` (boss = status flags 2 & 0x40000, can't escape; resist values 0 neutral / 50%, 1 resists / immune, 2 weak / always; poison = HP lost per poison tick; charge = ATB charge per tick, full at 9000) |
 | `battle` | a battle ends | see below |
