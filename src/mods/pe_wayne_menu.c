@@ -151,7 +151,7 @@ static void pe_build_wayne(PeText *t) {
         if (i < s_orig_len && s_orig[i] != G_NEWLINE) continue;
         if (option == s_ui.wayne_count - 1) { /* the last one is Cancel */
             if (!pe_compact()) {
-                pe_t_str(t, "    Mod Permit");
+                pe_t_str(t, "    Mod Permit Card");
                 pe_t_byte(t, G_NEWLINE);
             }
             pe_t_str(t, "    Workshop");
@@ -186,7 +186,7 @@ static void pe_build_root(PeText *t) {
     pe_t_choice(t, pe_compact() ? 4 : 3);
     pe_t_option_start(t, 1); pe_t_str(t, "Requisition");
     pe_t_option_start(t, 0); pe_t_str(t, "Rebuild");
-    if (pe_compact()) { pe_t_option_start(t, 0); pe_t_str(t, "Mod Permit"); }
+    if (pe_compact()) { pe_t_option_start(t, 0); pe_t_str(t, "Mod Permit Card"); }
     pe_t_option_start(t, 0); pe_t_str(t, "Back");
 }
 
