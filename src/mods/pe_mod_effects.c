@@ -309,7 +309,7 @@ static void pe_battle_start(void) {
 /* Reach: while Aya's bar is full, how far the nearest live enemy is against the gun's
  * range (the hit rows only see shots that landed; this sees waiting for a target).
  * Enemies: g_FieldActorListHead (as Battle_ApplyAttack walks it), entityFlags +0x98
- * (&0x2040 == 0x40 hidden/off, &0x4000 not a target), core hpAlive +0x10. */
+ * (targets as the game picks them: &0x2040 != 0x40 and not &0x4000), core hpAlive +0x10. */
 #define PE_ACTOR_LIST   0x8009D20Cu
 #define E_NEXT          0x04u
 #define E_FLAGS         0x98u
@@ -334,7 +334,7 @@ static void pe_note_reach(void) {
         const uint32_t core = psx_mod_read_word(e);
         if (!pe_ptr(core)) continue;
         const uint32_t fl = psx_mod_read_word(e + E_FLAGS);
-        if ((fl & 0x2040u) != 0x40u || (fl & 0x4000u) || (int32_t)psx_mod_read_word(core + C_HP_ALIVE) <= 0) continue;
+        if ((fl & 0x2040u) == 0x40u || (fl & 0x4000u) || (int32_t)psx_mod_read_word(core + C_HP_ALIVE) <= 0) continue;
         const int dx = (int16_t)psx_mod_read_half(e + E_AIM_X) - px, dz = (int16_t)psx_mod_read_half(e + E_AIM_Z) - pz;
         const unsigned pct = pe_isqrt((unsigned)(dx * dx + dz * dz)) * 100u / (unsigned)range;
         if (pct < best) best = pct;
