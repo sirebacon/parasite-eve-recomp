@@ -5,8 +5,9 @@
  *
  * Which items: keys and story items 0xC8-0xDC (Dressing Room Key ... Port
  * Storage Key, Fuses, cardkeys, Weapon Memo, Shiny Medal) and the Chrysler
- * elevator keys 0x38-0x3E. Not the good-luck charms 0xCB-0xCD (they work by
- * being in the bag; their check isn't found yet) and not the gun trading cards.
+ * elevator keys 0x38-0x3E, and Maeda's good-luck charms Hamaya / Mayoke / Narita
+ * (0xCD / 0xCC / 0xCB: "does nothing" per the RPGClassics item list; no code in the decomp
+ * reads them, 2026-10-14). Not the gun trading cards.
  *
  * Why it's safe (research 2026-10-14): the Theater Key's doors opened with the
  * key out of the bag, and nothing called the inventory lookups at those doors
@@ -83,7 +84,7 @@ static uint32_t pe_bag_limit(void) {
 
 int pe_key_is_pocket_item(uint16_t v) {
     if (v >= 0x38u && v <= 0x3Eu) return 1;                         /* Chrysler keys */
-    return v >= 0xC8u && v <= 0xDCu && !(v >= 0xCBu && v <= 0xCDu);  /* not the charms */
+    return v >= 0xC8u && v <= 0xDCu;                                /* keys, story items, charms */
 }
 
 static int pe_pocket_find(uint16_t v) {
