@@ -107,7 +107,7 @@ static struct {
 } s_bt;
 static int s_in_battle, s_battle_frames;
 static uint32_t s_rng = 0x51ED270Bu;
-static uint8_t s_poison_done[PE_ENEMY_SLOTS];
+static int16_t s_poison_written[PE_ENEMY_SLOTS];   /* what we last wrote; anything else is a new base */
 static int s_prev_hp = -1, s_refund_frac;
 /* Counter: agility raised for the battle, the game's value kept here (save states too). */
 #define PE_FX_STATE_VERSION 1u
@@ -259,7 +259,7 @@ static int pe_gun_has(int effect) {
 
 static void pe_battle_start(void) {
     memset(&s_bt, 0, sizeof s_bt);
-    memset(s_poison_done, 0, sizeof s_poison_done);
+    memset(s_poison_written, 0, sizeof s_poison_written);
     s_battle_frames = 0;
     s_prev_hp = -1;
     s_refund_frac = 0;
@@ -303,19 +303,16 @@ static void pe_battle_tick(void) {
     if (s_poison != 100) {
         for (int s = 0; s < PE_ENEMY_SLOTS; ++s) {
             const uint32_t slot = PE_ENEMY_SLOT_BASE + (uint32_t)s * PE_ENEMY_SLOT_STRIDE;
-            if (!psx_mod_read_byte(slot)) { s_poison_done[s] = 0; continue; }
+            if (!psx_mod_read_byte(slot)) { s_poison_written[s] = 0; continue; }
             const uint32_t core = slot + 4u;
-            const uint8_t id = (uint8_t)(psx_mod_read_byte(core + C_ENTITY_ID) | 0x80u);
-            if (s_poison_done[s] == id) continue;
             const int p = (int16_t)psx_mod_read_half(core + C_POISON);
-            if (p > 0) {
-                int np = p * s_poison / 100;
-                if (np < 1) np = 1;
-                if (np > 0x7FFF) np = 0x7FFF;
-                psx_mod_write_half(core + C_POISON, (uint16_t)np);
-                ++s_bt.poison_scaled;
-            }
-            s_poison_done[s] = id;
+            if (p <= 0 || p == s_poison_written[s]) continue;   /* scaled already: never compound */
+            int np = p * s_poison / 100;
+            if (np < 1) np = 1;
+            if (np > 0x7FFF) np = 0x7FFF;
+            psx_mod_write_half(core + C_POISON, (uint16_t)np);
+            s_poison_written[s] = (int16_t)np;
+            ++s_bt.poison_scaled;
         }
     }
     /* Damage taken with Attack Down / Slow Active Time armor. */
