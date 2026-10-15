@@ -941,6 +941,11 @@ static void pe_junk_without_room(void) {
         s_found.econ_shown = -1;
         s_found.econ_list_seen = 0;
     }
+    /* And key items: straight into the key pocket (pe_key_items.c). */
+    for (uint32_t i = 0; i < n; ++i) {
+        const uint16_t v = psx_mod_read_half(PE_FOUND_ITEMS + i * 2u);
+        if (v && pe_keys_take(v)) psx_mod_write_half(PE_FOUND_ITEMS + i * 2u, 0);
+    }
     for (uint32_t i = 0; i < n; ++i) {
         if (psx_mod_read_half(PE_FOUND_ITEMS + i * 2u) != PE_ITEM_JUNK) continue;
         psx_mod_write_half(PE_FOUND_ITEMS + i * 2u, 0);

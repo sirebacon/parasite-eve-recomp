@@ -20,6 +20,8 @@
  *     takes it again a couple of seconds later. With the bag full, the last
  *     non-key item steps aside for it and comes back when the key leaves
  *     (log key_unpark; found 2026-10-15: the Day 5 fuse box stalled on a full bag);
+ *   - a key given with the bag full (Inv_AddItem) gets a slot the same way, and a
+ *     key on the items-found list goes straight into the pocket (pe_keys_take);
  *   - a script removing one (Inv_DispatchCommand REMOVE_ITEM 1112) removes it
  *     from the pocket too.
  * Both log rows (key_lend / key_remove) so the play log shows any key that is
@@ -40,6 +42,7 @@
 
 #define PE_FN_SCRIPT_COUNT_ITEMS 0x800194F8u  /* Script_CountItemsByValue(int **args) */
 #define PE_FN_INV_DISPATCH       0x8005D2B4u  /* Inv_DispatchCommand(command, value, ...) */
+#define PE_FN_INV_ADD_ITEM       0x80053D2Cu  /* Inv_AddItem(item) */
 #define PE_FN_SAVE_SERIALIZE     0x8003F800u
 #define PE_FN_SAVE_DESERIALIZE   0x8003FBD8u
 #define PE_INV_CMD_COUNT_ITEM    1102
@@ -176,6 +179,39 @@ static void pe_lend_for_check(unsigned item, const char *how) {
     pe_log("key_lend", "item=0x%02X via=%s bag_full=1", item, how);
 }
 
+/* A key is about to be added to the bag (Inv_AddItem: field pickups, script
+ * gifts): with the bag full, the last non-key item steps aside so the key gets a
+ * slot; the pocket takes the key at the next free moment and the item comes back. */
+static void pe_on_add_item(struct CPUState *cpu, uint32_t address) {
+    (void)address;
+    const uint16_t item = (uint16_t)cpu->gpr[4];
+    if (!s_enabled || !pe_loaded() || !pe_key_is_pocket_item(item)) return;
+    const uint32_t limit = pe_bag_limit();
+    for (uint32_t i = 0; i < limit; ++i)
+        if (!psx_mod_read_half(PE_AYA_SLOTS_ADDR + i * 2u)) return;          /* room already */
+    for (uint32_t i = limit; i-- > 0;) {
+        const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
+        const uint16_t v = psx_mod_read_half(a);
+        if (!v || pe_key_is_pocket_item(v) || s_parked_count >= PE_PARK_MAX) continue;
+        s_parked[s_parked_count++] = v;
+        psx_mod_write_half(a, 0);
+        pe_log("key_add", "item=0x%02X bag_full=1 parked=0x%02X", item, v);
+        return;
+    }
+}
+
+/* pe_loot.c: a key on the items-found list with the bag full goes straight into
+ * the pocket (the list only moves an entry into a free slot). 1 = taken. */
+int pe_keys_take(uint16_t item) {
+    if (!s_enabled || !pe_key_is_pocket_item(item)) return 0;
+    if (pe_pocket_find(item) < 0) {
+        if (s_kp.count >= PE_KEY_MAX) return 0;
+        s_kp.ids[s_kp.count++] = item;
+    }
+    pe_log("key_add", "item=0x%02X bag_full=1 via=found", item);
+    return 1;
+}
+
 static void pe_on_script_count_items(struct CPUState *cpu, uint32_t address) {
     (void)address;
     const uint32_t args = cpu->gpr[4];
@@ -251,6 +287,8 @@ void pe_key_items_register(void) {
         PE_FN_SCRIPT_COUNT_ITEMS, pe_on_script_count_items);
     (void)psx_mod_register_function_entry_plugin("pe.key-items.inv-command",
         PE_FN_INV_DISPATCH, pe_on_inv_dispatch);
+    (void)psx_mod_register_function_entry_plugin("pe.key-items.add",
+        PE_FN_INV_ADD_ITEM, pe_on_add_item);
     (void)psx_mod_register_function_entry_plugin("pe.key-items.save",
         PE_FN_SAVE_SERIALIZE, pe_on_save_serialize);
     (void)psx_mod_register_function_entry_plugin("pe.key-items.load",
