@@ -52,7 +52,9 @@
  * Parasite Energy (2026-10-15, pe_pe_balance.c): only the powers in g_pe_quick_mask (the
  * queued command 0x183 + power index) cost half a bar; a full-bar power cast from a half bar
  * empties the gauge and leaves a debt of half a bar that the next refill pays first, so it
- * always costs a full bar. The settings live on F1 > Items & Parasite Energy.
+ * always costs a full bar; the same for anything that shoots from a half bar (Energy Shot and
+ * Liberate queue a PE command but fire as attacks, 2026-10-15 report: Energy Shot could be
+ * spammed from half bars). The settings live on F1 > Items & Parasite Energy.
  */
 #include <string.h>
 #include "cpu_state.h"
@@ -238,7 +240,7 @@ static int pe_action_allowed(int act) {
 }
 
 static void pe_log_pe_turn(const char *cost, unsigned from, unsigned to) {
-    if (s_st.action != ACT_PE || s_st.pe_index < 0 || s_st.pe_index >= 20) return;
+    if (s_st.pe_index < 0 || s_st.pe_index >= 20) return;   /* a PE power was queued (Energy Shot shoots) */
     pe_log("pe_turn", "power=%s cost=%s gauge=%u->%u", s_power_names[s_st.pe_index], cost, from, to);
 }
 
@@ -308,7 +310,9 @@ static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
             if (s_st.action == ACT_NONE) gauge = s_st.saved_gauge;
             else if (pe_action_allowed(s_st.action))
                 gauge = s_st.saved_gauge > PE_GAUGE_HALF ? s_st.saved_gauge - PE_GAUGE_HALF : 0;
-            else if (s_st.action == ACT_PE) {    /* a full power from a half bar: the rest is owed */
+            else if (s_st.action == ACT_PE || s_st.action == ACT_ATTACK) {
+                /* A full power from a half bar, or anything that shoots (Energy Shot and
+                 * Liberate are queued as PE but fire as attacks): the rest of the bar is owed. */
                 const unsigned paid = s_st.saved_gauge;
                 s_st.debt = paid < PE_GAUGE_FULL ? PE_GAUGE_FULL - paid : 0;
             }
