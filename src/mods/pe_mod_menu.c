@@ -814,6 +814,7 @@ void pe_catalog_menu_register(void);      /* pe_catalog_menu.c */
 void pe_key_items_register(void);         /* pe_key_items.c */
 void pe_bag_sort_register(void);          /* pe_bag_sort.c */
 void pe_field_wayne_register(void);       /* pe_field_wayne.c */
+void pe_mod_effects_register(void);       /* pe_mod_effects.c */
 void pe_loot_hooks_register(void);      /* pe_loot.c, after the loot logger */
 void pe_stats_menu_register(void);      /* pe_stats_menu.c */
 void pe_item_editor_register(void);     /* pe_item_editor.c */
@@ -854,6 +855,7 @@ PSX_MOD_CONSTRUCTOR(pe_register_mod_menu_plugin) {
     pe_key_items_register();
     pe_bag_sort_register();
     pe_field_wayne_register();
+    pe_mod_effects_register();
     pe_stats_menu_register();
     pe_item_editor_register();
     pe_debug_menu_register();

@@ -136,7 +136,7 @@ static const char *const s_armor_short[21] = {
 /* Price tier per effect: 0 common, 1 mid, 2 premium (Junk + a Tool) -- the
  * value ranking of the design doc 6.1b. */
 static const uint8_t s_gun_tier[21] = {
-    0, 0, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 2, 2,
+    0, 0, 1, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 1, 1, 0, 1, 1, 2, 2,   /* Cyanide (11) premium: mod effects doc 9 */
 };
 static const uint8_t s_armor_tier[21] = {
     0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0,

@@ -56,6 +56,7 @@ items), 0x37 Mod Permit, 0xEC-0xFF PE techniques. Gear in the bag is stored as
 
 | kind | when | detail |
 |---|---|---|
+| `modfx` | a battle ends with the Mod Effects rules on (pe_mod_effects.c) | `rules hits elem=n(neutral/weak/resist) rof_boost status_on status_off crit_up quickdraw poison_scaled hp_refunded` (what the rebalance changed in that battle) |
 | `enemy` | an enemy's slot is freed | `slot id hp def exp bp=base/factor/hits drop steal boss died heat frost cyanide acid tranq steal_r poison charge` (boss = status flags 2 & 0x40000, can't escape; resist values 0 neutral / 50%, 1 resists / immune, 2 weak / always; poison = HP lost per poison tick; charge = ATB charge per tick, full at 9000) |
 | `battle` | a battle ends | see below |
 | `loot` | a won battle pays out (loot overhaul) | `exp junk` (earned this battle) `hits` (hits Aya took) `vanilla` (game's own Junk) `steal` (empty-steal Junk) `shown` (the "Junk xN" line) `boss preset scav` (Scavenger) `rare_dry` (rare meter before the roll) `rolled` (0 none; 0x8000+n = economy mod n) `carried` (rare held over) `charm` (Lucky Charm battles left) `path` (the cascade: `-name` skipped, `+name` the drop, `!` = by guarantee; `-` = no rare) |
