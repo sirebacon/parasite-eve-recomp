@@ -931,6 +931,16 @@ static void pe_junk_without_room(void) {
     if (pe_free_bag_slot(limit) >= 0) return;
     uint32_t n = psx_mod_read_word(PE_FOUND_COUNT);
     if (n > 10u) n = 10u;
+    /* The same for an economy mod (its Mod Permit line, never next to a real one):
+     * unlocked where it stands (found 2026-10-15: Lucky Find lost to a full bag). */
+    for (uint32_t i = 0; i < n && s_found.econ_shown >= 0; ++i) {
+        if (psx_mod_read_half(PE_FOUND_ITEMS + i * 2u) != PE_ITEM_MOD_PERMIT) continue;
+        psx_mod_write_half(PE_FOUND_ITEMS + i * 2u, 0);
+        pe_catalog_unlock_armor(s_econ_mods[s_found.econ_shown].effect);
+        pe_log("econ_unlock", "mod=%s source=drop no_room=1", s_econ_mods[s_found.econ_shown].name);
+        s_found.econ_shown = -1;
+        s_found.econ_list_seen = 0;
+    }
     for (uint32_t i = 0; i < n; ++i) {
         if (psx_mod_read_half(PE_FOUND_ITEMS + i * 2u) != PE_ITEM_JUNK) continue;
         psx_mod_write_half(PE_FOUND_ITEMS + i * 2u, 0);

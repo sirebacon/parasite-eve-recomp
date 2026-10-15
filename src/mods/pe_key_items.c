@@ -17,7 +17,9 @@
  *   - a script asking how many of a pocketed key Aya has (Script_CountItemsByValue
  *     0x800194F8, or Inv_DispatchCommand COUNT_ITEM 1102) gets the key lent
  *     back into a free bag slot first, so the game's count finds it; the pocket
- *     takes it again a couple of seconds later;
+ *     takes it again a couple of seconds later. With the bag full, the last
+ *     non-key item steps aside for it and comes back when the key leaves
+ *     (log key_unpark; found 2026-10-15: the Day 5 fuse box stalled on a full bag);
  *   - a script removing one (Inv_DispatchCommand REMOVE_ITEM 1112) removes it
  *     from the pocket too.
  * Both log rows (key_lend / key_remove) so the play log shows any key that is
@@ -67,6 +69,10 @@ static struct {
 static int s_enabled = 1;
 static uint16_t s_lent;                       /* a key lent back to the bag for a check */
 static uint32_t s_lent_until, s_frames;
+/* Bag full: items moved aside to make room for a lent key, put back afterwards. */
+#define PE_PARK_MAX 4
+static uint16_t s_parked[PE_PARK_MAX];
+static int s_parked_count;
 
 static int pe_loaded(void) {
     return psx_mod_game_started() && psx_mod_read_half(PE_MAX_HP_ADDR) != 0;
@@ -128,6 +134,13 @@ static void pe_key_tick(void) {
         }
         psx_mod_write_half(a, 0);                     /* a duplicate just leaves the bag */
     }
+    /* Put back items moved aside for a lent key. */
+    for (uint32_t i = 0; i < limit && s_parked_count; ++i) {
+        const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
+        if (psx_mod_read_half(a)) continue;
+        psx_mod_write_half(a, s_parked[--s_parked_count]);
+        pe_log("key_unpark", "item=0x%02X", psx_mod_read_half(a));
+    }
 }
 
 /* A script is about to count `item` in the active list: lend a pocketed key
@@ -145,6 +158,19 @@ static void pe_lend_for_check(unsigned item, const char *how) {
         s_lent = (uint16_t)item;
         s_lent_until = s_frames + PE_LEND_FRAMES;
         pe_log("key_lend", "item=0x%02X via=%s", item, how);
+        return;
+    }
+    /* Bag full: move the last non-key item aside until the key is pocketed again
+     * (otherwise the count finds nothing and the script can stall, e.g. the fuse box). */
+    for (uint32_t i = limit; i-- > 0;) {
+        const uint32_t a = PE_AYA_SLOTS_ADDR + i * 2u;
+        const uint16_t v = psx_mod_read_half(a);
+        if (!v || pe_key_is_pocket_item(v) || s_parked_count >= PE_PARK_MAX) continue;
+        s_parked[s_parked_count++] = v;
+        psx_mod_write_half(a, (uint16_t)item);
+        s_lent = (uint16_t)item;
+        s_lent_until = s_frames + PE_LEND_FRAMES;
+        pe_log("key_lend", "item=0x%02X via=%s bag_full=1 parked=0x%02X", item, how, v);
         return;
     }
     pe_log("key_lend", "item=0x%02X via=%s bag_full=1", item, how);
@@ -198,6 +224,7 @@ static void pe_on_save_deserialize(struct CPUState *cpu, uint32_t address) {
     const uint32_t at = PE_CARD_BUFFER + PE_TAIL_OFFSET;
     memset(&s_kp, 0, sizeof s_kp);
     s_lent = 0;
+    s_parked_count = 0;
     if (psx_mod_read_word(at) != PE_TAIL_MAGIC || psx_mod_read_word(at + 4u) != PE_TAIL_VERSION ||
         psx_mod_read_word(at + 8u) != sizeof s_kp)
         return;                                   /* an older save: its keys are in the bag */
@@ -213,6 +240,7 @@ static void pe_key_state_loaded(int result, uint32_t saved_version, const void *
     (void)saved_version; (void)saved; (void)saved_size;
     if (result != PSX_MOD_STATE_RESTORED) memset(&s_kp, 0, sizeof s_kp);
     s_lent = 0;
+    s_parked_count = 0;
 }
 
 /* Called from pe_mod_menu.c. */
