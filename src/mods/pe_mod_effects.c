@@ -111,6 +111,7 @@ static struct {
 static const int s_band_edge[5] = { 50, 80, 100, 120, 150 };
 static unsigned s_hq[6][5];                       /* [band][reaction] */
 static unsigned s_hq_range, s_hq_gun;
+static unsigned s_reach[4], s_reach_frames;   /* reach: ready frames in range, graze (100-150%), far (150-180%), out */
 
 static int pe_ptr(uint32_t p);
 static unsigned pe_isqrt(unsigned v) { unsigned r = 0, b = 1u << 30; while (b > v) b >>= 2;
@@ -297,15 +298,64 @@ static int pe_gun_has(int effect) {
 static void pe_battle_start(void) {
     memset(&s_bt, 0, sizeof s_bt);
     memset(s_hq, 0, sizeof s_hq);
+    memset(s_reach, 0, sizeof s_reach);
+    s_reach_frames = 0;
     memset(s_poison_written, 0, sizeof s_poison_written);
     s_battle_frames = 0;
     s_prev_hp = -1;
     s_refund_frac = 0;
 }
 
+/* Reach: while Aya's bar is full, how far the nearest live enemy is against the gun's
+ * range (the hit rows only see shots that landed; this sees waiting for a target).
+ * Enemies: g_FieldActorListHead (as Battle_ApplyAttack walks it), entityFlags +0x98
+ * (&0x2040 == 0x40 hidden/off, &0x4000 not a target), core hpAlive +0x10. */
+#define PE_ACTOR_LIST   0x8009D20Cu
+#define E_NEXT          0x04u
+#define E_FLAGS         0x98u
+#define C_HP_ALIVE      0x10u
+static unsigned s_reach_range;
+
+static void pe_note_reach(void) {
+    ++s_reach_frames;
+    const uint32_t player = psx_mod_read_word(PE_PLAYER_ENTITY);
+    if (!pe_ptr(player)) return;
+    const uint32_t aya = psx_mod_read_word(player);
+    if (!pe_ptr(aya) || psx_mod_read_half(aya + C_GAUGE) < 9000u) return;
+    const uint32_t action = psx_mod_read_word(aya + C_ACTION);
+    if (!pe_ptr(action)) return;
+    const int range = (int16_t)psx_mod_read_half(action + A_RANGE);
+    if (range <= 0) return;
+    const int px = (int16_t)psx_mod_read_half(player + P_POS_X), pz = (int16_t)psx_mod_read_half(player + P_POS_Z);
+    unsigned best = 0xFFFFFFFFu;
+    uint32_t e = psx_mod_read_word(PE_ACTOR_LIST);
+    for (int guard = 0; pe_ptr(e) && guard < 64; ++guard, e = psx_mod_read_word(e + E_NEXT)) {
+        if (e == player) continue;
+        const uint32_t core = psx_mod_read_word(e);
+        if (!pe_ptr(core)) continue;
+        const uint32_t fl = psx_mod_read_word(e + E_FLAGS);
+        if ((fl & 0x2040u) != 0x40u || (fl & 0x4000u) || (int32_t)psx_mod_read_word(core + C_HP_ALIVE) <= 0) continue;
+        const int dx = (int16_t)psx_mod_read_half(e + E_AIM_X) - px, dz = (int16_t)psx_mod_read_half(e + E_AIM_Z) - pz;
+        const unsigned pct = pe_isqrt((unsigned)(dx * dx + dz * dz)) * 100u / (unsigned)range;
+        if (pct < best) best = pct;
+    }
+    if (best == 0xFFFFFFFFu) return;
+    s_reach_range = (unsigned)range;
+    ++s_reach[best <= 100u ? 0 : best <= 150u ? 1 : best <= 180u ? 2 : 3];
+}
+
 static void pe_battle_end(void) {
     pe_restore_hit();
     pe_agility_restore();
+    {
+        const unsigned ready = s_reach[0] + s_reach[1] + s_reach[2] + s_reach[3];
+        const uint32_t rec = pe_cat_record(0);
+        if (ready)
+            pe_log("reach", "gun=0x%02X range=%u frames=%u ready=%u in=%u graze=%u far=%u out=%u",
+                   rec ? psx_mod_read_byte(rec + 4u) : 0u, s_reach_range, s_reach_frames, ready, s_reach[0], s_reach[1], s_reach[2], s_reach[3]);
+        memset(s_reach, 0, sizeof s_reach);
+        s_reach_frames = 0;
+    }
     {                                             /* hit quality, under any rules */
         unsigned total = 0;
         for (int b = 0; b < 6; ++b) for (int r = 0; r < 5; ++r) total += s_hq[b][r];
@@ -419,6 +469,7 @@ static void pe_mod_effects_tick(void) {
     if (battle && !s_in_battle) pe_battle_start();
     if (!battle && s_in_battle) pe_battle_end();
     s_in_battle = battle;
+    if (battle) pe_note_reach();                  /* under any rules, like the hit rows */
     if (battle && pe_on()) pe_battle_tick();
 }
 
