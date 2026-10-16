@@ -149,14 +149,42 @@ static int s_prev_hp = -1, s_refund_frac;
 #define PE_FX_STATE_VERSION 1u
 static struct { uint32_t boosted; uint32_t agility; } s_fx;
 
-/* Only for save states taken while an old build had the value raised: put it back only if
- * it still holds exactly what that build wrote (s_fx.boosted = the raised value; older states
- * stored 1, which no real HP level equals), never over a level-up's new value. */
+/* Only for save states taken mid-battle by an old build that had the value raised: put the
+ * game's value back when that battle is over (as that build would); pe_hp_level_repair then
+ * gives back any level the battle added. */
 static void pe_agility_restore(void) {
     if (!s_fx.boosted) return;
-    if (s_fx.boosted > 1u && psx_mod_read_half(PE_AGILITY) == (uint16_t)s_fx.boosted)
-        psx_mod_write_half(PE_AGILITY, (uint16_t)s_fx.agility);
+    psx_mod_write_half(PE_AGILITY, (uint16_t)s_fx.agility);
     s_fx.boosted = 0;
+}
+
+/* HP level repair (2026-10-16). Aya's HP level (stats.levels[0], 0x800C0E28) only goes up:
+ * 0 at a new game, +10 per level-up (Aya_SetTotalExp), so it is never below level x 10. Below
+ * that, the old Counter boost ate level-ups' HP (saves and save states from before the fix
+ * carry it): raise it to level x 10 and max HP as Inv_RecalcSlotStats computes it,
+ * (scale[0] + 20) * levelRow.hp / 20, max 999; current HP gains the same. Field only. */
+#define PE_AYA_LEVEL          0x800C0E0Au   /* u8, 0-based */
+#define PE_AYA_CUR_HP         0x800C0E08u
+#define PE_STAT_SCALE         0x800A1B30u   /* g_StatScaleBase[0]: armor HP step */
+#define PE_LEVEL_TABLE_PTR    0x800A803Cu   /* Aya_LookupLevelStats: *ptr + 0x800A8028 + level * 0x18 */
+static void pe_hp_level_repair(void) {
+    const unsigned level = psx_mod_read_byte(PE_AYA_LEVEL);
+    if (level > 98u) return;
+    const unsigned track = psx_mod_read_half(PE_AGILITY), want = level * 10u;
+    if (track >= want) return;
+    const uint32_t row = psx_mod_read_word(PE_LEVEL_TABLE_PTR) + 0x800A8028u + level * 0x18u;
+    if (!pe_ptr(row)) return;
+    const int scale = (int32_t)psx_mod_read_word(PE_STAT_SCALE);
+    int max = (scale + 20) * (int)psx_mod_read_half(row) / 20;
+    if (max > 999) max = 999;
+    const int old_max = psx_mod_read_half(PE_MAX_HP_ADDR), cur = psx_mod_read_half(PE_AYA_CUR_HP);
+    if (max <= 0) return;
+    psx_mod_write_half(PE_AGILITY, (uint16_t)want);
+    psx_mod_write_half(PE_MAX_HP_ADDR, (uint16_t)max);
+    int nc = cur + (max > old_max ? max - old_max : 0);
+    if (nc > max) nc = max;
+    psx_mod_write_half(PE_AYA_CUR_HP, (uint16_t)nc);
+    pe_log("hp_level_fix", "level=%u track=%u->%u max_hp=%d->%d", level + 1u, track, want, old_max, max);
 }
 
 static uint32_t pe_rand(void) { s_rng ^= s_rng << 13; s_rng ^= s_rng >> 17; s_rng ^= s_rng << 5; return s_rng; }
@@ -469,6 +497,7 @@ static void pe_mod_effects_tick(void) {
     if (battle && !s_in_battle) pe_battle_start();
     if (!battle && s_in_battle) pe_battle_end();
     s_in_battle = battle;
+    if (!battle) pe_hp_level_repair();            /* any rules: undoes an old build's damage */
     if (battle) pe_note_reach();                  /* under any rules, like the hit rows */
     if (battle && pe_on()) pe_battle_tick();
 }
@@ -482,6 +511,7 @@ static void pe_mod_effects_restored(void) {
     memset(&s_hit, 0, sizeof s_hit);              /* a save state brings its own memory back */
     s_in_battle = pe_loaded() && pe_in_battle();
     if (!s_in_battle) pe_agility_restore();       /* a state saved mid-battle, loaded outside one */
+    if (!s_in_battle && pe_loaded()) pe_hp_level_repair();
     if (s_in_battle) pe_battle_start();
 }
 
