@@ -23,8 +23,8 @@
  * Per battle (VBlank tick): poison strength (each enemy's periodicDamage, +0x96, scaled once);
  * Quickdraw top-up at the start (the game's chance is Aya's stat22 %; we roll the difference up to
  * stat22 + bonus, max 90%); damage taken with Attack Down / Slow Active Time armor (HP refunded as
- * hits land); Counter (the game's roll reads Aya's agility, g_AyaStatAgility[0], only there:
- * raised for the battle while Counter is on the gun, put back after and in save states). One
+ * hits land). Counter is no longer boosted: the value its roll reads is Aya's HP level, and
+ * raising it lost HP on level-ups (see pe_battle_tick, 2026-10-16). One
  * "modfx" play-log row per battle counts what was changed.
  */
 #include <stdint.h>
@@ -85,7 +85,7 @@ static PeRow s_rows[] = {
     { "Poison strength %", "Acid poison damage per tick.", 100, 125, 50, 300, 5, &s_poison, 0 },
     { "Critical bonus points", "Crit chance the effect adds (20).", 20, 40, 0, 80, 5, &s_crit, 0 },
     { "Quickdraw bonus points", "Added to the speed-stat chance.", 0, 15, 0, 90, 5, &s_quickdraw, 0 },
-    { "Counter chance %", "Of the game's (agility; ~2-8%).", 100, 500, 100, 1000, 50, &s_counter, 0 },
+    { "Counter chance %", "Off for now (no effect).", 100, 100, 100, 100, 50, &s_counter, 0 },
     { "Attack Down dmg taken %", "Armor: damage Aya takes.", 100, 75, 50, 100, 5, &s_guard_attack_down, 0 },
     { "Slow AT dmg taken %", "Armor: damage Aya takes.", 100, 85, 50, 100, 5, &s_guard_slow_at, 0 },
 };
@@ -149,9 +149,13 @@ static int s_prev_hp = -1, s_refund_frac;
 #define PE_FX_STATE_VERSION 1u
 static struct { uint32_t boosted; uint32_t agility; } s_fx;
 
+/* Only for save states taken while an old build had the value raised: put it back only if
+ * it still holds exactly what that build wrote (s_fx.boosted = the raised value; older states
+ * stored 1, which no real HP level equals), never over a level-up's new value. */
 static void pe_agility_restore(void) {
     if (!s_fx.boosted) return;
-    psx_mod_write_half(PE_AGILITY, (uint16_t)s_fx.agility);
+    if (s_fx.boosted > 1u && psx_mod_read_half(PE_AGILITY) == (uint16_t)s_fx.boosted)
+        psx_mod_write_half(PE_AGILITY, (uint16_t)s_fx.agility);
     s_fx.boosted = 0;
 }
 
@@ -393,15 +397,11 @@ static void pe_battle_tick(void) {
             ++s_bt.quickdraw;
         }
     }
-    /* Counter: the roll reads agility (chance ~ agility / 1000 .. / 5000 by rank). */
-    if (s_battle_frames == 2 && s_counter != 100 && !s_fx.boosted && pe_gun_has(14)) {
-        const unsigned a = psx_mod_read_half(PE_AGILITY);
-        unsigned na = a * (unsigned)s_counter / 100u;
-        if (na > 0xFFFFu) na = 0xFFFFu;
-        s_fx.agility = a;
-        s_fx.boosted = 1;
-        psx_mod_write_half(PE_AGILITY, (uint16_t)na);
-    }
+    /* Counter: NOT boosted any more (2026-10-16). The roll reads 0x800C0E28, which the decomp
+     * calls g_AyaStatAgility[0] but is Aya's stat-level table (AyaSaveState.stats.levels[0], the
+     * HP level). Raising it for the battle let the post-battle level-up commit the boosted value
+     * and our restore then wiped the level's HP gain: a full run ended at level 33 with level 24's
+     * HP (385 instead of 714). A Counter boost needs an entry hook on the roll itself. */
     /* Poison strength: each enemy's periodicDamage once. */
     if (s_poison != 100) {
         for (int s = 0; s < PE_ENEMY_SLOTS; ++s) {
