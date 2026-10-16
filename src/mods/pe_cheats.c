@@ -179,8 +179,8 @@ static void pe_no_battles_tick(void) {
  * every check a battle (a room with no encounter value still has none). Patched
  * after each room load; the originals are put back when the row goes to Normal. */
 #define PE_SCENE_TOKEN        0x8009D280u
-#define PE_SCRIPT_LO          0x80190000u
-#define PE_SCRIPT_HI          0x80200000u
+#define PE_SCRIPT_LO          0x80198000u   /* room scripts seen at 0x801A0000-0x801B2000 */
+#define PE_SCRIPT_HI          0x801C8000u
 #define PE_ENC_MAX            16
 enum { PE_ENC_NORMAL, PE_ENC_MORE, PE_ENC_LOTS, PE_ENC_ALWAYS, PE_ENC_CHOICES };
 static const char *const s_enc_names[PE_ENC_CHOICES] = { "NORMAL", "MORE (x2)", "LOTS (x4)", "EVERY CHECK" };
@@ -227,16 +227,24 @@ static void pe_enc_restore(void) {
     s_enc_count = 0;
 }
 
-static void pe_enc_scan(void) {
-    s_enc_count = 0;
+/* Adds rolls not seen yet in this room (its script arrives in pieces) and patches
+ * them; returns how many were new. */
+static int pe_enc_scan(void) {
+    int added = 0;
     for (uint32_t a = PE_SCRIPT_LO; a < PE_SCRIPT_HI - 64u && s_enc_count < PE_ENC_MAX; a += 4u) {
         if ((psx_mod_read_word(a) & 0x1FFFu) != 0x1Au || !pe_is_encounter_roll(a)) continue;
+        int known = 0;
+        for (int i = 0; i < s_enc_count; ++i) if (s_enc[i].at == a + 16u) known = 1;
+        if (known) continue;
         const uint32_t orig = psx_mod_read_word(a + 16u);
         if (orig < 2u || orig > 0x1000u) continue;
         s_enc[s_enc_count].at = a + 16u;
         s_enc[s_enc_count].orig = orig;
+        psx_mod_write_word(a + 16u, pe_enc_end(orig));
         ++s_enc_count;
+        ++added;
     }
+    return added;
 }
 
 static void pe_enc_tick(void) {
@@ -246,7 +254,7 @@ static void pe_enc_tick(void) {
     if (token != s_enc_token) {              /* a new room: its script loads over the next moments */
         s_enc_token = token;
         s_enc_count = 0;
-        s_enc_scan_until = s_enc_frames + 180u;
+        s_enc_scan_until = s_enc_frames + 240u;
     }
     if (s_enc_mode != s_enc_applied) {       /* the row changed: undo, then patch again */
         const int mode = s_enc_mode;
@@ -254,18 +262,22 @@ static void pe_enc_tick(void) {
         pe_enc_restore();
         s_enc_mode = mode;
         s_enc_applied = mode;
-        s_enc_scan_until = s_enc_frames + 1u;
+        s_enc_scan_until = s_enc_frames + 30u;
     }
-    if (s_enc_mode == PE_ENC_NORMAL || s_enc_frames > s_enc_scan_until || (s_enc_frames & 15u)) return;
+    if (s_enc_mode == PE_ENC_NORMAL) return;
     if (psx_mod_read_word(PE_GAME_BLOCK_ADDR) & PE_GAME_BLOCK_BATTLE) return;
-    pe_enc_scan();
+    /* Shared encounter code (same addresses in every room, 0x801B1264 / 0x801B18A8 on
+     * 2026-10-15) is copied in again after a room settles, undoing a patch: put any
+     * known roll that is back to its original value right again, every frame. */
     for (int i = 0; i < s_enc_count; ++i)
-        psx_mod_write_word(s_enc[i].at, pe_enc_end(s_enc[i].orig));
-    if (s_enc_count) {
+        if (psx_mod_read_word(s_enc[i].at) == s_enc[i].orig)
+            psx_mod_write_word(s_enc[i].at, pe_enc_end(s_enc[i].orig));
+    /* The room rolls once, soon after it loads (then sets a "checked" bit), so scan
+     * every other frame for its first seconds, then twice a second for late pieces. */
+    if (s_enc_frames <= s_enc_scan_until ? (s_enc_frames & 1u) : (s_enc_frames % 30u)) return;
+    if (pe_enc_scan())
         pe_log("encounters", "mode=%s rolls=%d end=%u->%u", s_enc_names[s_enc_mode], s_enc_count,
                (unsigned)s_enc[0].orig, (unsigned)pe_enc_end(s_enc[0].orig));
-        s_enc_scan_until = s_enc_frames;     /* done for this room */
-    }
 }
 
 /* ---- infinite ammo -------------------------------------------------------- */
