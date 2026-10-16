@@ -168,6 +168,106 @@ static void pe_no_battles_tick(void) {
     }
 }
 
+/* ---- battle frequency --------------------------------------------------------
+ * Room scripts (bytecode, loaded around 0x801A0000) roll for a random battle as
+ *   Script_Random $r #0 #N        (op 0x1A: $r = roll in [0, N), N = 0x100)
+ *   Script_EvalExpr #A V0 $r $t   (op 0x09: V0 = roll against the room's encounter value $t)
+ *   Script_JumpIfZero V0 ...      (op 0x05: no battle)
+ *   ... Boot_MemCardStepInit #n   (op 0x55: start battle n), a few instructions on
+ * (traced 2026-10-15: the [0,256) roll comes right before every random battle).
+ * Shrinking N in the loaded script raises the odds: N/2 doubles them, N = 1 makes
+ * every check a battle (a room with no encounter value still has none). Patched
+ * after each room load; the originals are put back when the row goes to Normal. */
+#define PE_SCENE_TOKEN        0x8009D280u
+#define PE_SCRIPT_LO          0x80190000u
+#define PE_SCRIPT_HI          0x80200000u
+#define PE_ENC_MAX            16
+enum { PE_ENC_NORMAL, PE_ENC_MORE, PE_ENC_LOTS, PE_ENC_ALWAYS, PE_ENC_CHOICES };
+static const char *const s_enc_names[PE_ENC_CHOICES] = { "NORMAL", "MORE (x2)", "LOTS (x4)", "EVERY CHECK" };
+static int s_enc_mode, s_enc_applied = -1;
+static struct { uint32_t at; uint32_t orig; } s_enc[PE_ENC_MAX];
+static int s_enc_count;
+static uint32_t s_enc_token, s_enc_scan_until, s_enc_frames;
+
+static unsigned pe_ins_argc(uint32_t h) { return (h >> 13) & 15u; }
+static unsigned pe_ins_mode(uint32_t h, unsigned i) { return (h >> (17u + 3u * i)) & 7u; }   /* args 0-4 */
+
+/* Script_Random at `a` that feeds an encounter check? */
+static int pe_is_encounter_roll(uint32_t a) {
+    const uint32_t h = psx_mod_read_word(a);
+    if ((h & 0x1FFFu) != 0x1Au || pe_ins_argc(h) != 3u) return 0;
+    if (pe_ins_mode(h, 1) != 0u || pe_ins_mode(h, 2) != 0u) return 0;      /* #start #end */
+    if (psx_mod_read_word(a + 12u) != 0u) return 0;                        /* start 0 */
+    const uint32_t e = a + 20u, h2 = psx_mod_read_word(e);
+    if ((h2 & 0x1FFFu) != 0x09u || pe_ins_argc(h2) != 4u) return 0;
+    if (psx_mod_read_word(e + 8u) != 0xAu || psx_mod_read_word(e + 16u) != psx_mod_read_word(a + 8u)) return 0;
+    const uint32_t j = e + 24u;
+    if ((psx_mod_read_word(j) & 0x1FFFu) != 0x05u) return 0;
+    for (uint32_t p = j, n = 0; n < 16u && p < PE_SCRIPT_HI; ++n) {        /* a battle start soon after */
+        const uint32_t hp = psx_mod_read_word(p);
+        if ((hp & 0x1FFFu) == 0x55u && pe_ins_argc(hp) == 1u) return 1;
+        p += 8u + 4u * pe_ins_argc(hp);
+    }
+    return 0;
+}
+
+static uint32_t pe_enc_end(uint32_t orig) {
+    switch (s_enc_mode) {
+    case PE_ENC_MORE: return orig / 2u ? orig / 2u : 1u;
+    case PE_ENC_LOTS: return orig / 4u ? orig / 4u : 1u;
+    case PE_ENC_ALWAYS: return 1u;
+    default: return orig;
+    }
+}
+
+static void pe_enc_restore(void) {
+    for (int i = 0; i < s_enc_count; ++i)
+        if (psx_mod_read_word(s_enc[i].at) == pe_enc_end(s_enc[i].orig) || s_enc_mode == PE_ENC_NORMAL)
+            psx_mod_write_word(s_enc[i].at, s_enc[i].orig);
+    s_enc_count = 0;
+}
+
+static void pe_enc_scan(void) {
+    s_enc_count = 0;
+    for (uint32_t a = PE_SCRIPT_LO; a < PE_SCRIPT_HI - 64u && s_enc_count < PE_ENC_MAX; a += 4u) {
+        if ((psx_mod_read_word(a) & 0x1FFFu) != 0x1Au || !pe_is_encounter_roll(a)) continue;
+        const uint32_t orig = psx_mod_read_word(a + 16u);
+        if (orig < 2u || orig > 0x1000u) continue;
+        s_enc[s_enc_count].at = a + 16u;
+        s_enc[s_enc_count].orig = orig;
+        ++s_enc_count;
+    }
+}
+
+static void pe_enc_tick(void) {
+    ++s_enc_frames;
+    if (!pe_loaded()) { s_enc_count = 0; return; }
+    const uint32_t token = psx_mod_read_word(PE_SCENE_TOKEN);
+    if (token != s_enc_token) {              /* a new room: its script loads over the next moments */
+        s_enc_token = token;
+        s_enc_count = 0;
+        s_enc_scan_until = s_enc_frames + 180u;
+    }
+    if (s_enc_mode != s_enc_applied) {       /* the row changed: undo, then patch again */
+        const int mode = s_enc_mode;
+        s_enc_mode = s_enc_applied < 0 ? PE_ENC_NORMAL : s_enc_applied;
+        pe_enc_restore();
+        s_enc_mode = mode;
+        s_enc_applied = mode;
+        s_enc_scan_until = s_enc_frames + 1u;
+    }
+    if (s_enc_mode == PE_ENC_NORMAL || s_enc_frames > s_enc_scan_until || (s_enc_frames & 15u)) return;
+    if (psx_mod_read_word(PE_GAME_BLOCK_ADDR) & PE_GAME_BLOCK_BATTLE) return;
+    pe_enc_scan();
+    for (int i = 0; i < s_enc_count; ++i)
+        psx_mod_write_word(s_enc[i].at, pe_enc_end(s_enc[i].orig));
+    if (s_enc_count) {
+        pe_log("encounters", "mode=%s rolls=%d end=%u->%u", s_enc_names[s_enc_mode], s_enc_count,
+               (unsigned)s_enc[0].orig, (unsigned)pe_enc_end(s_enc[0].orig));
+        s_enc_scan_until = s_enc_frames;     /* done for this room */
+    }
+}
+
 /* ---- infinite ammo -------------------------------------------------------- */
 enum { PE_AMMO_OFF, PE_AMMO_SPARES, PE_AMMO_NO_RELOAD, PE_AMMO_CHOICES };
 static const char *const s_ammo_names[PE_AMMO_CHOICES] = {
@@ -237,6 +337,10 @@ void pe_cheats_menu_register(void) {
         "Stops random battles. Saved with game.", off_on, 2,
         pe_get_no_battles, pe_set_no_battles);
     (void)pe_menu_register_tick(pe_no_battles_tick);
+    (void)pe_menu_register_choice(0, "Battle frequency",
+        "More random battles (grinding).",
+        &s_enc_mode, s_enc_names, PE_ENC_CHOICES);
+    (void)pe_menu_register_tick(pe_enc_tick);
     (void)pe_menu_register_toggle(0, "Unstick movies",
         "Ends a movie stuck for 5 s.", &s_fmv_watchdog, 0);
     (void)pe_menu_register_live_choice("Debug", "Event skip (test)",
