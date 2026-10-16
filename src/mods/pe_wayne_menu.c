@@ -97,6 +97,7 @@ static unsigned s_orig_len;
 
 /* ---- Wayne's menu ----------------------------------------------------------- */
 static const char s_discard_junk[] = "Discard junk";
+static const char s_hold_equipment[] = "Hold equipment";
 
 static int pe_contains(const uint8_t *b, unsigned n, const char *ascii) {
     const unsigned m = (unsigned)strlen(ascii);
@@ -122,7 +123,9 @@ static int pe_is_wayne_menu(uint32_t msg) {
         ++n;
     }
     if (choice_at == PE_TEXT_MAX || n >= PE_TEXT_MAX - 1) return 0;
-    if (!warner && !pe_contains(b, n, s_discard_junk)) return 0;
+    /* "Discard junk" in the precinct / Chrysler menus; his storage-only menu on the
+     * ship reads "Hold equipment / Hold Items / Cancel" (2026-10-16). */
+    if (!warner && !pe_contains(b, n, s_discard_junk) && !pe_contains(b, n, s_hold_equipment)) return 0;
     const int count = b[choice_at] & 7;
     if (count < 2 || count + 1 > 7) return 0; /* room for Workshop (and Mod Permit, see pe_compact) */
     memcpy(s_orig, b, n + 1);
