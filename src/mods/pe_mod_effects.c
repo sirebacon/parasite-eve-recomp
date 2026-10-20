@@ -115,6 +115,8 @@ static struct {
     uint32_t s2_mask, s2_orig;
     uint16_t def_orig, power_orig;
     int def_set, power_set;
+    int32_t hp_before;                     /* self-check: the hit's predicted damage vs what happened */
+    int pred;
 } s_hit;
 
 /* Hit quality by distance (any rules): the reaction the game picked (core flags >> 15: 1 graze,
@@ -155,7 +157,7 @@ static void pe_note_hit_quality(uint32_t entity, uint32_t enemy, uint32_t action
 /* Per-battle counters for the play log. */
 static struct {
     unsigned hits, elem_hits, elem_neutral, elem_weak, elem_resist, rof_boost;
-    unsigned rof_volley, gun_bonus, aa_capped, aa_topup, fast_volley;
+    unsigned rof_volley, gun_bonus, aa_capped, aa_topup, fast_volley, pred_ok, pred_bad;
     unsigned status_on, status_off, crit_up, quickdraw, poison_scaled;
     unsigned hp_refunded;
 } s_bt;
@@ -217,8 +219,11 @@ static uint32_t pe_aya_core(void) {
     return pe_ptr(ent) ? psx_mod_read_word(ent) : 0;
 }
 
+static void pe_check_prediction(void);
+
 static void pe_restore_hit(void) {
     if (!s_hit.active) return;
+    pe_check_prediction();
     if (pe_ptr(s_hit.enemy)) {
         if (s_hit.s2_mask) {
             const uint32_t now = psx_mod_read_word(s_hit.enemy + C_STATUS2);
@@ -331,6 +336,27 @@ static int pe_installed_rof(unsigned shots) {
         if ((int)(c & 0x1Fu) == effect && !(c & 0x20u)) return 1;
     }
     return 0;
+}
+
+/* Self-check (2026-10-19): R-A trusts pe_hit_damage to match Battle_StepEnemyMovement, so every
+ * gun hit's damage is predicted at the hook and compared with the HP the target lost by the next
+ * hook. Per battle the modfx row counts matches / mismatches; the first mismatches get a "dmgchk"
+ * row each (a Disable roll, which skips the element factor at random, is the known cause). */
+static int s_chk_logged;
+static void pe_check_prediction(void) {
+    if (!s_hit.pred || !pe_ptr(s_hit.enemy)) return;
+    const int32_t now = (int32_t)psx_mod_read_word(s_hit.enemy + C_GAUGE);
+    const int32_t lost = s_hit.hp_before - now;
+    if (lost == s_hit.pred) ++s_bt.pred_ok;
+    else {
+        ++s_bt.pred_bad;
+        if (s_chk_logged < 8) {
+            ++s_chk_logged;
+            pe_log("dmgchk", "predicted=%d lost=%d hp_before=%d flags=0x%08X",
+                   s_hit.pred, (int)lost, (int)s_hit.hp_before, (unsigned)psx_mod_read_word(s_hit.enemy + C_CORE_FLAGS));
+        }
+    }
+    s_hit.pred = 0;
 }
 
 static void pe_on_damage(struct CPUState *cpu, uint32_t address) {
@@ -463,6 +489,8 @@ static void pe_on_damage(struct CPUState *cpu, uint32_t address) {
         s_hit.def_set = 1;
         psx_mod_write_half(enemy + C_DEFENSE, (uint16_t)nd);
     }
+    s_hit.hp_before = (int32_t)psx_mod_read_word(enemy + C_GAUGE);
+    s_hit.pred = pe_hit_damage(s, want, shots, nd, psx_mod_read_word(enemy + C_CORE_FLAGS), s2, turn);
 }
 
 static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
@@ -486,6 +514,7 @@ static int pe_gun_has(int effect) {
 static void pe_battle_start(void) {
     memset(&s_bt, 0, sizeof s_bt);
     memset(&s_aa, 0, sizeof s_aa);
+    s_chk_logged = 0;
     memset(s_hq, 0, sizeof s_hq);
     memset(s_reach, 0, sizeof s_reach);
     s_reach_frames = 0;
@@ -562,10 +591,11 @@ static void pe_battle_end(void) {
     }
     if (!pe_on()) return;
     pe_log("modfx", "rules=%s hits=%u elem=%u(n%u/w%u/r%u) rof_boost=%u status_on=%u status_off=%u crit_up=%u quickdraw=%u poison_scaled=%u hp_refunded=%u"
-           " rof_volley=%u gun_bonus=%u aa_capped=%u aa_topup=%u fast_volley=%u",
+           " rof_volley=%u gun_bonus=%u aa_capped=%u aa_topup=%u fast_volley=%u dmg_pred=%u/%u",
            s_rules_names[s_rules], s_bt.hits, s_bt.elem_hits, s_bt.elem_neutral, s_bt.elem_weak, s_bt.elem_resist,
            s_bt.rof_boost, s_bt.status_on, s_bt.status_off, s_bt.crit_up, s_bt.quickdraw, s_bt.poison_scaled,
-           s_bt.hp_refunded, s_bt.rof_volley, s_bt.gun_bonus, s_bt.aa_capped, s_bt.aa_topup, s_bt.fast_volley);
+           s_bt.hp_refunded, s_bt.rof_volley, s_bt.gun_bonus, s_bt.aa_capped, s_bt.aa_topup, s_bt.fast_volley,
+           s_bt.pred_ok, s_bt.pred_ok + s_bt.pred_bad);
 }
 
 static void pe_battle_tick(void) {
