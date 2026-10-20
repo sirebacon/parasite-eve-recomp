@@ -22,6 +22,8 @@
  *
  * Rebalance (2026-10-19, bridge findings pe-rebalance-economy-basis.md), same hook:
  *   - R-B / R-C: +45 / +15 attack while the equipped gun is the G3A3 (0x7D) / M203 4 (0x86);
+ *   - R-F (2026-10-20): "Progression gun bonuses" ON: M16A1 +25, SG550 +20, M203 +20, M203 2 +15
+ *     (bridge findings pe-gun-ladder-2026-10-20.md);
  *   - R-E (power): installed RoF 5 / 7 / 10 (effects 3-5 without the built-in bit 0x20) deal
  *     "Installed RoF volley %" (200) for the whole volley instead of 25 / 18 / 13% a shot;
  *   - R-A: in a fight with 2+ enemies alive and no boss, an Attack All turn ((turn & 0xC0) ==
@@ -85,6 +87,8 @@ static int s_rof7, s_rof10, s_status_resist, s_status_average, s_poison, s_crit,
 static int s_guard_attack_down, s_guard_slow_at, s_counter;
 /* Rebalance 2026-10-19 (bridge findings pe-rebalance-economy-basis.md R-A / R-B / R-C / R-E). */
 static int s_g3a3_bonus, s_m203_4_bonus, s_aa_cap, s_rof_volley, s_fast_volley;
+/* R-F (2026-10-20, bridge findings pe-gun-ladder-2026-10-20.md): progression gun bonuses. */
+static int s_prog_bonus;
 static PeRow s_rows[] = {
     { "Heat/Frost neutral %", "Damage vs enemies without a match.", 100, 115, 50, 200, 5, &s_elem_neutral, 0 },
     { "Heat/Frost weak %", "Damage vs enemies weak to it.", 150, 150, 50, 300, 5, &s_elem_weak, 0 },
@@ -95,6 +99,7 @@ static PeRow s_rows[] = {
     { "Installed RoF volley %", "RoF 5/7/10 mods: whole volley.", 0, 200, 0, 300, 10, &s_rof_volley, 0 },
     { "G3A3 attack bonus", "Added to the G3A3's attack.", 0, 45, 0, 100, 5, &s_g3a3_bonus, 0 },
     { "M203 4 attack bonus", "Added to the M203 4's attack.", 0, 15, 0, 100, 5, &s_m203_4_bonus, 0 },
+    { "Progression gun bonuses", "Weaker guns: +15 to +25 attack.", 0, 1, 0, 1, 1, &s_prog_bonus, 1 },
     { "Attack All crowd cap %", "Max HP lost a turn (100 = off).", 100, 75, 25, 100, 5, &s_aa_cap, 0 },
     { "RoF mods: fast volleys", "Installed RoF 5/7/10 fire fast.", 0, 1, 0, 1, 1, &s_fast_volley, 1 },
     { "Acid/Tranq vs resist %", "Chance vs resistant (vanilla 0).", 0, 20, 0, 100, 5, &s_status_resist, 0 },
@@ -254,6 +259,20 @@ static void pe_status(uint32_t *s2, uint32_t *mask, unsigned shift) {
 #define E_HP_CAP      0x88u                  /* hpAliveCap: the enemy's max HP */
 #define GUN_G3A3      0x7Du
 #define GUN_M203_4    0x86u
+/* R-F: guns that trailed the earlier gun of their class where they're found (gun ladder with
+ * stage-gated Catalog installs): { item, attack bonus }. */
+static const uint8_t s_prog_guns[][2] = { { 0x79u, 25 } /* M16A1 */, { 0x7Bu, 20 } /* SG550 */,
+                                          { 0x83u, 20 } /* M203 */, { 0x84u, 15 } /* M203 2 */ };
+
+/* R-B / R-C / R-F: flat attack bonus for the equipped gun. */
+static int pe_gun_bonus(unsigned gun) {
+    if (gun == GUN_G3A3) return s_g3a3_bonus;
+    if (gun == GUN_M203_4) return s_m203_4_bonus;
+    if (s_prog_bonus)
+        for (unsigned i = 0; i < sizeof s_prog_guns / sizeof s_prog_guns[0]; ++i)
+            if (s_prog_guns[i][0] == gun) return s_prog_guns[i][1];
+    return 0;
+}
 static const uint8_t s_shot_pct[11] = { 0, 100, 60, 41, 0, 25, 0, 18, 0, 0, 13 };
 
 /* The damage Battle_StepEnemyMovement (battle/enemy_movement.c) deals for a gun hit, given the
@@ -389,12 +408,12 @@ static void pe_on_damage(struct CPUState *cpu, uint32_t address) {
         if (shots == 7u && s_rof7 != 18) { atk_pm = s_rof7 * 1000 / 18; ++s_bt.rof_boost; }
         if (shots == 10u && s_rof10 != 13) { atk_pm = s_rof10 * 1000 / 13; ++s_bt.rof_boost; }
     }
-    /* R-B / R-C: flat attack for two guns. */
+    /* R-B / R-C / R-F: flat attack for some guns. */
     int bonus = 0;
     {
         const uint32_t rec = pe_cat_record(0);
         const unsigned gun = rec ? psx_mod_read_byte(rec + 4u) : 0u;
-        bonus = gun == GUN_G3A3 ? s_g3a3_bonus : gun == GUN_M203_4 ? s_m203_4_bonus : 0;
+        bonus = pe_gun_bonus(gun);
         if (bonus) ++s_bt.gun_bonus;
     }
     if (turn & 0x300u) {
@@ -716,7 +735,7 @@ static void pe_fast_volley_tick(int battle) {
  * volley % (0 when off or under Vanilla rules). */
 int pe_fx_attack_bonus(unsigned gun) {
     if (!pe_on()) return 0;
-    return gun == GUN_G3A3 ? s_g3a3_bonus : gun == GUN_M203_4 ? s_m203_4_bonus : 0;
+    return pe_gun_bonus(gun);
 }
 int pe_fx_rof_volley_pct(void) { return pe_on() ? s_rof_volley : 0; }
 
