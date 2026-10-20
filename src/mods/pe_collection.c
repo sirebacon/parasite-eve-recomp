@@ -30,6 +30,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "cpu_state.h"
 #include "mod_plugins.h"
@@ -184,11 +185,139 @@ static void pe_on_spell(struct CPUState *cpu, uint32_t address) {
     if (c >= 0) pe_unlock(c, C_WEAK, "scan");
 }
 
+/* ---- Wardrobe: character bundles ------------------------------------------------------------- *
+ * pe_skins/<folder>/ holds model.bin (the player bundle: model + bundle rows), texture.bin (the
+ * player texture blob) and day1..day8.bin (per-day rows 4-12), built from the user's disc by the
+ * bridge's tools/pe_assets/build_skin.py. The game's scene start-up runs one step a frame
+ * (g_GameState +0xED: 0x24 Scene_LoadEntityTexture, 0x25, 0x26 Scene_LoadEntityTextures, 0x27 the
+ * player's render object), so between its steps:
+ *   - before 0x24, a bundle reload is forced (flags +0x00 |= 0x200000) and the day rows too
+ *     (story_day_flags +0x0E |= 1) while the buffers don't hold this skin yet;
+ *   - at 0x25 after a texture load (entity phase +0xEC went through 1-5), our texture blob goes into
+ *     the scratch buffer (+0x194) and the loader is sent back to its upload step (phase 3, scene
+ *     step 0x24): the game uploads our TIMs itself, then re-reads its bundle from disc;
+ *   - at 0x25 again, our model.bin goes over that bundle (+0x154, 0xE000 bytes) and bank_slots[0] /
+ *     bank_rows[0][id] (+0x198 / +0x1C0) point into it;
+ *   - at 0x27 after a day-row load (subphase +0xEE 4-6), our day blob goes over the game's (+0x158)
+ *     and rows 4-12 point into it.
+ * A room that reloads nothing keeps our data (the game re-resolves its pointers from the same
+ * buffers, in the same blob format). Only gameplay outfit rooms (area 10 / 12 / 13) are touched. */
+#define PE_GS          0x800B0CD8u
+#define GS_FLAGS       0x000u
+#define GS_DAY         0x00Cu
+#define GS_DAYFLAGS    0x00Eu
+#define GS_ETPHASE     0x0ECu
+#define GS_SINIT       0x0EDu
+#define GS_SSUB        0x0EEu
+#define GS_VOICE       0x154u
+#define GS_ETEX        0x158u
+#define GS_SCRATCH     0x194u
+#define GS_SLOTS       0x198u
+#define GS_ROWS        0x1C0u
+#define PE_MODEL_BUF_MAX 0xE000u
+typedef struct { uint8_t *data; uint32_t size; } PeBlob;
+static struct { int loaded, ok; PeBlob model, tex, day[9]; } s_bundle[PE_SKINS];
+static int s_have = -1, s_have_day = -1, s_tex_loading, s_day_loading, s_stage;
+
+static int pe_read_file(const char *path, PeBlob *b) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    fseek(f, 0, SEEK_END); const long n = ftell(f); fseek(f, 0, SEEK_SET);
+    if (n <= 0 || n > 0x40000) { fclose(f); return 0; }
+    b->data = (uint8_t *)malloc((size_t)n); b->size = (uint32_t)n;
+    const size_t got = b->data ? fread(b->data, 1, (size_t)n, f) : 0;
+    fclose(f);
+    return got == (size_t)n;
+}
+static int pe_bundle(int i) {
+    if (i < 0 || i >= PE_SKINS || g_pe_skins[i].kind != 1 || !g_pe_skins[i].folder[0]) return 0;
+    if (s_bundle[i].loaded) return s_bundle[i].ok;
+    s_bundle[i].loaded = 1;
+    char p[160];
+    snprintf(p, sizeof p, "pe_skins/%s/model.bin", g_pe_skins[i].folder);
+    if (!pe_read_file(p, &s_bundle[i].model) || s_bundle[i].model.size > PE_MODEL_BUF_MAX) return 0;
+    snprintf(p, sizeof p, "pe_skins/%s/texture.bin", g_pe_skins[i].folder);
+    if (!pe_read_file(p, &s_bundle[i].tex)) return 0;
+    for (int d = 1; d <= 8; ++d) {
+        snprintf(p, sizeof p, "pe_skins/%s/day%d.bin", g_pe_skins[i].folder, d);
+        if (!pe_read_file(p, &s_bundle[i].day[d])) return 0;
+    }
+    return s_bundle[i].ok = 1;
+}
+static uint32_t rd32(const uint8_t *b, uint32_t o) { return (uint32_t)b[o] | (uint32_t)b[o + 1] << 8 | (uint32_t)b[o + 2] << 16 | (uint32_t)b[o + 3] << 24; }
+static void pe_put_blob(uint32_t dst, const PeBlob *b) {
+    for (uint32_t i = 0; i + 4 <= b->size; i += 4) psx_mod_write_word(dst + i, rd32(b->data, i));
+}
+/* Point bank_slots[0] / bank_rows[0][id] at a blob written to `base` (SceneAssetBlob: directory at
+ * word 1; +0x0C model records, +0x10 row records; records 12 bytes, word 1 = offset | id << 24). */
+static void pe_point_blob(uint32_t base, const PeBlob *b, int model) {
+    const uint32_t dir = rd32(b->data, 4);
+    if (model) {
+        const uint32_t desc = rd32(b->data, dir + 0x0C), at = desc & 0x3FFFFFu;
+        if (desc >> 22) psx_mod_write_word(PE_GS + GS_SLOTS, base + (rd32(b->data, at + 4) & 0xFFFFFFu));
+    }
+    const uint32_t desc = rd32(b->data, dir + 0x10), at = desc & 0x3FFFFFu;
+    for (uint32_t i = 0; i < (desc >> 22); ++i) {
+        const uint32_t w = rd32(b->data, at + 12u * i + 4u);
+        if ((w >> 24) < 48u) psx_mod_write_word(PE_GS + GS_ROWS + (w >> 24) * 4u, base + (w & 0xFFFFFFu));
+    }
+}
+static void pe_skin_tick(void) {
+    const int w = s_prof.worn;
+    const uint8_t sinit = psx_mod_read_byte(PE_GS + GS_SINIT), et = psx_mod_read_byte(PE_GS + GS_ETPHASE);
+    const uint8_t sub = psx_mod_read_byte(PE_GS + GS_SSUB), area = psx_mod_read_byte(PE_AREA_TYPE);
+    if (et >= 1 && et <= 5) s_tex_loading = 1;
+    if (sinit == 0x26 && sub >= 4 && sub <= 6) s_day_loading = 1;
+    const int active = pe_bundle(w) && (area == 10 || area == 12 || area == 13);
+    if (!active) {                                  /* a game bundle went in: ours is gone from the buffers */
+        if (sinit == 0x25 && s_tex_loading) { s_have = -1; s_tex_loading = 0; }
+        if (sinit == 0x27 && s_day_loading) { s_have_day = -1; s_day_loading = 0; }
+        s_stage = 0;
+        return;
+    }
+    if (sinit >= 0x20 && sinit <= 0x23) {           /* before the bundle step: make sure it reloads */
+        if (s_have != w) psx_mod_write_word(PE_GS + GS_FLAGS, psx_mod_read_word(PE_GS + GS_FLAGS) | 0x200000u);
+        if (s_have_day != w) psx_mod_write_byte(PE_GS + GS_DAYFLAGS, psx_mod_read_byte(PE_GS + GS_DAYFLAGS) | 1u);
+    }
+    if (sinit == 0x25 && s_tex_loading) {
+        s_tex_loading = 0;
+        if (s_stage == 0) {                         /* 1: our texture through the game's own upload */
+            const uint32_t scratch = psx_mod_read_word(PE_GS + GS_SCRATCH);
+            if (!pe_ptr(scratch)) return;
+            pe_put_blob(scratch, &s_bundle[w].tex);
+            psx_mod_write_byte(PE_GS + GS_ETPHASE, 3);
+            psx_mod_write_byte(PE_GS + GS_SINIT, 0x24);
+            s_stage = 1;
+        } else {                                    /* 2: our model and rows over the reloaded bundle */
+            const uint32_t voice = psx_mod_read_word(PE_GS + GS_VOICE);
+            if (!pe_ptr(voice)) { s_stage = 0; return; }
+            pe_put_blob(voice, &s_bundle[w].model);
+            pe_point_blob(voice, &s_bundle[w].model, 1);
+            s_have = w; s_stage = 0;
+            pe_log("skin", "worn=%s model+texture in", g_pe_skins[w].name);
+        }
+    }
+    if (sinit == 0x27 && s_day_loading) {            /* 3: the per-day rows */
+        s_day_loading = 0;
+        int day = (int8_t)psx_mod_read_byte(PE_GS + GS_DAY);
+        if (day < 1 || day > 8) day = 1;
+        const uint32_t etex = psx_mod_read_word(PE_GS + GS_ETEX);
+        if (!pe_ptr(etex)) return;
+        pe_put_blob(etex, &s_bundle[w].day[day]);
+        pe_point_blob(etex, &s_bundle[w].day[day], 0);
+        s_have_day = w;
+        pe_log("skin", "worn=%s day%d rows in", g_pe_skins[w].name, day);
+    }
+}
+
 /* ---- Wardrobe: Aya's outfits ---------------------------------------------------------------- */
-static int pe_skin_wearable(int i) { return i >= 0 && i < PE_SKINS && g_pe_skins[i].kind == 0 &&
-                                     (g_pe_skins[i].area == 10 || g_pe_skins[i].area == 12 || g_pe_skins[i].area == 13); }
+static int pe_skin_wearable(int i) {
+    if (i < 0 || i >= PE_SKINS) return 0;
+    if (g_pe_skins[i].kind == 1) return pe_bundle(i);
+    return g_pe_skins[i].area == 10 || g_pe_skins[i].area == 12 || g_pe_skins[i].area == 13;
+}
 static void pe_outfit_tick(void) {
-    if (!s_prof.worn || !pe_skin_wearable(s_prof.worn)) return;   /* Aya as the story dresses her */
+    if (!s_prof.worn || !pe_skin_wearable(s_prof.worn) || g_pe_skins[s_prof.worn].kind != 0) return;
     const uint8_t area = psx_mod_read_byte(PE_AREA_TYPE), want = g_pe_skins[s_prof.worn].area;
     if ((area == 10 || area == 12 || area == 13) && area != want) psx_mod_write_byte(PE_AREA_TYPE, want);
 }
@@ -269,7 +398,7 @@ static int pe_w_cell(int i, char *label, unsigned size, unsigned *flags) {
     if (i < 0 || i >= PE_SKINS) return 0;
     const PeSkin *k = &g_pe_skins[i];
     const int owned = (s_prof.skins >> i) & 1u;
-    if (k->kind != 0 || (!pe_skin_wearable(i) && i != 0)) { snprintf(label, size, "%s (soon)", k->name); *flags = PE_CELL_EMPTY; return 1; }
+    if (!pe_skin_wearable(i) && i != 0) { snprintf(label, size, "%s (soon)", k->name); *flags = PE_CELL_EMPTY; return 1; }
     if (owned) snprintf(label, size, "%s%s", k->name, s_prof.worn == i ? " [worn]" : "");
     else snprintf(label, size, "%s %u", k->name, k->price);
     *flags = s_prof.worn == i ? PE_CELL_HIGHLIGHT : owned ? 0 : PE_CELL_DIM;
@@ -280,7 +409,7 @@ static void pe_w_accept(void) {
     if (i < 0 || i >= PE_SKINS) return;
     const PeSkin *k = &g_pe_skins[i];
     char msg[96];
-    if (k->kind != 0 || (!pe_skin_wearable(i) && i != 0)) { psx_mod_osd_message("Not available yet"); return; }
+    if (!pe_skin_wearable(i) && i != 0) { psx_mod_osd_message("Not available yet (build it with build_skin.py)"); return; }
     if (!((s_prof.skins >> i) & 1u)) {
         if (!pe_loaded()) { psx_mod_osd_message("Load a game first (Junk comes from it)"); return; }
         if (!pe_loot_spend_junk(k->price)) {
@@ -305,8 +434,9 @@ static void pe_reset_collection(void) {
 
 /* ---- tick / register ------------------------------------------------------------------------ */
 static void pe_collection_tick(void) {
-    if (!pe_loaded()) { memset(s_slot, 0, sizeof s_slot); return; }
+    if (!pe_loaded()) { memset(s_slot, 0, sizeof s_slot); s_have = s_have_day = -1; s_stage = 0; return; }
     pe_outfit_tick();
+    pe_skin_tick();
     if (psx_mod_read_word(PE_GAME_BLOCK) & 2u) pe_watch_slots();
     else memset(s_slot, 0, sizeof s_slot);
     if (s_dirty) pe_profile_save();

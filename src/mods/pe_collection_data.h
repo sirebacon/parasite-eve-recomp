@@ -6,9 +6,10 @@
 typedef struct { const char *name; uint8_t ex, boss; uint8_t price_weak, price_loot; const char *section;
                  uint16_t hp, defense; uint8_t weak, strong; const char *drop, *steal; } PeCreature;
 typedef struct { uint16_t map, id; uint8_t creature; } PeCreatureKey;
-typedef struct { const char *name; uint16_t price; uint8_t kind, area; } PeSkin;
+typedef struct { const char *name; uint16_t price; uint8_t kind, area; const char *folder; } PeSkin;
 /* weak / strong bits: 1 heat, 2 frost, 4 cyanide, 8 acid, 16 tranq. Skin kind 0 = Aya outfit (area),
- * 1 = character bundle (not built yet: shown, not sold). */
+ * 1 = character bundle in pe_skins/<folder>/ (built from the user's disc by tools/pe_assets/build_skin.py;
+ * shown as "soon" and not sold while its files are missing). */
 
 #define PE_CREATURES 75
 static const PeCreature g_pe_creatures[PE_CREATURES] = {
@@ -426,31 +427,31 @@ static const PeCreatureKey g_pe_creature_keys[PE_CREATURE_KEYS] = {
 
 #define PE_SKINS 27
 static const PeSkin g_pe_skins[PE_SKINS] = {
-    { "Aya", 0, 0, 12 },
-    { "Aya: evening dress", 100, 0, 10 },
-    { "Aya: T-shirt", 100, 0, 13 },
-    { "Aya: long dress", 100, 0, 11 },
-    { "Aya: transformed", 400, 0, 14 },
-    { "Melissa", 400, 1, 0 },
-    { "Eve", 400, 1, 0 },
-    { "Daniel", 250, 1, 0 },
-    { "Maeda", 250, 1, 0 },
-    { "Maya", 250, 1, 0 },
-    { "Chief Baker", 150, 1, 0 },
-    { "Daniel (gun drawn)", 150, 1, 0 },
-    { "Maeda (backpack)", 150, 1, 0 },
-    { "Aya's date", 50, 1, 0 },
-    { "Policewoman", 50, 1, 0 },
-    { "Policewoman (cap)", 50, 1, 0 },
-    { "Officer (moustache)", 50, 1, 0 },
-    { "Officer (cap)", 50, 1, 0 },
-    { "NYPD (brown jacket)", 50, 1, 0 },
-    { "NYPD (holster)", 50, 1, 0 },
-    { "Opera actress", 50, 1, 0 },
-    { "Opera (doublet)", 50, 1, 0 },
-    { "Opera king", 50, 1, 0 },
-    { "Opera knight", 50, 1, 0 },
-    { "Harlequin", 50, 1, 0 },
-    { "Usher", 50, 1, 0 },
-    { "Crew", 50, 1, 0 },
+    { "Aya", 0, 0, 12, "" },
+    { "Aya: evening dress", 100, 0, 10, "" },
+    { "Aya: T-shirt", 100, 0, 13, "" },
+    { "Aya: long dress", 100, 0, 11, "" },
+    { "Aya: transformed", 400, 0, 14, "" },
+    { "Melissa", 400, 1, 0, "melissa" },
+    { "Eve", 400, 1, 0, "eve" },
+    { "Daniel", 250, 1, 0, "daniel" },
+    { "Maeda", 250, 1, 0, "maeda" },
+    { "Maya", 250, 1, 0, "maya" },
+    { "Chief Baker", 150, 1, 0, "baker" },
+    { "Daniel (gun drawn)", 150, 1, 0, "daniel_gun" },
+    { "Maeda (backpack)", 150, 1, 0, "maeda_pack" },
+    { "Aya's date", 50, 1, 0, "date" },
+    { "Policewoman", 50, 1, 0, "policewoman" },
+    { "Policewoman (cap)", 50, 1, 0, "policewoman_cap" },
+    { "Officer (moustache)", 50, 1, 0, "officer" },
+    { "Officer (cap)", 50, 1, 0, "officer_cap" },
+    { "NYPD (brown jacket)", 50, 1, 0, "nypd_jacket" },
+    { "NYPD (holster)", 50, 1, 0, "nypd_holster" },
+    { "Opera actress", 50, 1, 0, "opera_actress" },
+    { "Opera (doublet)", 50, 1, 0, "opera_doublet" },
+    { "Opera king", 50, 1, 0, "opera_king" },
+    { "Opera knight", 50, 1, 0, "opera_knight" },
+    { "Harlequin", 50, 1, 0, "harlequin" },
+    { "Usher", 50, 1, 0, "usher" },
+    { "Crew", 50, 1, 0, "crew" },
 };
