@@ -682,6 +682,14 @@ static void pe_fast_volley_tick(int battle) {
     ++s_bt.fast_volley;
 }
 
+/* For pe_weapon_power.c's DPS line: the rebalance's attack bonus for a gun and the installed-RoF
+ * volley % (0 when off or under Vanilla rules). */
+int pe_fx_attack_bonus(unsigned gun) {
+    if (!pe_on()) return 0;
+    return gun == GUN_G3A3 ? s_g3a3_bonus : gun == GUN_M203_4 ? s_m203_4_bonus : 0;
+}
+int pe_fx_rof_volley_pct(void) { return pe_on() ? s_rof_volley : 0; }
+
 /* ---- rules rows ------------------------------------------------------------------------ */
 static void pe_apply_rules(int rules) {
     if (rules == RULES_CUSTOM) return;

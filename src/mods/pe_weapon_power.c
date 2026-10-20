@@ -154,20 +154,28 @@ static uint32_t pe_record_for_gun(unsigned id) {
     return pe_base_record(id);
 }
 
+/* pe_mod_effects.c: the rebalance's G3A3 / M203 4 attack bonus and installed-RoF volley %. */
+int pe_fx_attack_bonus(unsigned gun);
+int pe_fx_rof_volley_pct(void);
+
 /* Damage per second x10 (sustained: commands, reloads, Aya's turn speed). */
 static unsigned pe_dps_x10(uint32_t rec) {
     static const uint8_t shot_percent[11] = { 0, 100, 60, 41, 0, 25, 0, 18, 0, 0, 13 };
     int attack = psx_mod_read_byte(rec + REC_BASE0) +
                  (int16_t)psx_mod_read_half(rec + REC_BONUS0);
     if (attack > 999) attack = 999;
+    attack += pe_fx_attack_bonus(psx_mod_read_byte(rec + REC_ITEM_ID));
+    int installed_rof = 0;
     int capacity = psx_mod_read_byte(rec + REC_BASE2) + (int16_t)psx_mod_read_half(rec + REC_BONUS2);
     if (capacity > 999) capacity = 999;
     unsigned shots = 1, commands = 1;
     int count = psx_mod_read_byte(rec + REC_MOD_COUNT);
     if (count > REC_MAX_MODS) count = REC_MAX_MODS;
     for (int i = 0; i < count; ++i) {
-        const unsigned effect = psx_mod_read_byte(rec + REC_MODS + (uint32_t)i) & 31u;
+        const unsigned code = psx_mod_read_byte(rec + REC_MODS + (uint32_t)i);
+        const unsigned effect = code & 31u;
         if (effect >= 1 && effect <= 5) shots = psx_mod_read_byte(PE_SHOTS_TABLE + effect);
+        if (effect >= 3 && effect <= 5 && !(code & 0x20u)) installed_rof = 1;   /* R-E applies */
         if (effect == 16) attack >>= 1;
         if (effect == 19) commands = 2;
         if (effect == 20) commands = 3;
@@ -184,7 +192,9 @@ static unsigned pe_dps_x10(uint32_t rec) {
             if (s >= 1 && s < 1000) stat22 = s;
         }
     }
-    const int per_shot = ((int)(aya_attack / 5u) + attack) * shot_percent[shots] / 100;
+    const int volley = installed_rof && shots >= 5u ? pe_fx_rof_volley_pct() : 0;
+    const int per_shot = volley > 0 ? ((int)(aya_attack / 5u) + attack) * volley / (int)(shots * 100u)
+                                    : ((int)(aya_attack / 5u) + attack) * shot_percent[shots] / 100;
     if (per_shot <= 0) return 0;
 
     /* Damage a turn, x10, with reloads for guns. */
