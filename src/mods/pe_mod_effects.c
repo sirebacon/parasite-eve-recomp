@@ -690,20 +690,27 @@ static void pe_battle_tick(void) {
 
 /* ---- R-E speed / hold: fast volleys for installed RoF 5 / 7 / 10 ----------------------------
  * Each extra bullet of a volley replays Aya's follow-up clip (action modes 7 / 9 / 11, set by
- * Battle_SetupEnemyAnims), whose length depends on the gun kind; between queue slots the kind's
- * hold byte (g_BattleActionAnimRows 0x800106A4, 5 bytes a kind, byte 2) adds frames. While the
- * equipped gun has an installed RoF 5 / 7 / 10 and "RoF mods: fast volleys" is on:
- *   - in a follow-up mode Aya's animation step (entity +0x1C, 16.16) is raised so the clip plays in
- *     max(4, hit frame) frames (factor = follow frames / that; machine guns are already faster);
+ * Battle_StepCharacterAction, battle/attack.c); the bullet's hit lands when g_BattleHitTimer
+ * reaches the kind's hit frame (Battle_ResolveHitOnTimer, which then clears g_BattleHitPending),
+ * and the next bullet starts only when the clip reaches its last frame (animPrev integer ==
+ * animLastFrame). Between bullets the kind's hold byte (g_BattleActionAnimRows 0x800106A4, 5 bytes
+ * a kind, byte 2) replays the aim clip. While the equipped gun has an installed RoF 5 / 7 / 10 and
+ * "RoF mods: fast volleys" is on:
+ *   - once a follow-up clip's hit has landed, the rest of the clip is skipped (animFrame = last
+ *     frame), so a bullet costs its hit frame plus a frame or two (machine guns unchanged);
  *   - the kind's hold byte reads 0.
- * Both go back to the game's values the moment the condition ends (save states included: the
- * hold bytes are restored from the retail values below, not from memory). */
+ * The hold bytes go back to the game's values the moment the condition ends (save states included:
+ * restored from the retail values below, not from memory).
+ * (Until 2026-10-20 this scaled Aya's animation step instead; Entity_AdvanceAnim wraps the frame
+ * modulo the clip length, so a big step could jump over the last frame and the clip looped until
+ * a hit on Aya broke it.) */
 #define PE_ANIM_ROWS        0x800106A4u
+#define PE_HIT_PENDING      0x8009D294u     /* g_BattleHitPending */
 #define E_ACTION_MODE       0x0Eu
-#define E_ANIM_STEP         0x1Cu
+#define E_ANIM_LAST         0x0Fu
+#define E_ANIM_FRAME        0x14u           /* 16.16 */
 static const uint8_t s_hold_retail[9] = { 0, 5, 0, 0, 0, 5, 20, 5, 0 };     /* byte 2 per kind */
 static const uint16_t s_follow_x100[9] = { 100, 250, 750, 100, 375, 625, 250, 250, 100 };
-static uint32_t s_vol_player, s_vol_written, s_vol_base;
 
 static int pe_fast_volley_gun(unsigned *kind) {
     const uint32_t rec = pe_cat_record(0);
@@ -721,26 +728,13 @@ static void pe_fast_volley_tick(int battle) {
         if (psx_mod_read_byte(at) != want) psx_mod_write_byte(at, want);
     }
     const uint32_t player = psx_mod_read_word(PE_PLAYER_ENTITY);
-    if (s_vol_written && pe_ptr(s_vol_player)) {         /* put the game's step back when we're done */
-        const unsigned mode = pe_ptr(player) ? psx_mod_read_byte(player + E_ACTION_MODE) : 0u;
-        const int follow = mode == 7u || mode == 9u || mode == 11u;
-        if (!on || !follow || player != s_vol_player) {
-            if (psx_mod_read_word(s_vol_player + E_ANIM_STEP) == s_vol_written)
-                psx_mod_write_word(s_vol_player + E_ANIM_STEP, s_vol_base);
-            s_vol_written = 0;
-        }
-    }
     if (!on || !pe_ptr(player) || s_follow_x100[kind] <= 100u) return;
     const unsigned mode = psx_mod_read_byte(player + E_ACTION_MODE);
     if (mode != 7u && mode != 9u && mode != 11u) return;
-    const uint32_t step = psx_mod_read_word(player + E_ANIM_STEP);
-    if (s_vol_written && step == s_vol_written) return;  /* ours, still in place */
-    s_vol_base = step;                                    /* the game set a new step: scale it */
-    uint64_t fast = (uint64_t)step * s_follow_x100[kind] / 100u;
-    if (fast > 0x7FFFFFFFu) fast = 0x7FFFFFFFu;
-    s_vol_written = (uint32_t)fast;
-    s_vol_player = player;
-    psx_mod_write_word(player + E_ANIM_STEP, s_vol_written);
+    if (psx_mod_read_byte(PE_HIT_PENDING)) return;       /* this bullet's hit hasn't landed yet */
+    const uint32_t last = (uint32_t)psx_mod_read_byte(player + E_ANIM_LAST) << 16;
+    if ((psx_mod_read_word(player + E_ANIM_FRAME) >> 16) >= (last >> 16)) return;
+    psx_mod_write_word(player + E_ANIM_FRAME, last);     /* the next advance makes animPrev = last */
     ++s_bt.fast_volley;
 }
 
