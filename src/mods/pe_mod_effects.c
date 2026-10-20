@@ -20,6 +20,16 @@
  * and put back exactly the bits / fields we changed at the next hit or the next battle frame
  * (Battle_Update, 0x800299CC).
  *
+ * Rebalance (2026-10-19, bridge findings pe-rebalance-economy-basis.md), same hook:
+ *   - R-B / R-C: +45 / +15 attack while the equipped gun is the G3A3 (0x7D) / M203 4 (0x86);
+ *   - R-E (power): installed RoF 5 / 7 / 10 (effects 3-5 without the built-in bit 0x20) deal
+ *     "Installed RoF volley %" (200) for the whole volley instead of 25 / 18 / 13% a shot;
+ *   - R-A: in a fight with 2+ enemies alive and no boss, an Attack All turn ((turn & 0xC0) ==
+ *     0xC0) can take at most "Attack All crowd cap %" (75) of a target's max HP (hpAliveCap
+ *     +0x88): its HP at the turn's first Attack All hit is the reference, and each hit's power
+ *     bonus is lowered just enough that the game's damage (replicated: pe_hit_damage) keeps it
+ *     above the line; a minimum-damage hit that still crosses is topped back up at the next hook.
+ *
  * Per battle (VBlank tick): poison strength (each enemy's periodicDamage, +0x96, scaled once);
  * Quickdraw top-up at the start (the game's chance is Aya's stat22 %; we roll the difference up to
  * stat22 + bonus, max 90%); damage taken with Attack Down / Slow Active Time armor (HP refunded as
@@ -73,6 +83,8 @@ static int s_rules_shown = -1;
 static int s_elem_neutral, s_elem_weak, s_elem_resist, s_elem_best;
 static int s_rof7, s_rof10, s_status_resist, s_status_average, s_poison, s_crit, s_quickdraw;
 static int s_guard_attack_down, s_guard_slow_at, s_counter;
+/* Rebalance 2026-10-19 (bridge findings pe-rebalance-economy-basis.md R-A / R-B / R-C / R-E). */
+static int s_g3a3_bonus, s_m203_4_bonus, s_aa_cap, s_rof_volley;
 static PeRow s_rows[] = {
     { "Heat/Frost neutral %", "Damage vs enemies without a match.", 100, 115, 50, 200, 5, &s_elem_neutral, 0 },
     { "Heat/Frost weak %", "Damage vs enemies weak to it.", 150, 150, 50, 300, 5, &s_elem_weak, 0 },
@@ -80,6 +92,10 @@ static PeRow s_rows[] = {
     { "Heat+Frost best of two", "Both on: the better one counts.", 0, 1, 0, 1, 1, &s_elem_best, 1 },
     { "RoF 7 per-shot %", "Each of 7 shots (vanilla 18).", 18, 20, 10, 40, 1, &s_rof7, 0 },
     { "RoF 10 per-shot %", "Each of 10 shots (vanilla 13).", 13, 15, 8, 30, 1, &s_rof10, 0 },
+    { "Installed RoF volley %", "RoF 5/7/10 mods: whole volley.", 0, 200, 0, 300, 10, &s_rof_volley, 0 },
+    { "G3A3 attack bonus", "Added to the G3A3's attack.", 0, 45, 0, 100, 5, &s_g3a3_bonus, 0 },
+    { "M203 4 attack bonus", "Added to the M203 4's attack.", 0, 15, 0, 100, 5, &s_m203_4_bonus, 0 },
+    { "Attack All crowd cap %", "Max HP lost a turn (100 = off).", 100, 75, 25, 100, 5, &s_aa_cap, 0 },
     { "Acid/Tranq vs resist %", "Chance vs resistant (vanilla 0).", 0, 20, 0, 100, 5, &s_status_resist, 0 },
     { "Acid/Tranq vs normal %", "Chance vs others (vanilla 50).", 50, 60, 0, 100, 5, &s_status_average, 0 },
     { "Poison strength %", "Acid poison damage per tick.", 100, 125, 50, 300, 5, &s_poison, 0 },
@@ -138,6 +154,7 @@ static void pe_note_hit_quality(uint32_t entity, uint32_t enemy, uint32_t action
 /* Per-battle counters for the play log. */
 static struct {
     unsigned hits, elem_hits, elem_neutral, elem_weak, elem_resist, rof_boost;
+    unsigned rof_volley, gun_bonus, aa_capped, aa_topup;
     unsigned status_on, status_off, crit_up, quickdraw, poison_scaled;
     unsigned hp_refunded;
 } s_bt;
@@ -227,9 +244,98 @@ static void pe_status(uint32_t *s2, uint32_t *mask, unsigned shift) {
     if (on) ++s_bt.status_on; else ++s_bt.status_off;
 }
 
+/* ---- rebalance helpers (R-A / R-B / R-C / R-E) ------------------------------------ */
+#define E_HP_CAP      0x88u                  /* hpAliveCap: the enemy's max HP */
+#define GUN_G3A3      0x7Du
+#define GUN_M203_4    0x86u
+static const uint8_t s_shot_pct[11] = { 0, 100, 60, 41, 0, 25, 0, 18, 0, 0, 13 };
+
+/* The damage Battle_StepEnemyMovement (battle/enemy_movement.c) deals for a gun hit, given the
+ * attack term's power bonus `pb` (stat1E / 5 = s), the shots in the volley, the defense, the
+ * reaction (core flags 0x38000: 0x8000 graze x0.3, 0x18000 critical x1.5, 0x20000 splash / 10),
+ * the element bits it will read and the turn word; minimum 1 (2 on a critical). The
+ * Acid / Tranq / disable rolls change no damage. */
+static int pe_hit_damage(int s, int pb, unsigned shots, unsigned def, uint32_t cf, uint32_t s2, uint32_t turn) {
+    if (shots < 1u || shots > 10u || !s_shot_pct[shots]) shots = 1u;
+    int dmg = (s + pb) * s_shot_pct[shots] / 100 - (int)(def / shots);
+    if (dmg > 0) {
+        const uint32_t r = cf & 0x38000u;
+        if (r == 0x8000u) dmg = dmg * 3 / 10;
+        else if (r == 0x18000u) dmg = dmg * 3 / 2;
+        else if (r == 0x20000u) dmg /= 10;
+        const unsigned cls = (cf >> 18) & 3u;
+        if (cls != 2u && cls != 3u && !(cf & 0x400u)) {
+            int mode = 0;
+            if (turn & 0x100u) { const unsigned v = (s2 >> 14) & 3u; if (v == 1u) mode = 1; else if (v == 2u) mode = 2; }
+            if (mode != 2 && (turn & 0x200u)) { const unsigned v = (s2 >> 16) & 3u; if (v == 1u) mode = 1; else if (v == 2u) mode = 2; }
+            if (mode == 1) dmg /= 5; else if (mode == 2) dmg = dmg * 3 / 2;
+        }
+    }
+    if (dmg <= 0) dmg = (cf & 0x38000u) == 0x18000u ? 2 : 1;
+    return dmg;
+}
+
+/* R-A applies in ordinary fights: two or more enemies alive and none of them a boss (bit 0x40000). */
+static int pe_crowd_fight(void) {
+    int alive = 0;
+    for (int i = 0; i < PE_ENEMY_SLOTS; ++i) {
+        const uint32_t slot = PE_ENEMY_SLOT_BASE + (uint32_t)i * PE_ENEMY_SLOT_STRIDE;
+        if (!psx_mod_read_byte(slot)) continue;
+        const uint32_t core = slot + 4u;
+        if ((int32_t)psx_mod_read_word(core + C_GAUGE) <= 0) continue;
+        if (psx_mod_read_word(core + C_STATUS2) & 0x40000u) return 0;
+        ++alive;
+    }
+    return alive >= 2;
+}
+
+/* R-A per-turn reference: each target's HP at its first Attack All hit of the turn. A turn's hits
+ * (every volley of a 2 / 3 Commands turn too) come close together; 40 battle frames with no Attack
+ * All hit start a new turn. */
+static struct {
+    uint32_t enemy[PE_ENEMY_SLOTS];
+    int32_t ref[PE_ENEMY_SLOTS];
+    int n, idle;
+    uint32_t fix_enemy;                     /* a minimum-damage hit crossed the line: top HP back up */
+    int32_t fix_floor;
+} s_aa;
+
+static int32_t pe_aa_ref(uint32_t enemy, int32_t hp) {
+    if (s_aa.idle > 40) s_aa.n = 0;
+    s_aa.idle = 0;
+    for (int i = 0; i < s_aa.n; ++i) if (s_aa.enemy[i] == enemy) return s_aa.ref[i];
+    if (s_aa.n < PE_ENEMY_SLOTS) { s_aa.enemy[s_aa.n] = enemy; s_aa.ref[s_aa.n] = hp; ++s_aa.n; }
+    return hp;
+}
+
+static void pe_aa_fix(void) {
+    if (!s_aa.fix_enemy) return;
+    if (pe_ptr(s_aa.fix_enemy)) {
+        const int32_t hp = (int32_t)psx_mod_read_word(s_aa.fix_enemy + C_GAUGE);
+        if (hp > 0 && hp < s_aa.fix_floor) psx_mod_write_word(s_aa.fix_enemy + C_GAUGE, (uint32_t)s_aa.fix_floor);
+    }
+    s_aa.fix_enemy = 0;
+}
+
+/* R-E: the equipped gun's RoF for this many shots is an installed mod (effects 3 / 4 / 5 = RoF
+ * 5 / 7 / 10 without the built-in bit 0x20; the P90's 0x25 is built in). */
+static int pe_installed_rof(unsigned shots) {
+    const int effect = shots == 5u ? 3 : shots == 7u ? 4 : shots == 10u ? 5 : 0;
+    const uint32_t rec = pe_cat_record(0);
+    if (!effect || !rec) return 0;
+    int n = psx_mod_read_byte(rec + 0x14u);
+    if (n > 10) n = 10;
+    for (int m = 0; m < n; ++m) {
+        const unsigned c = psx_mod_read_byte(rec + 0x15u + (uint32_t)m);
+        if ((int)(c & 0x1Fu) == effect && !(c & 0x20u)) return 1;
+    }
+    return 0;
+}
+
 static void pe_on_damage(struct CPUState *cpu, uint32_t address) {
     (void)address;
     pe_restore_hit();
+    pe_aa_fix();
     if (!pe_loaded()) return;
     const uint32_t entity = cpu->gpr[4];
     if (!pe_ptr(entity)) return;
@@ -249,8 +355,21 @@ static void pe_on_damage(struct CPUState *cpu, uint32_t address) {
 
     /* Attack scale (per mille) and both-term scale (element). */
     int atk_pm = 1000, both_pm = 1000;
-    if (shots == 7u && s_rof7 != 18) { atk_pm = s_rof7 * 1000 / 18; ++s_bt.rof_boost; }
-    if (shots == 10u && s_rof10 != 13) { atk_pm = s_rof10 * 1000 / 13; ++s_bt.rof_boost; }
+    if (s_rof_volley > 0 && pe_installed_rof(shots)) {               /* R-E: whole volley % */
+        atk_pm = s_rof_volley * 1000 / (int)(shots * s_shot_pct[shots]);
+        ++s_bt.rof_volley;
+    } else {
+        if (shots == 7u && s_rof7 != 18) { atk_pm = s_rof7 * 1000 / 18; ++s_bt.rof_boost; }
+        if (shots == 10u && s_rof10 != 13) { atk_pm = s_rof10 * 1000 / 13; ++s_bt.rof_boost; }
+    }
+    /* R-B / R-C: flat attack for two guns. */
+    int bonus = 0;
+    {
+        const uint32_t rec = pe_cat_record(0);
+        const unsigned gun = rec ? psx_mod_read_byte(rec + 4u) : 0u;
+        bonus = gun == GUN_G3A3 ? s_g3a3_bonus : gun == GUN_M203_4 ? s_m203_4_bonus : 0;
+        if (bonus) ++s_bt.gun_bonus;
+    }
     if (turn & 0x300u) {
         const unsigned h = (s2 >> 14) & 3u, f = (s2 >> 16) & 3u;
         int pct;
@@ -291,29 +410,65 @@ static void pe_on_damage(struct CPUState *cpu, uint32_t address) {
         s_hit.s2_orig = psx_mod_read_word(enemy + C_STATUS2);
         psx_mod_write_word(enemy + C_STATUS2, (s_hit.s2_orig & ~mask) | (s2 & mask));
     }
-    if (atk_pm != 1000 || both_pm != 1000) {
-        const int s = psx_mod_read_half(actor + C_STAT1E) / 5;
-        const int pb = (int16_t)psx_mod_read_half(action + A_POWER);
-        int want = (int)(((int64_t)(s + pb) * atk_pm / 1000) * both_pm / 1000) - s;
+    const int s = psx_mod_read_half(actor + C_STAT1E) / 5;
+    const int pb = (int16_t)psx_mod_read_half(action + A_POWER);
+    const unsigned d = psx_mod_read_half(enemy + C_DEFENSE);
+    int want = pb;
+    unsigned nd = d;
+    if (atk_pm != 1000 || both_pm != 1000 || bonus) {
+        want = (int)(((int64_t)(s + pb + bonus) * atk_pm / 1000) * both_pm / 1000) - s;
         if (want < 0) want = 0;
-        if (want > 0x7FFF) want = 0x7FFF;
+        if (both_pm != 1000) {
+            nd = (unsigned)((uint64_t)d * (unsigned)both_pm / 1000u);
+            if (nd > 0xFFFFu) nd = 0xFFFFu;
+        }
+    }
+    /* R-A: an Attack All turn takes at most s_aa_cap % of a target's max HP (crowds only). The hit's
+     * power bonus is lowered just enough that the replicated damage stays above the line; a hit
+     * whose minimum damage still crosses it is topped back up at the next hook. */
+    if (s_aa_cap < 100 && (turn & 0xC0u) == 0xC0u && pe_crowd_fight()) {
+        const int32_t hp = (int32_t)psx_mod_read_word(enemy + C_GAUGE);
+        int32_t max = (int32_t)psx_mod_read_word(enemy + E_HP_CAP);
+        if (max <= 0) max = hp;
+        const int32_t floor = pe_aa_ref(enemy, hp) - (int32_t)((int64_t)max * s_aa_cap / 100);
+        if (floor > 0 && hp > 0) {
+            const uint32_t cf = psx_mod_read_word(enemy + C_CORE_FLAGS);
+            const int allowed = hp - floor;
+            if (pe_hit_damage(s, want, shots, nd, cf, s2, turn) > allowed) {
+                int lo = -s, hi = want;
+                if (pe_hit_damage(s, lo, shots, nd, cf, s2, turn) > allowed) {
+                    want = lo;
+                    s_aa.fix_enemy = enemy; s_aa.fix_floor = floor; ++s_bt.aa_topup;
+                } else {
+                    while (lo < hi) {                       /* the largest bonus that stays above the line */
+                        const int mid = lo + (hi - lo + 1) / 2;
+                        if (pe_hit_damage(s, mid, shots, nd, cf, s2, turn) <= allowed) lo = mid; else hi = mid - 1;
+                    }
+                    want = lo;
+                }
+                ++s_bt.aa_capped;
+            }
+        }
+    }
+    if (want > 0x7FFF) want = 0x7FFF;
+    if (want < -0x8000) want = -0x8000;
+    if (want != pb) {
         s_hit.power_orig = (uint16_t)pb;
         s_hit.power_set = 1;
-        psx_mod_write_half(action + A_POWER, (uint16_t)want);
-        if (both_pm != 1000) {
-            const unsigned d = psx_mod_read_half(enemy + C_DEFENSE);
-            unsigned nd = (unsigned)((uint64_t)d * (unsigned)both_pm / 1000u);
-            if (nd > 0xFFFFu) nd = 0xFFFFu;
-            s_hit.def_orig = (uint16_t)d;
-            s_hit.def_set = 1;
-            psx_mod_write_half(enemy + C_DEFENSE, (uint16_t)nd);
-        }
+        psx_mod_write_half(action + A_POWER, (uint16_t)(int16_t)want);
+    }
+    if (nd != d) {
+        s_hit.def_orig = (uint16_t)d;
+        s_hit.def_set = 1;
+        psx_mod_write_half(enemy + C_DEFENSE, (uint16_t)nd);
     }
 }
 
 static void pe_on_battle_update(struct CPUState *cpu, uint32_t address) {
     (void)cpu; (void)address;
     pe_restore_hit();
+    pe_aa_fix();
+    if (s_aa.idle < 1000) ++s_aa.idle;
 }
 
 /* ---- per battle --------------------------------------------------------------------- */
@@ -329,6 +484,7 @@ static int pe_gun_has(int effect) {
 
 static void pe_battle_start(void) {
     memset(&s_bt, 0, sizeof s_bt);
+    memset(&s_aa, 0, sizeof s_aa);
     memset(s_hq, 0, sizeof s_hq);
     memset(s_reach, 0, sizeof s_reach);
     s_reach_frames = 0;
@@ -404,10 +560,11 @@ static void pe_battle_end(void) {
         }
     }
     if (!pe_on()) return;
-    pe_log("modfx", "rules=%s hits=%u elem=%u(n%u/w%u/r%u) rof_boost=%u status_on=%u status_off=%u crit_up=%u quickdraw=%u poison_scaled=%u hp_refunded=%u",
+    pe_log("modfx", "rules=%s hits=%u elem=%u(n%u/w%u/r%u) rof_boost=%u status_on=%u status_off=%u crit_up=%u quickdraw=%u poison_scaled=%u hp_refunded=%u"
+           " rof_volley=%u gun_bonus=%u aa_capped=%u aa_topup=%u",
            s_rules_names[s_rules], s_bt.hits, s_bt.elem_hits, s_bt.elem_neutral, s_bt.elem_weak, s_bt.elem_resist,
            s_bt.rof_boost, s_bt.status_on, s_bt.status_off, s_bt.crit_up, s_bt.quickdraw, s_bt.poison_scaled,
-           s_bt.hp_refunded);
+           s_bt.hp_refunded, s_bt.rof_volley, s_bt.gun_bonus, s_bt.aa_capped, s_bt.aa_topup);
 }
 
 static void pe_battle_tick(void) {
