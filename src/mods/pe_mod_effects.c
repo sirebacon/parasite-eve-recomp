@@ -84,7 +84,7 @@ static int s_elem_neutral, s_elem_weak, s_elem_resist, s_elem_best;
 static int s_rof7, s_rof10, s_status_resist, s_status_average, s_poison, s_crit, s_quickdraw;
 static int s_guard_attack_down, s_guard_slow_at, s_counter;
 /* Rebalance 2026-10-19 (bridge findings pe-rebalance-economy-basis.md R-A / R-B / R-C / R-E). */
-static int s_g3a3_bonus, s_m203_4_bonus, s_aa_cap, s_rof_volley;
+static int s_g3a3_bonus, s_m203_4_bonus, s_aa_cap, s_rof_volley, s_fast_volley;
 static PeRow s_rows[] = {
     { "Heat/Frost neutral %", "Damage vs enemies without a match.", 100, 115, 50, 200, 5, &s_elem_neutral, 0 },
     { "Heat/Frost weak %", "Damage vs enemies weak to it.", 150, 150, 50, 300, 5, &s_elem_weak, 0 },
@@ -96,6 +96,7 @@ static PeRow s_rows[] = {
     { "G3A3 attack bonus", "Added to the G3A3's attack.", 0, 45, 0, 100, 5, &s_g3a3_bonus, 0 },
     { "M203 4 attack bonus", "Added to the M203 4's attack.", 0, 15, 0, 100, 5, &s_m203_4_bonus, 0 },
     { "Attack All crowd cap %", "Max HP lost a turn (100 = off).", 100, 75, 25, 100, 5, &s_aa_cap, 0 },
+    { "RoF mods: fast volleys", "Installed RoF 5/7/10 fire fast.", 0, 1, 0, 1, 1, &s_fast_volley, 1 },
     { "Acid/Tranq vs resist %", "Chance vs resistant (vanilla 0).", 0, 20, 0, 100, 5, &s_status_resist, 0 },
     { "Acid/Tranq vs normal %", "Chance vs others (vanilla 50).", 50, 60, 0, 100, 5, &s_status_average, 0 },
     { "Poison strength %", "Acid poison damage per tick.", 100, 125, 50, 300, 5, &s_poison, 0 },
@@ -154,7 +155,7 @@ static void pe_note_hit_quality(uint32_t entity, uint32_t enemy, uint32_t action
 /* Per-battle counters for the play log. */
 static struct {
     unsigned hits, elem_hits, elem_neutral, elem_weak, elem_resist, rof_boost;
-    unsigned rof_volley, gun_bonus, aa_capped, aa_topup;
+    unsigned rof_volley, gun_bonus, aa_capped, aa_topup, fast_volley;
     unsigned status_on, status_off, crit_up, quickdraw, poison_scaled;
     unsigned hp_refunded;
 } s_bt;
@@ -561,10 +562,10 @@ static void pe_battle_end(void) {
     }
     if (!pe_on()) return;
     pe_log("modfx", "rules=%s hits=%u elem=%u(n%u/w%u/r%u) rof_boost=%u status_on=%u status_off=%u crit_up=%u quickdraw=%u poison_scaled=%u hp_refunded=%u"
-           " rof_volley=%u gun_bonus=%u aa_capped=%u aa_topup=%u",
+           " rof_volley=%u gun_bonus=%u aa_capped=%u aa_topup=%u fast_volley=%u",
            s_rules_names[s_rules], s_bt.hits, s_bt.elem_hits, s_bt.elem_neutral, s_bt.elem_weak, s_bt.elem_resist,
            s_bt.rof_boost, s_bt.status_on, s_bt.status_off, s_bt.crit_up, s_bt.quickdraw, s_bt.poison_scaled,
-           s_bt.hp_refunded, s_bt.rof_volley, s_bt.gun_bonus, s_bt.aa_capped, s_bt.aa_topup);
+           s_bt.hp_refunded, s_bt.rof_volley, s_bt.gun_bonus, s_bt.aa_capped, s_bt.aa_topup, s_bt.fast_volley);
 }
 
 static void pe_battle_tick(void) {
@@ -625,6 +626,62 @@ static void pe_battle_tick(void) {
     s_prev_hp = hp;
 }
 
+/* ---- R-E speed / hold: fast volleys for installed RoF 5 / 7 / 10 ----------------------------
+ * Each extra bullet of a volley replays Aya's follow-up clip (action modes 7 / 9 / 11, set by
+ * Battle_SetupEnemyAnims), whose length depends on the gun kind; between queue slots the kind's
+ * hold byte (g_BattleActionAnimRows 0x800106A4, 5 bytes a kind, byte 2) adds frames. While the
+ * equipped gun has an installed RoF 5 / 7 / 10 and "RoF mods: fast volleys" is on:
+ *   - in a follow-up mode Aya's animation step (entity +0x1C, 16.16) is raised so the clip plays in
+ *     max(4, hit frame) frames (factor = follow frames / that; machine guns are already faster);
+ *   - the kind's hold byte reads 0.
+ * Both go back to the game's values the moment the condition ends (save states included: the
+ * hold bytes are restored from the retail values below, not from memory). */
+#define PE_ANIM_ROWS        0x800106A4u
+#define E_ACTION_MODE       0x0Eu
+#define E_ANIM_STEP         0x1Cu
+static const uint8_t s_hold_retail[9] = { 0, 5, 0, 0, 0, 5, 20, 5, 0 };     /* byte 2 per kind */
+static const uint16_t s_follow_x100[9] = { 100, 250, 750, 100, 375, 625, 250, 250, 100 };
+static uint32_t s_vol_player, s_vol_written, s_vol_base;
+
+static int pe_fast_volley_gun(unsigned *kind) {
+    const uint32_t rec = pe_cat_record(0);
+    if (!rec) return 0;
+    *kind = psx_mod_read_byte(rec + 6u);
+    return *kind < 9u && (pe_installed_rof(5u) || pe_installed_rof(7u) || pe_installed_rof(10u));
+}
+
+static void pe_fast_volley_tick(int battle) {
+    unsigned kind = 0;
+    const int on = battle && pe_on() && s_fast_volley && pe_fast_volley_gun(&kind);
+    for (unsigned k = 1; k < 9u; ++k) {                  /* hold bytes: 0 for this kind, retail otherwise */
+        const uint32_t at = PE_ANIM_ROWS + k * 5u + 2u;
+        const uint8_t want = on && k == kind ? 0 : s_hold_retail[k];
+        if (psx_mod_read_byte(at) != want) psx_mod_write_byte(at, want);
+    }
+    const uint32_t player = psx_mod_read_word(PE_PLAYER_ENTITY);
+    if (s_vol_written && pe_ptr(s_vol_player)) {         /* put the game's step back when we're done */
+        const unsigned mode = pe_ptr(player) ? psx_mod_read_byte(player + E_ACTION_MODE) : 0u;
+        const int follow = mode == 7u || mode == 9u || mode == 11u;
+        if (!on || !follow || player != s_vol_player) {
+            if (psx_mod_read_word(s_vol_player + E_ANIM_STEP) == s_vol_written)
+                psx_mod_write_word(s_vol_player + E_ANIM_STEP, s_vol_base);
+            s_vol_written = 0;
+        }
+    }
+    if (!on || !pe_ptr(player) || s_follow_x100[kind] <= 100u) return;
+    const unsigned mode = psx_mod_read_byte(player + E_ACTION_MODE);
+    if (mode != 7u && mode != 9u && mode != 11u) return;
+    const uint32_t step = psx_mod_read_word(player + E_ANIM_STEP);
+    if (s_vol_written && step == s_vol_written) return;  /* ours, still in place */
+    s_vol_base = step;                                    /* the game set a new step: scale it */
+    uint64_t fast = (uint64_t)step * s_follow_x100[kind] / 100u;
+    if (fast > 0x7FFFFFFFu) fast = 0x7FFFFFFFu;
+    s_vol_written = (uint32_t)fast;
+    s_vol_player = player;
+    psx_mod_write_word(player + E_ANIM_STEP, s_vol_written);
+    ++s_bt.fast_volley;
+}
+
 /* ---- rules rows ------------------------------------------------------------------------ */
 static void pe_apply_rules(int rules) {
     if (rules == RULES_CUSTOM) return;
@@ -657,6 +714,7 @@ static void pe_mod_effects_tick(void) {
     if (!battle) pe_hp_level_repair();            /* any rules: undoes an old build's damage */
     if (battle) pe_note_reach();                  /* under any rules, like the hit rows */
     if (battle && pe_on()) pe_battle_tick();
+    pe_fast_volley_tick(battle);                  /* also restores the game's values when off */
 }
 
 static void pe_fx_state_loaded(int result, uint32_t saved_version, const void *saved, uint32_t saved_size) {
