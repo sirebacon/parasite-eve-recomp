@@ -22,7 +22,7 @@
  *
  * Rebalance (2026-10-19, bridge findings pe-rebalance-economy-basis.md), same hook:
  *   - R-B / R-C: +45 / +15 attack while the equipped gun is the G3A3 (0x7D) / M203 4 (0x86);
- *   - R-F (2026-10-20): "Progression gun bonuses" ON: M16A1 +25, SG550 +20, M203 +20, M203 2 +15
+ *   - R-F (2026-10-20): "Progression gun bonuses" ON: M16A1 +25, SG550 +15, M203 +20, M203 2 +15
  *     (bridge findings pe-gun-ladder-2026-10-20.md);
  *   - R-E (power): installed RoF 5 / 7 / 10 (effects 3-5 without the built-in bit 0x20) deal
  *     "Installed RoF volley %" (200) for the whole volley instead of 25 / 18 / 13% a shot;
@@ -261,7 +261,7 @@ static void pe_status(uint32_t *s2, uint32_t *mask, unsigned shift) {
 #define GUN_M203_4    0x86u
 /* R-F: guns that trailed the earlier gun of their class where they're found (gun ladder with
  * stage-gated Catalog installs): { item, attack bonus }. */
-static const uint8_t s_prog_guns[][2] = { { 0x79u, 25 } /* M16A1 */, { 0x7Bu, 20 } /* SG550 */,
+static const uint8_t s_prog_guns[][2] = { { 0x79u, 25 } /* M16A1 */, { 0x7Bu, 15 } /* SG550 */,
                                           { 0x83u, 20 } /* M203 */, { 0x84u, 15 } /* M203 2 */ };
 
 /* R-B / R-C / R-F: flat attack bonus for the equipped gun. */
