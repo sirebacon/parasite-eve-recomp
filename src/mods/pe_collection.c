@@ -427,6 +427,37 @@ static void pe_w_accept(void) {
     pe_profile_save();
 }
 
+/* For Wayne's Workshop (pe_wayne_menu.c): the skins that can be worn or bought now, by list index. */
+static int pe_ward_skin(int k) {
+    for (int i = 0; i < PE_SKINS; ++i)
+        if ((i == 0 || pe_skin_wearable(i)) && k-- == 0) return i;
+    return -1;
+}
+int pe_ward_count(void) { int n = 0; while (pe_ward_skin(n) >= 0) ++n; return n; }
+const char *pe_ward_name(int k) { const int i = pe_ward_skin(k); return i >= 0 ? g_pe_skins[i].name : ""; }
+unsigned pe_ward_price(int k) { const int i = pe_ward_skin(k); return i >= 0 ? g_pe_skins[i].price : 0u; }
+int pe_ward_state(int k) {                     /* 0 locked, 1 owned, 2 worn */
+    const int i = pe_ward_skin(k);
+    if (i < 0) return 0;
+    if (s_prof.worn == i) return 2;
+    return (int)((s_prof.skins >> i) & 1u);
+}
+int pe_ward_pick(int k, char *msg, size_t n) {   /* buy if needed, then wear */
+    const int i = pe_ward_skin(k);
+    if (i < 0) return 0;
+    if (!((s_prof.skins >> i) & 1u)) {
+        if (!pe_loot_spend_junk(g_pe_skins[i].price)) {
+            snprintf(msg, n, "Need %u Junk", (unsigned)g_pe_skins[i].price); return 0;
+        }
+        s_prof.skins |= 1ull << i;
+        pe_log("wardrobe", "bought=%s price=%u at=wayne", g_pe_skins[i].name, (unsigned)g_pe_skins[i].price);
+    }
+    s_prof.worn = (uint8_t)i;
+    pe_profile_save();
+    snprintf(msg, n, "Wearing %s next room", g_pe_skins[i].name);
+    return 1;
+}
+
 static void pe_reset_collection(void) {
     pe_profile_defaults(); pe_profile_save();
     psx_mod_osd_message("Collection reset");

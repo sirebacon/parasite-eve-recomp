@@ -18,7 +18,7 @@
  *     one line taller;
  *   - confirm on Workshop is taken away from the game (the press is cleared)
  *     and the box shows our screens instead: Workshop (Requisition / Rebuild /
- *     Back), Requisition (goods with prices, then the economy mods not yet
+ *     Wardrobe (2026-10-19: pe_collection.c's skins, buy once / wear) / Back), Requisition (goods with prices, then the economy mods not yet
  *     unlocked, 5 a page, in the game's dimmed
  *     gray when they can't be bought now) and Rebuild (dismantled gear with prices). The title line
  *     shows your Junk or what the last purchase did. Cancel (Circle) goes back
@@ -78,7 +78,14 @@
 #define REC_KIND      0x06u
 #define REC_SLOTS     0x14u                    /* tailCount: mod slots */
 #define REC_MODS      0x15u
-enum { SCR_NONE, SCR_WAYNE, SCR_ROOT, SCR_REQ, SCR_REB, SCR_PERMIT, SCR_PERMIT_ASK };
+enum { SCR_NONE, SCR_WAYNE, SCR_ROOT, SCR_REQ, SCR_REB, SCR_PERMIT, SCR_PERMIT_ASK, SCR_WARD };
+/* pe_collection.c: the Wardrobe (skins, permanent across games) */
+int pe_ward_count(void);
+const char *pe_ward_name(int k);
+unsigned pe_ward_price(int k);
+int pe_ward_state(int k);
+int pe_ward_pick(int k, char *msg, size_t n);
+#define ROOT_PERMIT 3                          /* compact menus: Mod Permit sits on the Workshop screen */
 
 static struct {
     int screen;
@@ -186,9 +193,10 @@ static void pe_title(PeText *t, const char *name) {
 
 static void pe_build_root(PeText *t) {
     pe_title(t, "Workshop");
-    pe_t_choice(t, pe_compact() ? 4 : 3);
+    pe_t_choice(t, pe_compact() ? 5 : 4);
     pe_t_option_start(t, 1); pe_t_str(t, "Requisition");
     pe_t_option_start(t, 0); pe_t_str(t, "Rebuild");
+    pe_t_option_start(t, 0); pe_t_str(t, "Wardrobe");
     if (pe_compact()) { pe_t_option_start(t, 0); pe_t_str(t, "Mod Permit Card"); }
     pe_t_option_start(t, 0); pe_t_str(t, "Back");
 }
@@ -227,6 +235,30 @@ static void pe_build_list(PeText *t, int rebuild) {
         }
         pe_t_str(t, "  ");
         pe_t_num(t, (unsigned)(rebuild ? pe_rebuild_price_index(i) : pe_shop_price_index(i)));
+        if (red) { pe_t_byte(t, G_CODE); pe_t_byte(t, G_NORMAL); }
+    }
+    if (pe_pages(count) > 1) { pe_t_option_start(t, items == 0); pe_t_str(t, "Next page"); }
+    pe_t_option_start(t, items == 0 && pe_pages(count) == 1);
+    pe_t_str(t, "Back");
+}
+
+/* ---- Wardrobe (pe_collection.c): buy once, wear in every game ------------------- */
+static void pe_build_ward(PeText *t) {
+    const int count = pe_ward_count();
+    int items;
+    const int options = pe_list_options(count, &items);
+    pe_title(t, "Wardrobe");
+    pe_t_choice(t, options);
+    for (int k = 0; k < items; ++k) {
+        const int i = s_ui.page * PE_PAGE_SIZE + k;
+        const int state = pe_ward_state(i);
+        pe_t_option_start(t, k == 0);
+        const int red = state == 0 && pe_ward_price(i) > pe_loot_junk();
+        if (red) { pe_t_byte(t, G_CODE); pe_t_byte(t, G_RED); }
+        pe_t_str(t, pe_ward_name(i));
+        if (state == 2) pe_t_str(t, "  worn");
+        else if (state == 1) pe_t_str(t, "  owned");
+        else { pe_t_str(t, "  "); pe_t_num(t, pe_ward_price(i)); }
         if (red) { pe_t_byte(t, G_CODE); pe_t_byte(t, G_NORMAL); }
     }
     if (pe_pages(count) > 1) { pe_t_option_start(t, items == 0); pe_t_str(t, "Next page"); }
@@ -333,6 +365,7 @@ static void pe_show(int screen, int cursor) {
     else if (screen == SCR_ROOT) pe_build_root(&t);
     else if (screen == SCR_PERMIT) pe_build_permit_list(&t);
     else if (screen == SCR_PERMIT_ASK) pe_build_permit_ask(&t);
+    else if (screen == SCR_WARD) pe_build_ward(&t);
     else pe_build_list(&t, screen == SCR_REB);
     pe_t_byte(&t, G_END);
     if (!s_buf) s_buf = psx_mod_alloc_guest_memory(PE_TEXT_MAX, 4);
@@ -497,12 +530,12 @@ static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
                 pe_show(SCR_PERMIT, 0);
             } else if (cursor == options - 1) {
                 s_ui.note[0] = '\0';
-                if (pe_compact()) pe_show(SCR_ROOT, 2); else pe_show(SCR_WAYNE, permit);
+                if (pe_compact()) pe_show(SCR_ROOT, ROOT_PERMIT); else pe_show(SCR_WAYNE, permit);
             }
         } else if (pressed & PE_IN_CANCEL) {
             taken = PE_IN_CANCEL;
             s_ui.note[0] = '\0';
-            if (pe_compact()) pe_show(SCR_ROOT, 2); else pe_show(SCR_WAYNE, permit);
+            if (pe_compact()) pe_show(SCR_ROOT, ROOT_PERMIT); else pe_show(SCR_WAYNE, permit);
         } else if ((pressed & (PE_IN_LEFT | PE_IN_RIGHT)) && pe_pages(count) > 1) {
             const int pages = pe_pages(count);
             s_ui.page = (s_ui.page + ((pressed & PE_IN_RIGHT) ? 1 : pages - 1)) % pages;
@@ -545,13 +578,43 @@ static void pe_on_draw_textboxes(struct CPUState *cpu, uint32_t address) {
             s_ui.note[0] = '\0';
             if (cursor == 0) pe_show(SCR_REQ, 0);
             else if (cursor == 1) pe_show(SCR_REB, 0);
-            else if (cursor == 2 && pe_compact()) { s_ui.page = 0; pe_show(SCR_PERMIT, 0); }
+            else if (cursor == 2) pe_show(SCR_WARD, 0);
+            else if (cursor == ROOT_PERMIT && pe_compact()) { s_ui.page = 0; pe_show(SCR_PERMIT, 0); }
             else pe_show(SCR_WAYNE, workshop);
         } else if (pressed & PE_IN_CANCEL) {
             taken = PE_IN_CANCEL;
             pe_show(SCR_WAYNE, workshop);
         }
         break;
+    case SCR_WARD: {
+        const int count = pe_ward_count();
+        int items;
+        const int options = pe_list_options(count, &items);
+        if (pressed & PE_IN_CONFIRM) {
+            taken = PE_IN_CONFIRM;
+            if (cursor < items) {
+                pe_ward_pick(s_ui.page * PE_PAGE_SIZE + cursor, s_ui.note, sizeof s_ui.note);
+                pe_show(SCR_WARD, cursor);
+            } else if (pe_pages(count) > 1 && cursor == items) {
+                s_ui.page = (s_ui.page + 1) % pe_pages(count);
+                s_ui.note[0] = '\0';
+                pe_show(SCR_WARD, 0);
+            } else if (cursor == options - 1) {
+                s_ui.note[0] = '\0';
+                pe_show(SCR_ROOT, 2);
+            }
+        } else if (pressed & PE_IN_CANCEL) {
+            taken = PE_IN_CANCEL;
+            s_ui.note[0] = '\0';
+            pe_show(SCR_ROOT, 2);
+        } else if ((pressed & (PE_IN_LEFT | PE_IN_RIGHT)) && pe_pages(count) > 1) {
+            const int pages = pe_pages(count);
+            s_ui.page = (s_ui.page + ((pressed & PE_IN_RIGHT) ? 1 : pages - 1)) % pages;
+            s_ui.note[0] = '\0';
+            pe_show(SCR_WARD, 0);
+        }
+        break;
+    }
     case SCR_REQ:
     case SCR_REB: {
         const int rebuild = s_ui.screen == SCR_REB;
