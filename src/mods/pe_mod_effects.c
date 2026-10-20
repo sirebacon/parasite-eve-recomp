@@ -24,7 +24,7 @@
  *   - R-B / R-C: +45 / +15 attack while the equipped gun is the G3A3 (0x7D) / M203 4 (0x86);
  *   - R-F (2026-10-20): "Progression gun bonuses" ON: M16A1 +25, SG550 +15, M203 +20, M203 2 +15
  *     (bridge findings pe-gun-ladder-2026-10-20.md);
- *   - R-E (power): installed RoF 5 / 7 / 10 (effects 3-5 without the built-in bit 0x20) deal
+ *   - R-E (power): installed RoF 5 / 7 / 10 (effects 3-5 the base item doesn't have) deal
  *     "Installed RoF volley %" (200) for the whole volley instead of 25 / 18 / 13% a shot;
  *   - R-A: in a fight with 2+ enemies alive and no boss, an Attack All turn ((turn & 0xC0) ==
  *     0xC0) can take at most "Attack All crowd cap %" (75) of a target's max HP (hpAliveCap
@@ -342,19 +342,32 @@ static void pe_aa_fix(void) {
     s_aa.fix_enemy = 0;
 }
 
+/* Item record (equipped instance or base item, 0x20 bytes): mod count +0x14, mod bytes +0x15
+ * ((group << 5) | effect; RoF is group 1, so every RoF byte has 0x20 set). */
+static int pe_rec_has_effect(uint32_t rec, int effect) {
+    int n = psx_mod_read_byte(rec + 0x14u);
+    if (n > 10) n = 10;
+    for (int m = 0; m < n; ++m)
+        if ((int)(psx_mod_read_byte(rec + 0x15u + (uint32_t)m) & 0x1Fu) == effect) return 1;
+    return 0;
+}
+
 /* R-E: the equipped gun's RoF for this many shots is an installed mod (effects 3 / 4 / 5 = RoF
- * 5 / 7 / 10 without the built-in bit 0x20; the P90's 0x25 is built in). */
+ * 5 / 7 / 10): the gun has it and its base item (Item_LookupBaseData table) doesn't, so the
+ * P90's own RoF 10 stays built in. (Until 2026-10-20 this tested bit 0x20, which every RoF byte
+ * has, so no install ever counted.) */
+#define PE_ITEM_TABLE_BASE_ADDR 0x800A8034u
+#define PE_ITEM_TABLE_END_ADDR  0x800A8038u
+#define PE_ITEM_TABLE_ORIGIN    0x800A8028u
 static int pe_installed_rof(unsigned shots) {
     const int effect = shots == 5u ? 3 : shots == 7u ? 4 : shots == 10u ? 5 : 0;
     const uint32_t rec = pe_cat_record(0);
-    if (!effect || !rec) return 0;
-    int n = psx_mod_read_byte(rec + 0x14u);
-    if (n > 10) n = 10;
-    for (int m = 0; m < n; ++m) {
-        const unsigned c = psx_mod_read_byte(rec + 0x15u + (uint32_t)m);
-        if ((int)(c & 0x1Fu) == effect && !(c & 0x20u)) return 1;
-    }
-    return 0;
+    if (!effect || !rec || !pe_rec_has_effect(rec, effect)) return 0;
+    const uint32_t base = psx_mod_read_word(PE_ITEM_TABLE_BASE_ADDR);
+    const uint32_t end = psx_mod_read_word(PE_ITEM_TABLE_END_ADDR);
+    const uint32_t index = (uint32_t)psx_mod_read_byte(rec + 4u) - 1u;
+    if (end <= base || index >= ((end - base) >> 5)) return 0;
+    return !pe_rec_has_effect(PE_ITEM_TABLE_ORIGIN + base + index * 0x20u, effect);
 }
 
 /* Self-check (2026-10-19): R-A trusts pe_hit_damage to match Battle_StepEnemyMovement, so every

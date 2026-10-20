@@ -158,6 +158,16 @@ static uint32_t pe_record_for_gun(unsigned id) {
 int pe_fx_attack_bonus(unsigned gun);
 int pe_fx_rof_volley_pct(void);
 
+/* The base item (item table) carries this effect: a built-in, not a Catalog install. */
+static int pe_base_has_effect(unsigned id, unsigned effect) {
+    const uint32_t base = pe_base_record(id);
+    int count = psx_mod_read_byte(base + REC_MOD_COUNT);
+    if (count > REC_MAX_MODS) count = REC_MAX_MODS;
+    for (int i = 0; i < count; ++i)
+        if ((psx_mod_read_byte(base + REC_MODS + (uint32_t)i) & 31u) == effect) return 1;
+    return 0;
+}
+
 /* Damage per second x10 (sustained: commands, reloads, Aya's turn speed). */
 static unsigned pe_dps_x10(uint32_t rec) {
     static const uint8_t shot_percent[11] = { 0, 100, 60, 41, 0, 25, 0, 18, 0, 0, 13 };
@@ -175,7 +185,8 @@ static unsigned pe_dps_x10(uint32_t rec) {
         const unsigned code = psx_mod_read_byte(rec + REC_MODS + (uint32_t)i);
         const unsigned effect = code & 31u;
         if (effect >= 1 && effect <= 5) shots = psx_mod_read_byte(PE_SHOTS_TABLE + effect);
-        if (effect >= 3 && effect <= 5 && !(code & 0x20u)) installed_rof = 1;   /* R-E applies */
+        if (effect >= 3 && effect <= 5)                                          /* R-E: installed RoF */
+            installed_rof = !pe_base_has_effect(psx_mod_read_byte(rec + REC_ITEM_ID), effect);
         if (effect == 16) attack >>= 1;
         if (effect == 19) commands = 2;
         if (effect == 20) commands = 3;
