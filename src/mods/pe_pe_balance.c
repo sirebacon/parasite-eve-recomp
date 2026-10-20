@@ -17,8 +17,11 @@
  *     effect flag 0x200, takes a third off both, as the game does).
  *   - Panacea (item 0x19, pe_custom.c and pe_native_menu.c): Combine Medicine 4 + Full Cure;
  *     restores 400 HP and cures every ailment.
+ *   - Scan summary (2026-10-19): vanilla Scan only flashes one "Susceptible to ..." line per
+ *     weakness and never shows resistances; Rebalanced adds one on-screen line with both.
  */
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include "cpu_state.h"
 #include "mod_plugins.h"
@@ -43,7 +46,7 @@ enum { RULES_VANILLA, RULES_REBALANCED, RULES_CUSTOM };
 static const char *const s_rules_names[] = { "VANILLA", "REBALANCED", "CUSTOM" };
 static int s_rules = RULES_REBALANCED, s_rules_shown = -1;
 
-static int s_heal1, s_heal2, s_heal3, s_cost_detox, s_cost_scan;
+static int s_heal1, s_heal2, s_heal3, s_cost_detox, s_cost_scan, s_scan_summary;
 static int s_quick[20];
 
 typedef struct { const char *label, *desc; int vanilla, rebalanced, min, max, step; int *value; int toggle; } PeRow;
@@ -59,6 +62,7 @@ static PeRow s_rows[] = {
     { "Heal 3 % of max HP", "0 = vanilla (+280 HP).", 0, 65, 0, 100, 5, &s_heal3, 0 },
     { "Detox PE cost", "Vanilla 100.", 100, 60, 0, 300, 10, &s_cost_detox, 0 },
     { "Scan PE cost", "Vanilla 50.", 50, 30, 0, 300, 10, &s_cost_scan, 0 },
+    { "Scan: weak & strong", "Scan lists weaknesses and resists.", 0, 1, 0, 1, 1, &s_scan_summary, 1 },
     { "Panacea", "Combine Medicine 4 + Full Cure.", 0, 1, 0, 1, 1, &g_pe_panacea, 1 },
 };
 #define PE_ROWS ((int)(sizeof s_rows / sizeof s_rows[0]))
@@ -102,10 +106,41 @@ static void pe_balance_tick(void) {
     g_pe_quick_mask = mask;
 }
 
+/* ---- Scan summary ---------------------------------------------------------------------- */
+/* Vanilla Scan (Battle_ApplySpellEffect case 7, battle/attack.c:642) shows the target's HP, then
+ * one "Susceptible to ..." line per weakness for 75 frames each (Save_DrawSlotMetadata,
+ * menu/save_slot.c), and never what the target resists. This adds one line listing both, from the
+ * target's statusFlags2 pairs (EnemyCombatant +0xCC; 0 average, 1 resists, 2 weak): bits 0-1
+ * poison, 2-3 acid, 4-5 tranquilizer, 8-9 slow, 10-11 confusion, 12-13 steal, 14-15 heat,
+ * 16-17 cold (bits 6-7: whether Scan may show HP). */
+#define E_STATUS2 0xCCu
+static void pe_scan_summary(uint32_t target) {
+    static const struct { int shift; const char *name; } pairs[] = {
+        { 14, "Heat" }, { 16, "Cold" }, { 0, "Poison" }, { 2, "Acid" }, { 4, "Tranq" },
+        { 10, "Confuse" }, { 8, "Slow" }, { 12, "Steal" },
+    };
+    if (!pe_ptr(target) || target == psx_mod_read_word(PE_PLAYER_ENTITY)) return;
+    const uint32_t core = psx_mod_read_word(target);
+    if (!pe_ptr(core)) return;
+    const uint32_t s2 = psx_mod_read_word(core + E_STATUS2);
+    char weak[96] = "", strong[96] = "", text[200];
+    for (unsigned i = 0; i < sizeof pairs / sizeof pairs[0]; ++i) {
+        const unsigned v = (s2 >> pairs[i].shift) & 3u;
+        char *dst = v == 2u ? weak : v == 1u ? strong : NULL;
+        if (!dst) continue;
+        if (dst[0]) strncat(dst, ", ", 95 - strlen(dst));
+        strncat(dst, pairs[i].name, 95 - strlen(dst));
+    }
+    snprintf(text, sizeof text, "Scan  Weak: %s   Strong: %s", weak[0] ? weak : "none", strong[0] ? strong : "none");
+    psx_mod_osd_message(text);
+    pe_log("scan", "status2=0x%05X weak=%s strong=%s", (unsigned)(s2 & 0x3FFFFu), weak, strong);
+}
+
 /* ---- PE numbers: Battle_ApplySpellEffect entry ----------------------------------------- */
 static void pe_on_apply_spell(struct CPUState *cpu, uint32_t address) {
     (void)address;
     const uint32_t idx = cpu->gpr[4];
+    if (idx == 7u && s_scan_summary) pe_scan_summary(cpu->gpr[5]);
     const uint32_t ent = psx_mod_read_word(PE_PLAYER_ENTITY);
     if (!pe_ptr(ent)) return;
     const uint32_t core = psx_mod_read_word(ent);
