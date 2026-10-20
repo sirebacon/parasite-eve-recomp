@@ -822,6 +822,7 @@ void pe_item_editor_register(void);     /* pe_item_editor.c */
 void pe_debug_menu_register(void);      /* pe_debug_menu.c */
 void pe_loot_logger_menu_register(void); /* pe_loot_logger.c (Debug page) */
 void pe_custom_register(void);           /* pe_custom.c, after the loot hooks */
+void pe_collection_register(void);       /* pe_collection.c: Bestiary + Wardrobe */
 
 PSX_MOD_CONSTRUCTOR(pe_register_mod_menu_plugin) {
     (void)psx_mod_register_vblank_plugin("pe.mod-menu", pe_mod_menu_vblank);
@@ -858,6 +859,7 @@ PSX_MOD_CONSTRUCTOR(pe_register_mod_menu_plugin) {
     pe_field_wayne_register();
     pe_mod_effects_register();
     pe_pe_balance_register();
+    pe_collection_register();
     pe_stats_menu_register();
     pe_item_editor_register();
     pe_debug_menu_register();
