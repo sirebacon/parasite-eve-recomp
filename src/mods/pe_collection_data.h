@@ -425,7 +425,7 @@ static const PeCreatureKey g_pe_creature_keys[PE_CREATURE_KEYS] = {
     { 437, 0x0035, 68 },
 };
 
-#define PE_SKINS 27
+#define PE_SKINS 28
 static const PeSkin g_pe_skins[PE_SKINS] = {
     { "Aya", 0, 0, 12, "" },
     { "Aya: evening dress", 100, 0, 10, "" },
@@ -442,11 +442,11 @@ static const PeSkin g_pe_skins[PE_SKINS] = {
     { "Maeda (backpack)", 150, 1, 0, "maeda_pack" },
     { "Aya's date", 50, 1, 0, "date" },
     { "Wayne", 150, 1, 0, "wayne" },
-    { "Policewoman (cap)", 50, 1, 0, "policewoman_cap" },
+    { "Cathy", 150, 1, 0, "cathy" },
     { "Torres", 150, 1, 0, "torres" },
-    { "Officer (cap)", 50, 1, 0, "officer_cap" },
+    { "Eddie", 150, 1, 0, "eddie" },
     { "Warner", 150, 1, 0, "warner" },
-    { "NYPD (holster)", 50, 1, 0, "nypd_holster" },
+    { "Nix", 150, 1, 0, "nix" },
     { "Opera actress", 50, 1, 0, "opera_actress" },
     { "Opera (doublet)", 50, 1, 0, "opera_doublet" },
     { "Opera king", 50, 1, 0, "opera_king" },
@@ -454,4 +454,5 @@ static const PeSkin g_pe_skins[PE_SKINS] = {
     { "Harlequin", 50, 1, 0, "harlequin" },
     { "Usher", 50, 1, 0, "usher" },
     { "Crew", 50, 1, 0, "crew" },
+    { "Scientist", 150, 1, 0, "scientist" },
 };
