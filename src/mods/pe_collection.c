@@ -222,7 +222,7 @@ static void pe_on_spell(struct CPUState *cpu, uint32_t address) {
 #define PE_FN_ENTITY_TEXS  0x8006C5BCu      /* Scene_LoadEntityTextures */
 #define PE_MODEL_BUF_MAX 0xE000u
 typedef struct { uint8_t *data; uint32_t size; } PeBlob;
-static struct { int loaded, ok; PeBlob model, tex, day[9], rooms; uint32_t nrooms; } s_bundle[PE_SKINS];
+static struct { int loaded, ok; PeBlob model, tex, day[9], rooms; uint32_t nrooms; int gun_part; } s_bundle[PE_SKINS];
 static int s_have = -2;                     /* in the buffers: -2 unknown, -1 the game's, else a skin */
 static int s_pending = -1;                  /* skin whose model / rows go in at the next row load */
 
@@ -255,6 +255,12 @@ static int pe_bundle(int i) {
         const uint32_t n = (uint32_t)r->data[4] | (uint32_t)r->data[5] << 8 | (uint32_t)r->data[6] << 16 | (uint32_t)r->data[7] << 24;
         if (8u + 12u * n <= r->size) s_bundle[i].nrooms = n;
     }
+    s_bundle[i].gun_part = -1;                  /* optional: the part the weapon follows */
+    PeBlob meta = { 0, 0 };
+    snprintf(p, sizeof p, "pe_skins/%s/meta.bin", g_pe_skins[i].folder);
+    if (pe_read_file(p, &meta) && meta.size >= 8 && !memcmp(meta.data, "PEMT", 4) && meta.data[4] < 64)
+        s_bundle[i].gun_part = meta.data[4];
+    free(meta.data);
     return s_bundle[i].ok = 1;
 }
 static uint32_t rd32(const uint8_t *b, uint32_t o) { return (uint32_t)b[o] | (uint32_t)b[o + 1] << 8 | (uint32_t)b[o + 2] << 16 | (uint32_t)b[o + 3] << 24; }
@@ -426,14 +432,36 @@ static void pe_room_rows(int w) {
     }
 }
 
+/* The weapon model: g_GameState.scene_object (+0x14) follows the player's part animation_id (+0x2A),
+ * set to 0x12 -- Aya's right hand, second finger segment -- when Scene_LoadEntityTextures sets it
+ * up (animation_state 3). A skin's part 0x12 is something else; meta.bin names the skin's part. */
+#define GS_GUN_ID      (0x014u + 0x2Au)
+#define PE_GUN_AYA     0x12u
+static int s_gun_written = -1;
+static void pe_gun_part(int w) {
+    const uint16_t now = psx_mod_read_half(PE_GS + GS_GUN_ID);
+    const int want = w >= 0 && s_bundle[w].gun_part >= 0 ? s_bundle[w].gun_part : -1;
+    if (want >= 0) {
+        if (now != (uint16_t)want && (now == PE_GUN_AYA || (int)now == s_gun_written)) {
+            psx_mod_write_half(PE_GS + GS_GUN_ID, (uint16_t)want);
+            s_gun_written = want;
+        }
+    } else if (s_gun_written >= 0) {                 /* skin off: Aya's hand again */
+        if ((int)now == s_gun_written) psx_mod_write_half(PE_GS + GS_GUN_ID, PE_GUN_AYA);
+        s_gun_written = -1;
+    }
+}
+
 /* Every call (each frame, and the room load's row step): while a skin's texture is in VRAM, keep
  * bank_slots[0] and the bundle / day rows on the skin's copies -- battles and day changes re-resolve
  * the game's rows. */
 static void pe_on_entity_textures(struct CPUState *cpu, uint32_t address) {
     (void)cpu; (void)address;
     const int w = s_have;
-    if (w < 0 || psx_mod_read_byte(PE_GS + GS_SSUB) != 0 || psx_mod_read_byte(PE_GS + GS_ETPHASE) != 0) return;
-    if (!pe_gameplay_area(psx_mod_read_byte(PE_AREA_TYPE))) return;
+    if (psx_mod_read_byte(PE_GS + GS_SSUB) != 0 || psx_mod_read_byte(PE_GS + GS_ETPHASE) != 0) return;
+    const int on = w >= 0 && pe_gameplay_area(psx_mod_read_byte(PE_AREA_TYPE));
+    pe_gun_part(on ? w : -1);
+    if (!on) return;
     const uint32_t mem = pe_skin_mem(w);
     if (!mem) return;
     int day = (int8_t)psx_mod_read_byte(PE_GS + GS_DAY);
