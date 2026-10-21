@@ -461,6 +461,6 @@ static const PeSkin g_pe_skins[PE_SKINS] = {
     { "Guard (jumpsuit)", 50, 1, 0, "guard" },
     { "Soldier", 50, 1, 0, "soldier" },
     { "Cameraman", 50, 1, 0, "cameraman" },
-    { "Naval officer (beard)", 50, 1, 0, "naval_beard" },
-    { "Naval officer", 50, 1, 0, "naval" },
+    { "Admiral", 150, 1, 0, "admiral" },
+    { "Captain", 150, 1, 0, "captain" },
 };
