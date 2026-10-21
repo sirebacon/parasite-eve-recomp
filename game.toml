@@ -68,13 +68,15 @@ strict = true
 #   0x80062CC4 MenuWidget_GetCurrentNode, 0x80052534 Battle_IsActiveWrapped - Catalog Cross (as a list's itemAction)
 #   0x80050ADC Menu_DrawActionCodeItem - no portrait for economy armor mod badges
 #   0x80028574 Battle_StepEnemyMovement - per-hit damage inputs for the mod effects rebalance (pe_mod_effects.c)
+#   0x8006BECC Scene_LoadEntityTexture, 0x8006C5BC Scene_LoadEntityTextures - Wardrobe costumes (pe_collection.c)
 mod_function_entry_funcs = ["0x8003EB04", "0x80024250", "0x8005F27C", "0x800299CC", "0x8004B70C", "0x8005D2B4",
                             "0x80053D2C", "0x8003F800", "0x8003FBD8", "0x800194F8",
                             "0x8005A318", "0x80023E14", "0x80052C08", "0x80045110",
                             "0x80050878", "0x8005F354", "0x80044B0C", "0x80037870", "0x800661A4",
                             "0x800647D0", "0x80043DA4", "0x8005EB64",
                             "0x8004F950", "0x800509A8", "0x8004C608",
-                            "0x80062CC4", "0x80052534", "0x80050ADC", "0x80028574"]
+                            "0x80062CC4", "0x80052534", "0x80050ADC", "0x80028574",
+                            "0x8006BECC", "0x8006C5BC"]
 
 [runtime]
 window_title = "Parasite Eve Recompiled"

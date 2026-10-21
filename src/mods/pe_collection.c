@@ -21,11 +21,12 @@
  * Wardrobe: Aya's outfits are the game's own player bundles, picked by g_SceneAreaType
  * (0x800B0CE2, = g_GameState.requested_entity_bank): the room sets it when it loads, and the
  * player's model, textures and per-day animation rows (Scene_LoadEntityTexture / Scene_LoadEntity
- * Textures) all follow it. Wearing an outfit rewrites it, every frame, from 10 / 12 / 13 (the
- * gameplay outfits) to the worn one before the scene start-up reads it (it runs over several frames
- * after the room data arrives). 11 (Day 1 long dress) and 14 (transformed form) have no full player
- * moveset and are not offered; resume's 0x0E is left alone. Character skins are listed but not
- * sold until their bundles are built.
+ * Textures) all follow it. Wearing an outfit rewrites it from 10 / 12 / 13 (the gameplay outfits)
+ * at the entry of the room load's texture step; character skins replace the bundle at the same
+ * steps (see "Wardrobe: costumes" below). 11 (Day 1 long dress) and 14 (transformed form) have no
+ * full player moveset and are not offered. Character skins are listed but not sold until their
+ * bundles are built. F1 pages: a filter row, an item row browsed with left / right, details, one
+ * action.
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -185,39 +186,45 @@ static void pe_on_spell(struct CPUState *cpu, uint32_t address) {
     if (c >= 0) pe_unlock(c, C_WEAK, "scan");
 }
 
-/* ---- Wardrobe: character bundles ------------------------------------------------------------- *
- * pe_skins/<folder>/ holds model.bin (the player bundle: model + bundle rows), texture.bin (the
- * player texture blob) and day1..day8.bin (per-day rows 4-12), built from the user's disc by the
- * bridge's tools/pe_assets/build_skin.py. The game's scene start-up runs one step a frame
- * (g_GameState +0xED: 0x24 Scene_LoadEntityTexture, 0x25, 0x26 Scene_LoadEntityTextures, 0x27 the
- * player's render object), so between its steps:
- *   - before 0x24, a bundle reload is forced (flags +0x00 |= 0x200000) and the day rows too
- *     (story_day_flags +0x0E |= 1) while the buffers don't hold this skin yet;
- *   - at 0x25 after a texture load (entity phase +0xEC went through 1-5), our texture blob goes into
- *     the scratch buffer (+0x194) and the loader is sent back to its upload step (phase 3, scene
- *     step 0x24): the game uploads our TIMs itself, then re-reads its bundle from disc;
- *   - at 0x25 again, our model.bin goes over that bundle (+0x154, 0xE000 bytes) and bank_slots[0] /
- *     bank_rows[0][id] (+0x198 / +0x1C0) point into it;
- *   - at 0x27 after a day-row load (subphase +0xEE 4-6), our day blob goes over the game's (+0x158)
- *     and rows 4-12 point into it.
- * A room that reloads nothing keeps our data (the game re-resolves its pointers from the same
- * buffers, in the same blob format). Only gameplay outfit rooms (area 10 / 12 / 13) are touched. */
+/* ---- Wardrobe: costumes ---------------------------------------------------------------------- *
+ * Rooms load the player through Draw_InitPipeline (draw/pipeline.c): Scene_LoadEntityTexture
+ * (texture blob from PE image entry area+3 into the scratch buffer, uploaded to VRAM in phase 3;
+ * then the bundle, entry area+8, into the voice buffer +0x154 and its pointers resolved in phase 6),
+ * then Scene_LoadEntityTextures (per-day rows into +0x158, pointers resolved in subphase 6). Both
+ * run in tight loops, so the costume goes in from function-entry hooks, never from the VBlank tick:
+ *   - Scene_LoadEntityTexture entry, phase 0: a worn outfit rewrites g_SceneAreaType (10 / 12 / 13
+ *     only) and forces the reload if the loaded bundle differs. A worn character skin puts its
+ *     texture.bin in the scratch buffer and starts the loader at phase 3, so the game uploads our
+ *     TIMs and then reads its own bundle (which we replace next). Not during Liberate (flags
+ *     0x20000: the transformation's own sequence waits in phase 2).
+ *   - Scene_LoadEntityTextures entry (the next call of the room load): model.bin goes over the
+ *     bundle and bank_slots[0] / bank_rows point into it; the day blob goes into +0x158 and the
+ *     loader starts at subphase 6, so the game resolves our rows (and stream tables) itself.
+ * Taking a costume off forces the game's own bundle and rows back (flags 0x200000, day flags 1).
+ * Wearing from F1 asks for the game's same-room reload (Scene_SelectMapById: g_GameStateFlags
+ * |= 0x2000 and flags |= 0x800 end the frame loop and the room loads again), so it shows as soon
+ * as the menu closes. (Until 2026-10-20 this keyed on Scene_InitEntityPlayer's steps 0x20-0x27,
+ * which only Liberate runs, and the outfit byte was rewritten from the VBlank tick, racing the
+ * room load: character skins never went in and outfits only sometimes.) */
 #define PE_GS          0x800B0CD8u
 #define GS_FLAGS       0x000u
+#define GS_LOADED_BANK 0x00Bu               /* g_SavedSceneAreaType */
 #define GS_DAY         0x00Cu
 #define GS_DAYFLAGS    0x00Eu
 #define GS_ETPHASE     0x0ECu
-#define GS_SINIT       0x0EDu
 #define GS_SSUB        0x0EEu
 #define GS_VOICE       0x154u
 #define GS_ETEX        0x158u
 #define GS_SCRATCH     0x194u
 #define GS_SLOTS       0x198u
 #define GS_ROWS        0x1C0u
+#define PE_FN_ENTITY_TEX   0x8006BECCu      /* Scene_LoadEntityTexture */
+#define PE_FN_ENTITY_TEXS  0x8006C5BCu      /* Scene_LoadEntityTextures */
 #define PE_MODEL_BUF_MAX 0xE000u
 typedef struct { uint8_t *data; uint32_t size; } PeBlob;
 static struct { int loaded, ok; PeBlob model, tex, day[9]; } s_bundle[PE_SKINS];
-static int s_have = -1, s_have_day = -1, s_tex_loading, s_day_loading, s_stage;
+static int s_have = -2;                     /* in the buffers: -2 unknown, -1 the game's, else a skin */
+static int s_pending = -1;                  /* skin whose model / rows go in at the next row load */
 
 static int pe_read_file(const char *path, PeBlob *b) {
     FILE *f = fopen(path, "rb");
@@ -248,85 +255,135 @@ static uint32_t rd32(const uint8_t *b, uint32_t o) { return (uint32_t)b[o] | (ui
 static void pe_put_blob(uint32_t dst, const PeBlob *b) {
     for (uint32_t i = 0; i + 4 <= b->size; i += 4) psx_mod_write_word(dst + i, rd32(b->data, i));
 }
-/* Point bank_slots[0] / bank_rows[0][id] at a blob written to `base` (SceneAssetBlob: directory at
- * word 1; +0x0C model records, +0x10 row records; records 12 bytes, word 1 = offset | id << 24). */
-static void pe_point_blob(uint32_t base, const PeBlob *b, int model) {
+/* Point bank_slots[0] / bank_rows[0][id] at a bundle written to `base` (SceneAssetBlob: directory
+ * at word 1; +0x0C model records, +0x10 row records; records 12 bytes, word 1 = offset | id << 24),
+ * as Scene_LoadEntityTexture phase 6 does. */
+static void pe_point_bundle(uint32_t base, const PeBlob *b) {
     const uint32_t dir = rd32(b->data, 4);
-    if (model) {
-        const uint32_t desc = rd32(b->data, dir + 0x0C), at = desc & 0x3FFFFFu;
-        if (desc >> 22) psx_mod_write_word(PE_GS + GS_SLOTS, base + (rd32(b->data, at + 4) & 0xFFFFFFu));
-    }
+    const uint32_t mdesc = rd32(b->data, dir + 0x0C), mat = mdesc & 0x3FFFFFu;
+    if (mdesc >> 22) psx_mod_write_word(PE_GS + GS_SLOTS, base + (rd32(b->data, mat + 4) & 0xFFFFFFu));
     const uint32_t desc = rd32(b->data, dir + 0x10), at = desc & 0x3FFFFFu;
     for (uint32_t i = 0; i < (desc >> 22); ++i) {
         const uint32_t w = rd32(b->data, at + 12u * i + 4u);
         if ((w >> 24) < 48u) psx_mod_write_word(PE_GS + GS_ROWS + (w >> 24) * 4u, base + (w & 0xFFFFFFu));
     }
 }
-static void pe_skin_tick(void) {
-    const int w = s_prof.worn;
-    const uint8_t sinit = psx_mod_read_byte(PE_GS + GS_SINIT), et = psx_mod_read_byte(PE_GS + GS_ETPHASE);
-    const uint8_t sub = psx_mod_read_byte(PE_GS + GS_SSUB), area = psx_mod_read_byte(PE_AREA_TYPE);
-    if (et >= 1 && et <= 5) s_tex_loading = 1;
-    if (sinit == 0x26 && sub >= 4 && sub <= 6) s_day_loading = 1;
-    const int active = pe_bundle(w) && (area == 10 || area == 12 || area == 13);
-    if (!active) {                                  /* a game bundle went in: ours is gone from the buffers */
-        if (sinit == 0x25 && s_tex_loading) { s_have = -1; s_tex_loading = 0; }
-        if (sinit == 0x27 && s_day_loading) { s_have_day = -1; s_day_loading = 0; }
-        s_stage = 0;
-        return;
-    }
-    if (sinit >= 0x20 && sinit <= 0x23) {           /* before the bundle step: make sure it reloads */
-        if (s_have != w) psx_mod_write_word(PE_GS + GS_FLAGS, psx_mod_read_word(PE_GS + GS_FLAGS) | 0x200000u);
-        if (s_have_day != w) psx_mod_write_byte(PE_GS + GS_DAYFLAGS, psx_mod_read_byte(PE_GS + GS_DAYFLAGS) | 1u);
-    }
-    if (sinit == 0x25 && s_tex_loading) {
-        s_tex_loading = 0;
-        if (s_stage == 0) {                         /* 1: our texture through the game's own upload */
-            const uint32_t scratch = psx_mod_read_word(PE_GS + GS_SCRATCH);
-            if (!pe_ptr(scratch)) return;
-            pe_put_blob(scratch, &s_bundle[w].tex);
-            psx_mod_write_byte(PE_GS + GS_ETPHASE, 3);
-            psx_mod_write_byte(PE_GS + GS_SINIT, 0x24);
-            s_stage = 1;
-        } else {                                    /* 2: our model and rows over the reloaded bundle */
-            const uint32_t voice = psx_mod_read_word(PE_GS + GS_VOICE);
-            if (!pe_ptr(voice)) { s_stage = 0; return; }
-            pe_put_blob(voice, &s_bundle[w].model);
-            pe_point_blob(voice, &s_bundle[w].model, 1);
-            s_have = w; s_stage = 0;
-            pe_log("skin", "worn=%s model+texture in", g_pe_skins[w].name);
-        }
-    }
-    if (sinit == 0x27 && s_day_loading) {            /* 3: the per-day rows */
-        s_day_loading = 0;
-        int day = (int8_t)psx_mod_read_byte(PE_GS + GS_DAY);
-        if (day < 1 || day > 8) day = 1;
-        const uint32_t etex = psx_mod_read_word(PE_GS + GS_ETEX);
-        if (!pe_ptr(etex)) return;
-        pe_put_blob(etex, &s_bundle[w].day[day]);
-        pe_point_blob(etex, &s_bundle[w].day[day], 0);
-        s_have_day = w;
-        pe_log("skin", "worn=%s day%d rows in", g_pe_skins[w].name, day);
-    }
-}
-
-/* ---- Wardrobe: Aya's outfits ---------------------------------------------------------------- */
+static int pe_gameplay_area(unsigned a) { return a == 10u || a == 12u || a == 13u; }
 static int pe_skin_wearable(int i) {
     if (i < 0 || i >= PE_SKINS) return 0;
     if (g_pe_skins[i].kind == 1) return pe_bundle(i);
-    return g_pe_skins[i].area == 10 || g_pe_skins[i].area == 12 || g_pe_skins[i].area == 13;
-}
-static void pe_outfit_tick(void) {
-    if (!s_prof.worn || !pe_skin_wearable(s_prof.worn) || g_pe_skins[s_prof.worn].kind != 0) return;
-    const uint8_t area = psx_mod_read_byte(PE_AREA_TYPE), want = g_pe_skins[s_prof.worn].area;
-    if ((area == 10 || area == 12 || area == 13) && area != want) psx_mod_write_byte(PE_AREA_TYPE, want);
+    return pe_gameplay_area(g_pe_skins[i].area);
 }
 
-/* ---- F1 pages ------------------------------------------------------------------------------- */
+static void pe_on_entity_texture(struct CPUState *cpu, uint32_t address) {
+    (void)cpu; (void)address;
+    if (!pe_loaded() || psx_mod_read_byte(PE_GS + GS_ETPHASE) != 0) return;
+    uint32_t flags = psx_mod_read_word(PE_GS + GS_FLAGS);
+    uint8_t dayflags = psx_mod_read_byte(PE_GS + GS_DAYFLAGS);
+    unsigned area = psx_mod_read_byte(PE_AREA_TYPE);
+    const int w = s_prof.worn < PE_SKINS ? s_prof.worn : 0;
+    const PeSkin *k = &g_pe_skins[w];
+    if (w && k->kind == 0 && pe_skin_wearable(w) && pe_gameplay_area(area) && area != k->area) {
+        area = k->area;                                      /* an outfit: the game's own bundle */
+        psx_mod_write_byte(PE_AREA_TYPE, (uint8_t)area);
+        if (area != psx_mod_read_byte(PE_GS + GS_LOADED_BANK)) flags |= 0x200000u;
+        dayflags |= 1u;
+        pe_log("skin", "outfit=%s area=%u", k->name, area);
+    }
+    const int active = k->kind == 1 && pe_bundle(w) && pe_gameplay_area(area) && !(flags & 0x20000u);
+    const uint32_t scratch = psx_mod_read_word(PE_GS + GS_SCRATCH);
+    if (active && pe_ptr(scratch)) {
+        if ((flags & 0x200000u) || s_have != w) {            /* our texture through the game's upload */
+            pe_put_blob(scratch, &s_bundle[w].tex);
+            psx_mod_write_byte(PE_GS + GS_ETPHASE, 3);
+        }
+        s_pending = w;                                       /* model and rows at the row load */
+    } else {
+        if (s_have != -1) { flags |= 0x200000u; dayflags |= 1u; }   /* the game's own back */
+        if (s_have >= 0) pe_log("skin", "worn=Aya game bundle back");
+        s_have = -1; s_pending = -1;
+    }
+    if (flags & 0x200000u) dayflags |= 1u;                  /* a new bundle needs its own rows */
+    psx_mod_write_word(PE_GS + GS_FLAGS, flags);
+    psx_mod_write_byte(PE_GS + GS_DAYFLAGS, dayflags);
+}
+
+static void pe_on_entity_textures(struct CPUState *cpu, uint32_t address) {
+    (void)cpu; (void)address;
+    const int w = s_pending;
+    if (w < 0 || psx_mod_read_byte(PE_GS + GS_SSUB) != 0 || psx_mod_read_byte(PE_GS + GS_ETPHASE) != 0) return;
+    s_pending = -1;
+    const uint32_t voice = psx_mod_read_word(PE_GS + GS_VOICE), etex = psx_mod_read_word(PE_GS + GS_ETEX);
+    if (!pe_ptr(voice) || !pe_ptr(etex)) return;
+    pe_put_blob(voice, &s_bundle[w].model);                  /* over the bundle the game just read */
+    pe_point_bundle(voice, &s_bundle[w].model);
+    int day = (int8_t)psx_mod_read_byte(PE_GS + GS_DAY);
+    if (day < 1 || day > 8) day = 1;
+    pe_put_blob(etex, &s_bundle[w].day[day]);                /* the game resolves our rows */
+    psx_mod_write_byte(PE_GS + GS_SSUB, 6);
+    s_have = w;
+    pe_log("skin", "worn=%s model+texture+day%d rows in", g_pe_skins[w].name, day);
+}
+
+/* The game's same-room reload, so a new costume shows when F1 closes. */
+static int pe_request_reload(void) {
+    if (!pe_loaded()) return 0;
+    if (psx_mod_read_word(PE_GAME_BLOCK) & 2u) return 0;     /* battle: the next room does it */
+    if (psx_mod_read_byte(PE_AREA_TYPE) - 10u >= 5u) return 0;
+    psx_mod_write_word(PE_GAME_BLOCK, psx_mod_read_word(PE_GAME_BLOCK) | 0x2000u);
+    psx_mod_write_word(PE_GS + GS_FLAGS, psx_mod_read_word(PE_GS + GS_FLAGS) | 0x800u);
+    pe_log("skin", "reload worn=%s", g_pe_skins[s_prof.worn].name);
+    return 1;
+}
+
+/* ---- F1 pages ------------------------------------------------------------------------------- *
+ * Few rows, left / right to browse: a filter row, the item row (only what the filter shows), the
+ * details, one action. (Until 2026-10-20 these were grids of 75 / 27 tiles.) */
 #define PE_PAGE_B "Collection/Bestiary"
 #define PE_PAGE_W "Collection/Wardrobe"
-static int s_bcur, s_wcur, s_dummy;
+static int s_bcur, s_dummy;
 static char s_line[4][96];
+
+/* Bestiary filters: area (the generator's sections, in order) and how much is known. */
+#define PE_MAX_SECTIONS 12
+static const char *s_sections[PE_MAX_SECTIONS + 1] = { "All areas" };
+static unsigned s_nsections = 1;
+static int s_barea, s_bshow, s_bsel;
+static const char *const s_show_names[] = { "All", "Met", "Not complete" };
+static int s_blist[PE_CREATURES], s_bcount;
+static char s_bnames[PE_CREATURES][48];
+
+static void pe_build_sections(void) {
+    for (int c = 0; c < PE_CREATURES; ++c) {
+        unsigned j = 1;
+        while (j < s_nsections && strcmp(s_sections[j], g_pe_creatures[c].section)) ++j;
+        if (j == s_nsections && s_nsections <= PE_MAX_SECTIONS) s_sections[s_nsections++] = g_pe_creatures[c].section;
+    }
+}
+static void pe_bestiary_filter(void) {
+    s_bcount = 0;
+    for (int c = 0; c < PE_CREATURES; ++c) {
+        const uint8_t s = s_prof.creature[c];
+        if (s_barea > 0 && (unsigned)s_barea < s_nsections && strcmp(g_pe_creatures[c].section, s_sections[s_barea])) continue;
+        if (s_bshow == 1 && !(s & C_MET)) continue;
+        if (s_bshow == 2 && (s & C_WEAK) && (s & C_LOOT)) continue;
+        s_blist[s_bcount++] = c;
+    }
+    if (s_bsel >= s_bcount) s_bsel = 0;
+    s_bcur = s_bcount ? s_blist[s_bsel] : 0;
+}
+static unsigned pe_b_count(void) { pe_bestiary_filter(); return s_bcount ? (unsigned)s_bcount : 1u; }
+static const char *pe_b_name(unsigned i) {
+    pe_bestiary_filter();
+    if (!s_bcount) return "(none)";
+    if (i >= (unsigned)s_bcount) i = 0;
+    const int c = s_blist[i];
+    const uint8_t s = s_prof.creature[c];
+    if (!(s & C_MET)) snprintf(s_bnames[c], sizeof s_bnames[c], "???  (%u/%d)", i + 1, s_bcount);
+    else snprintf(s_bnames[c], sizeof s_bnames[c], "%s%s%s  (%u/%d)", g_pe_creatures[c].ex ? "EX " : "", g_pe_creatures[c].name,
+                  (s & C_WEAK) && (s & C_LOOT) ? " *" : g_pe_creatures[c].boss ? " (boss)" : "", i + 1, s_bcount);
+    return s_bnames[c];
+}
 
 static const char *pe_elems(uint8_t bits) {
     static char buf[64]; static const char *n[5] = { "Heat", "Frost", "Cyanide", "Acid", "Tranq" };
@@ -341,6 +398,7 @@ static unsigned pe_next_price(int c, uint8_t *bit) {
     *bit = 0; return 0;
 }
 static void pe_bestiary_lines(void) {
+    pe_bestiary_filter();
     const int c = s_bcur < 0 || s_bcur >= PE_CREATURES ? 0 : s_bcur;
     const PeCreature *k = &g_pe_creatures[c];
     const uint8_t s = s_prof.creature[c];
@@ -358,29 +416,27 @@ static void pe_bestiary_lines(void) {
         s_line[3][0] = 0;
     }
 }
-static unsigned pe_b_count(void) { return PE_CREATURES; }
-static int pe_b_cell(int i, char *label, unsigned size, unsigned *flags) {
-    if (i == -1) {
-        int met = 0; for (int c = 0; c < PE_CREATURES; ++c) met += (s_prof.creature[c] & C_MET) != 0;
-        snprintf(label, size, "%d/%d", met, PE_CREATURES); return 1;
-    }
-    if (i < 0 || i >= PE_CREATURES) return 0;
-    const uint8_t s = s_prof.creature[i];
-    if (s & C_MET) snprintf(label, size, "%s%s", g_pe_creatures[i].ex ? "EX " : "", g_pe_creatures[i].name);
-    else snprintf(label, size, "???");
-    *flags = !(s & C_MET) ? PE_CELL_EMPTY : (s & C_WEAK) && (s & C_LOOT) ? PE_CELL_HIGHLIGHT : 0;
-    if (g_pe_creatures[i].boss) *flags |= PE_CELL_MARK;
-    return 1;
-}
 static unsigned pe_one(void) { return 1; }
 static const char *pe_line0(unsigned i) { (void)i; pe_bestiary_lines(); return s_line[0]; }
 static const char *pe_line1(unsigned i) { (void)i; pe_bestiary_lines(); return s_line[1]; }
 static const char *pe_line2(unsigned i) { (void)i; pe_bestiary_lines(); return s_line[2]; }
 static const char *pe_line3(unsigned i) { (void)i; pe_bestiary_lines(); return s_line[3][0] ? s_line[3] : "-"; }
+static const char *pe_bprogress(unsigned i) {
+    static char buf[64]; (void)i;
+    int met = 0, done = 0;
+    for (int c = 0; c < PE_CREATURES; ++c) {
+        met += (s_prof.creature[c] & C_MET) != 0;
+        done += (s_prof.creature[c] & (C_WEAK | C_LOOT)) == (C_WEAK | C_LOOT);
+    }
+    snprintf(buf, sizeof buf, "Met %d/%d  Complete %d  Junk %u", met, PE_CREATURES, done, (unsigned)pe_loot_junk());
+    return buf;
+}
 
 static void pe_buy_tier(void) {
     if (!pe_loaded()) { psx_mod_osd_message("Load a game first (Junk comes from it)"); return; }
-    const int c = s_bcur < 0 || s_bcur >= PE_CREATURES ? 0 : s_bcur;
+    pe_bestiary_filter();
+    if (!s_bcount) return;
+    const int c = s_bcur;
     uint8_t bit; const unsigned price = pe_next_price(c, &bit);
     char msg[96];
     if (!bit) { psx_mod_osd_message("Already complete"); return; }
@@ -392,24 +448,54 @@ static void pe_buy_tier(void) {
     pe_profile_save();
 }
 
-static unsigned pe_w_count(void) { return PE_SKINS; }
-static int pe_w_cell(int i, char *label, unsigned size, unsigned *flags) {
-    if (i == -1) { snprintf(label, size, "Junk %u", (unsigned)pe_loot_junk()); return 1; }
-    if (i < 0 || i >= PE_SKINS) return 0;
+/* Wardrobe groups: Aya's outfits, then characters by price tier. */
+static const char *const s_group_names[] = { "Aya's outfits", "Main cast", "Supporting", "Extras" };
+static int s_wgroup, s_wsel;
+static int s_wlist[PE_SKINS], s_wcount;
+static char s_wnames[PE_SKINS][56];
+static int pe_skin_group(int i) {
     const PeSkin *k = &g_pe_skins[i];
-    const int owned = (s_prof.skins >> i) & 1u;
-    if (!pe_skin_wearable(i) && i != 0) { snprintf(label, size, "%s (soon)", k->name); *flags = PE_CELL_EMPTY; return 1; }
-    if (owned) snprintf(label, size, "%s%s", k->name, s_prof.worn == i ? " [worn]" : "");
-    else snprintf(label, size, "%s %u", k->name, k->price);
-    *flags = s_prof.worn == i ? PE_CELL_HIGHLIGHT : owned ? 0 : PE_CELL_DIM;
-    return 1;
+    if (k->kind == 0) return 0;
+    return k->price >= 250 ? 1 : k->price >= 150 ? 2 : 3;
+}
+static void pe_wardrobe_filter(void) {
+    s_wcount = 0;
+    for (int i = 0; i < PE_SKINS; ++i) if (pe_skin_group(i) == s_wgroup) s_wlist[s_wcount++] = i;
+    if (s_wsel >= s_wcount) s_wsel = 0;
+}
+static unsigned pe_w_count(void) { pe_wardrobe_filter(); return s_wcount ? (unsigned)s_wcount : 1u; }
+static const char *pe_w_name(unsigned n) {
+    pe_wardrobe_filter();
+    if (!s_wcount) return "(none)";
+    if (n >= (unsigned)s_wcount) n = 0;
+    const int i = s_wlist[n];
+    const PeSkin *k = &g_pe_skins[i];
+    const char *state = !pe_skin_wearable(i) ? "soon" : s_prof.worn == i ? "worn" : ((s_prof.skins >> i) & 1u) ? "owned" : NULL;
+    if (state) snprintf(s_wnames[i], sizeof s_wnames[i], "%s  [%s]  (%u/%d)", k->name, state, n + 1, s_wcount);
+    else snprintf(s_wnames[i], sizeof s_wnames[i], "%s  %u Junk  (%u/%d)", k->name, k->price, n + 1, s_wcount);
+    return s_wnames[i];
+}
+static const char *pe_w_status(unsigned n) {
+    static char buf[80]; (void)n;
+    snprintf(buf, sizeof buf, "Wearing %s   Junk %u", g_pe_skins[s_prof.worn < PE_SKINS ? s_prof.worn : 0].name,
+             (unsigned)pe_loot_junk());
+    return buf;
+}
+static void pe_wear(int i) {
+    char msg[96];
+    s_prof.worn = (uint8_t)i;
+    pe_profile_save();
+    snprintf(msg, sizeof msg, pe_request_reload() ? "Wearing %s" : "Wearing %s from the next room", g_pe_skins[i].name);
+    psx_mod_osd_message(msg);
 }
 static void pe_w_accept(void) {
-    const int i = s_wcur;
-    if (i < 0 || i >= PE_SKINS) return;
+    pe_wardrobe_filter();
+    if (!s_wcount) return;
+    const int i = s_wlist[s_wsel];
     const PeSkin *k = &g_pe_skins[i];
     char msg[96];
-    if (!pe_skin_wearable(i) && i != 0) { psx_mod_osd_message("Not available yet (build it with build_skin.py)"); return; }
+    if (!pe_skin_wearable(i)) { psx_mod_osd_message("Not available yet (build it with build_skin.py)"); return; }
+    if (s_prof.worn == i) { psx_mod_osd_message("Already wearing it"); return; }
     if (!((s_prof.skins >> i) & 1u)) {
         if (!pe_loaded()) { psx_mod_osd_message("Load a game first (Junk comes from it)"); return; }
         if (!pe_loot_spend_junk(k->price)) {
@@ -417,14 +503,15 @@ static void pe_w_accept(void) {
             psx_mod_osd_message(msg); return;
         }
         s_prof.skins |= 1ull << i;
-        snprintf(msg, sizeof msg, "Unlocked: %s (every game)", k->name);
-        psx_mod_osd_message(msg);
         pe_log("wardrobe", "bought=%s price=%u", k->name, (unsigned)k->price);
     }
-    s_prof.worn = (uint8_t)i;
-    snprintf(msg, sizeof msg, "Wearing %s from the next room", k->name);
-    psx_mod_osd_message(msg);
-    pe_profile_save();
+    pe_log("wardrobe", "wear=%s", k->name);
+    pe_wear(i);
+}
+static void pe_w_default(void) {
+    if (s_prof.worn == 0) { psx_mod_osd_message("Already wearing Aya"); return; }
+    pe_log("wardrobe", "wear=Aya");
+    pe_wear(0);
 }
 
 /* For Wayne's Workshop (pe_wayne_menu.c): the skins that can be worn or bought now, by list index. */
@@ -442,7 +529,7 @@ int pe_ward_state(int k) {                     /* 0 locked, 1 owned, 2 worn */
     if (s_prof.worn == i) return 2;
     return (int)((s_prof.skins >> i) & 1u);
 }
-int pe_ward_pick(int k, char *msg, size_t n) {   /* buy if needed, then wear */
+int pe_ward_pick(int k, char *msg, size_t n) {   /* buy if needed, then wear (shows when the room changes) */
     const int i = pe_ward_skin(k);
     if (i < 0) return 0;
     if (!((s_prof.skins >> i) & 1u)) {
@@ -454,7 +541,7 @@ int pe_ward_pick(int k, char *msg, size_t n) {   /* buy if needed, then wear */
     }
     s_prof.worn = (uint8_t)i;
     pe_profile_save();
-    snprintf(msg, n, "Wearing %s next room", g_pe_skins[i].name);
+    snprintf(msg, n, "Wearing %s when you leave", g_pe_skins[i].name);
     return 1;
 }
 
@@ -465,26 +552,35 @@ static void pe_reset_collection(void) {
 
 /* ---- tick / register ------------------------------------------------------------------------ */
 static void pe_collection_tick(void) {
-    if (!pe_loaded()) { memset(s_slot, 0, sizeof s_slot); s_have = s_have_day = -1; s_stage = 0; return; }
-    pe_outfit_tick();
-    pe_skin_tick();
+    if (!pe_loaded()) { memset(s_slot, 0, sizeof s_slot); s_have = -2; s_pending = -1; return; }
     if (psx_mod_read_word(PE_GAME_BLOCK) & 2u) pe_watch_slots();
     else memset(s_slot, 0, sizeof s_slot);
     if (s_dirty) pe_profile_save();
 }
+static void pe_collection_restored(void) { s_have = -2; s_pending = -1; }   /* a save state brings its own buffers */
 
 void pe_collection_register(void) {
     pe_profile_load();
-    (void)pe_menu_register_grid(PE_PAGE_B, "Creatures", "Pick one; details below.", &s_bcur,
-                                PE_CREATURES, 3, pe_b_count, pe_b_cell, 0, 0);
+    pe_build_sections();
+    (void)pe_menu_register_choice(PE_PAGE_B, "Area", "Which creatures to browse.", &s_barea, s_sections, s_nsections);
+    (void)pe_menu_register_choice(PE_PAGE_B, "Show", "All, met only, or not complete.", &s_bshow, s_show_names, 3);
+    (void)pe_menu_register_dynamic_choice(PE_PAGE_B, "Creature", "Left / right to browse. * = complete.", &s_bsel,
+                                          PE_CREATURES, pe_b_count, pe_b_name);
     (void)pe_menu_register_dynamic_choice(PE_PAGE_B, "Info", "Name, HP, defense, where.", &s_dummy, 1, pe_one, pe_line0);
     (void)pe_menu_register_dynamic_choice(PE_PAGE_B, "Elements", "Weak and strong elements.", &s_dummy, 1, pe_one, pe_line1);
     (void)pe_menu_register_dynamic_choice(PE_PAGE_B, "Drop", "What it drops (odds).", &s_dummy, 1, pe_one, pe_line2);
     (void)pe_menu_register_dynamic_choice(PE_PAGE_B, "Steal", "What can be stolen (odds).", &s_dummy, 1, pe_one, pe_line3);
     (void)pe_menu_register_action(PE_PAGE_B, "Buy next tier", "Spend Junk: weaknesses, then loot.", pe_buy_tier);
-    (void)pe_menu_register_grid(PE_PAGE_W, "Skins", "Buy once, wear in every game.", &s_wcur,
-                                PE_SKINS, 2, pe_w_count, pe_w_cell, pe_w_accept, 0);
+    (void)pe_menu_register_dynamic_choice(PE_PAGE_B, "Progress", "Bestiary totals.", &s_dummy, 1, pe_one, pe_bprogress);
+    (void)pe_menu_register_choice(PE_PAGE_W, "Group", "Aya's outfits or characters.", &s_wgroup, s_group_names, 4);
+    (void)pe_menu_register_dynamic_choice(PE_PAGE_W, "Costume", "Left / right to browse.", &s_wsel, PE_SKINS, pe_w_count, pe_w_name);
+    (void)pe_menu_register_action(PE_PAGE_W, "Buy / wear", "Buy once (every game), wear now: the room reloads.", pe_w_accept);
+    (void)pe_menu_register_action(PE_PAGE_W, "Wear Aya", "Back to Aya's own clothes.", pe_w_default);
+    (void)pe_menu_register_dynamic_choice(PE_PAGE_W, "Status", "What you wear, Junk.", &s_dummy, 1, pe_one, pe_w_status);
     (void)pe_menu_register_action("Debug", "Reset collection", "Forget all Bestiary / skin unlocks.", pe_reset_collection);
     (void)pe_menu_register_tick(pe_collection_tick);
+    (void)psx_mod_register_restore_callback(pe_collection_restored);
     (void)psx_mod_register_function_entry_plugin("pe.collection.scan", PE_FN_APPLY_SPELL, pe_on_spell);
+    (void)psx_mod_register_function_entry_plugin("pe.collection.etex", PE_FN_ENTITY_TEX, pe_on_entity_texture);
+    (void)psx_mod_register_function_entry_plugin("pe.collection.etexs", PE_FN_ENTITY_TEXS, pe_on_entity_textures);
 }
