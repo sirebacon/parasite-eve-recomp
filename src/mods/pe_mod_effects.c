@@ -829,6 +829,99 @@ static void pe_sync_weapon_cache(void) {
            (unsigned)packed_old, (unsigned)packed);
 }
 
+/* The armor cache, same story: Inv_BuildArmorList (aya/stats.c) fills g_BattleEquipStateBlock
+ * (0x8009D1B0, Aya's Combatant attributes: defense / PE defense / crit in parameterWord, resist and
+ * auto effects in effectFlags) and BattleCmd_LoadWeaponModifiers sets the armor's stat modifiers
+ * (g_InvBonusSlotCount = Bag+, g_StatScaleBase = MaxHP / Attack Up / Down / Slow AT), which
+ * Inv_RecalcSlotStats turns into max HP, offense (stat1E) and active time (stat22). Outside battle
+ * we rebuild both the game's way; when the modifiers change we also redo the parts of
+ * Inv_RecalcSlotStats they feed (max HP with current HP clamped, stat1E, stat22). The stat
+ * levels (0x800C0E28..) are only read. */
+#define PE_ARMOR_CACHE      0x8009D1B0u     /* g_BattleEquipStateBlock (BattleAttributes) */
+#define PE_BONUS_SLOTS      0x8009D018u     /* g_InvBonusSlotCount */
+#define PE_STAT_EXP         0x800C0E28u     /* u16[7] stat EXP (read only) */
+#define PE_SAVE_CUR_HP      0x800C0E08u
+#define PE_TABLE_ORIGIN     0x800A8028u
+#define C_ATTRIBUTES        0x6Cu
+#define C_HP_MIRROR         0x0Eu
+#define C_MAX_HP            0x1Cu
+static unsigned s_acache_syncs;
+
+static uint32_t pe_level_row(int level) {        /* Aya_LookupLevelStats: clamped 0..98 */
+    if (level < 0) level = 0; else if (level > 98) level = 98;
+    return PE_TABLE_ORIGIN + psx_mod_read_word(0x800A803Cu) + (uint32_t)level * 0x18u;
+}
+
+static int pe_stat_level(int kind) {             /* Aya_StatQueryLevelAndSubLevel's level */
+    const uint32_t table = PE_TABLE_ORIGIN + psx_mod_read_word(0x800A8038u) + (uint32_t)kind * 0x200u;
+    const int32_t value = psx_mod_read_half(PE_STAT_EXP + (uint32_t)kind * 2u);
+    int level = 0;
+    for (int l = 1; l < 99; ++l) {
+        if ((int32_t)psx_mod_read_word(table + (uint32_t)l * 4u) > value) break;
+        level = l;
+    }
+    return level;
+}
+
+static void pe_sync_armor_cache(void) {
+    const uint32_t core = pe_aya_core(), rec = pe_cat_record(1);
+    if (!pe_ptr(core) || psx_mod_read_word(core + C_ATTRIBUTES) != PE_ARMOR_CACHE) return;
+    uint32_t word_old = psx_mod_read_word(PE_ARMOR_CACHE), word = word_old & 0xF0000000u, flags = 0;
+    int bonus = 0, scale[7] = { 0, 0, 0, 0, 0, 0, 0 };
+    if (rec) {
+        int crit = psx_mod_read_byte(rec + 0x09u) + (int16_t)psx_mod_read_half(rec + 0x12u);
+        if (crit >= 1000) crit = 999;
+        crit = crit < 85 ? (int)pe_isqrt((unsigned)(crit < 0 ? 0 : crit) * 3000u) / 10 : (crit * 249 / 208 + 402) / 10;
+        word |= ((uint32_t)pe_stat(rec, 0) & 0x3FFu) | (((uint32_t)pe_stat(rec, 1) & 0x3FFu) << 10) |
+                (((uint32_t)crit & 0xFFu) << 20);
+        int n = psx_mod_read_byte(rec + 0x14u);
+        if (n > 10) n = 10;
+        for (int m = 0; m < n; ++m) {
+            const unsigned e = psx_mod_read_byte(rec + 0x15u + (uint32_t)m) & 31u;
+            static const uint32_t bit[18] = { 0, 1, 2, 4, 8, 16, 0x4000, 0x8000, 0, 0, 0, 0x800, 0x2000,
+                                              0x10000, 0x200, 0x20000, 0x400, 0x1000 };
+            if (e >= 8u && e <= 10u) {
+                flags = (flags & ~0x1E0u) | (((1u << (e - 8u)) & 15u) << 5);
+                bonus = 1 << (e - 8u);
+            } else if (e < 18u) flags |= bit[e];
+            if (e == 11u) scale[0] = 3;
+            if (e == 12u) scale[1] = 2;
+            if (e == 13u) scale[5] = -2;
+            if (e == 15u) scale[1] = -2;
+        }
+    }
+    if (word != word_old || flags != psx_mod_read_word(PE_ARMOR_CACHE + 4u)) {
+        psx_mod_write_word(PE_ARMOR_CACHE, word);
+        psx_mod_write_word(PE_ARMOR_CACHE + 4u, flags);
+        ++s_acache_syncs;
+        pe_log("acache", "armor=0x%02X params=0x%08X->0x%08X", rec ? psx_mod_read_byte(rec + 0x04u) : 0u,
+               (unsigned)word_old, (unsigned)word);
+    }
+    const int bonus_old = (int)psx_mod_read_word(PE_BONUS_SLOTS);
+    if (bonus < bonus_old) {                      /* never strand an item past a smaller bag (pe_item_editor) */
+        uint32_t lo = psx_mod_read_byte(0x800C0E0Cu) + (uint32_t)bonus, hi = psx_mod_read_byte(0x800C0E0Cu) + (uint32_t)bonus_old;
+        if (lo > 50u) lo = 50u;
+        if (hi > 50u) hi = 50u;
+        for (uint32_t s = lo; s < hi; ++s)
+            if (psx_mod_read_half(0x800C0E48u + s * 2u)) { bonus = bonus_old; break; }
+    }
+    int same = bonus_old == bonus;
+    for (int i = 0; i < 7 && same; ++i) same = (int32_t)psx_mod_read_word(PE_STAT_SCALE + (uint32_t)i * 4u) == scale[i];
+    if (same) return;
+    psx_mod_write_word(PE_BONUS_SLOTS, (uint32_t)bonus);
+    for (int i = 0; i < 7; ++i) psx_mod_write_word(PE_STAT_SCALE + (uint32_t)i * 4u, (uint32_t)scale[i]);
+    /* Inv_RecalcSlotStats, the parts the armor modifiers feed. */
+    const uint16_t max_hp = (uint16_t)(((scale[0] + 20) * (int)psx_mod_read_half(pe_level_row(pe_stat_level(0)))) / 20);
+    psx_mod_write_half(PE_MAX_HP_ADDR, max_hp);
+    psx_mod_write_half(core + C_MAX_HP, max_hp);
+    if ((int16_t)psx_mod_read_half(core + C_HP) > (int16_t)max_hp) psx_mod_write_half(core + C_HP, max_hp);
+    if ((int16_t)psx_mod_read_half(core + C_HP_MIRROR) > (int16_t)max_hp) psx_mod_write_half(core + C_HP_MIRROR, max_hp);
+    if (psx_mod_read_half(PE_SAVE_CUR_HP) > max_hp) psx_mod_write_half(PE_SAVE_CUR_HP, max_hp);
+    psx_mod_write_half(core + C_STAT1E, psx_mod_read_half(pe_level_row(pe_stat_level(1) + scale[1]) + 2u));
+    psx_mod_write_half(core + C_STAT22, psx_mod_read_byte(pe_level_row(pe_stat_level(5) + scale[5]) + 6u));
+    pe_log("acache", "modifiers bag=%d hp=%d atk=%d at=%d max_hp=%u", bonus, scale[0], scale[1], scale[5], max_hp);
+}
+
 static void pe_mod_effects_tick(void) {
     if (s_rules != s_rules_shown) {               /* the Rules row was changed */
         pe_apply_rules(s_rules);
@@ -847,6 +940,7 @@ static void pe_mod_effects_tick(void) {
     s_in_battle = battle;
     if (!battle) pe_hp_level_repair();            /* any rules: undoes an old build's damage */
     if (!battle) pe_sync_weapon_cache();          /* any rules: menu edits reach the next battle */
+    if (!battle) pe_sync_armor_cache();
     if (battle) pe_note_reach();                  /* under any rules, like the hit rows */
     if (battle && pe_on()) pe_battle_tick();
     pe_fast_volley_tick(battle);                  /* also restores the game's values when off */
