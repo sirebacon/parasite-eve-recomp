@@ -230,7 +230,7 @@ static int pe_read_file(const char *path, PeBlob *b) {
     FILE *f = fopen(path, "rb");
     if (!f) return 0;
     fseek(f, 0, SEEK_END); const long n = ftell(f); fseek(f, 0, SEEK_SET);
-    if (n <= 0 || n > 0x40000) { fclose(f); return 0; }
+    if (n <= 0 || n > 0x400000) { fclose(f); return 0; }    /* rooms.bin is ~800 KB (was capped at 256 KB: never loaded) */
     b->data = (uint8_t *)malloc((size_t)n); b->size = (uint32_t)n;
     const size_t got = b->data ? fread(b->data, 1, (size_t)n, f) : 0;
     fclose(f);
@@ -255,6 +255,7 @@ static int pe_bundle(int i) {
         const uint32_t n = (uint32_t)r->data[4] | (uint32_t)r->data[5] << 8 | (uint32_t)r->data[6] << 16 | (uint32_t)r->data[7] << 24;
         if (8u + 12u * n <= r->size) s_bundle[i].nrooms = n;
     }
+    if (!s_bundle[i].nrooms) pe_log("skin", "%s: rooms.bin missing or unreadable (room animations stay Aya's)", g_pe_skins[i].name);
     s_bundle[i].gun_part = -1;                  /* optional: the part the weapon follows */
     PeBlob meta = { 0, 0 };
     snprintf(p, sizeof p, "pe_skins/%s/meta.bin", g_pe_skins[i].folder);
