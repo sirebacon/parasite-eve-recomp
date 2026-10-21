@@ -471,7 +471,22 @@ static void pe_anim_watch(int w) {
     const uint32_t a = psx_mod_read_word(player + 0x1B0u);
     if (a == s_anim_last) return;
     s_anim_last = a;
-    if (!a || pe_ours(w, a) || s_anim_logged >= 30) return;
+    if (!a || pe_ours(w, a)) return;
+    /* A room's door / event script can install a row and start it in the same frame, before
+     * pe_room_rows points the slot at our copy (play test 2026-10-21: map 51 entry, slots 34 / 37).
+     * Swap the running animation itself: same frame count, so the game's frame bookkeeping holds. */
+    if (pe_ptr(a)) {
+        const int e = pe_room_entry(w, pe_guest_fingerprint(a));
+        const uint32_t dst = e >= 0 ? pe_room_copy(w, e) : 0;
+        if (dst && psx_mod_read_byte(dst + 2u) == psx_mod_read_byte(a + 2u)) {
+            psx_mod_write_word(player + 0x1B0u, dst);
+            s_anim_last = dst;
+            for (int i = PE_ROOM_SLOT0; i < PE_ROOM_SLOT0 + PE_ROOM_SLOTS; ++i)   /* and the slot, if it holds it */
+                if (psx_mod_read_word(PE_GS + GS_ROWS + (uint32_t)i * 4u) == a) psx_mod_write_word(PE_GS + GS_ROWS + (uint32_t)i * 4u, dst);
+            return;
+        }
+    }
+    if (s_anim_logged >= 30) return;
     int slot = -1;
     for (int i = 0; i < 48 && slot < 0; ++i) if (psx_mod_read_word(PE_GS + GS_ROWS + (uint32_t)i * 4u) == a) slot = i;
     ++s_anim_logged;
