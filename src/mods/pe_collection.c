@@ -197,9 +197,9 @@ static void pe_on_spell(struct CPUState *cpu, uint32_t address) {
  *     texture.bin in the scratch buffer and starts the loader at phase 3, so the game uploads our
  *     TIMs and then reads its own bundle (which we replace next). Not during Liberate (flags
  *     0x20000: the transformation's own sequence waits in phase 2).
- *   - Scene_LoadEntityTextures entry (the next call of the room load): model.bin goes over the
- *     bundle and bank_slots[0] / bank_rows point into it; the day blob goes into +0x158 and the
- *     loader starts at subphase 6, so the game resolves our rows (and stream tables) itself.
+ *   - Scene_LoadEntityTextures entry (the room load's row step, then every frame): bank_slots[0]
+ *     and the bundle / day rows point at the skin's copies in mod memory; the game's own bundle and
+ *     day blob (stream tables included) stay as loaded.
  * Taking a costume off forces the game's own bundle and rows back (flags 0x200000, day flags 1).
  * Wearing from F1 asks for the game's same-room reload (Scene_SelectMapById: g_GameStateFlags
  * |= 0x2000 and flags |= 0x800 end the frame loop and the room loads again), so it shows as soon
@@ -222,7 +222,7 @@ static void pe_on_spell(struct CPUState *cpu, uint32_t address) {
 #define PE_FN_ENTITY_TEXS  0x8006C5BCu      /* Scene_LoadEntityTextures */
 #define PE_MODEL_BUF_MAX 0xE000u
 typedef struct { uint8_t *data; uint32_t size; } PeBlob;
-static struct { int loaded, ok; PeBlob model, tex, day[9]; } s_bundle[PE_SKINS];
+static struct { int loaded, ok; PeBlob model, tex, day[9], rooms; uint32_t nrooms; } s_bundle[PE_SKINS];
 static int s_have = -2;                     /* in the buffers: -2 unknown, -1 the game's, else a skin */
 static int s_pending = -1;                  /* skin whose model / rows go in at the next row load */
 
@@ -249,24 +249,17 @@ static int pe_bundle(int i) {
         snprintf(p, sizeof p, "pe_skins/%s/day%d.bin", g_pe_skins[i].folder, d);
         if (!pe_read_file(p, &s_bundle[i].day[d])) return 0;
     }
+    snprintf(p, sizeof p, "pe_skins/%s/rooms.bin", g_pe_skins[i].folder);   /* optional: room animations */
+    PeBlob *r = &s_bundle[i].rooms;
+    if (pe_read_file(p, r) && r->size >= 8 && !memcmp(r->data, "PERR", 4)) {
+        const uint32_t n = (uint32_t)r->data[4] | (uint32_t)r->data[5] << 8 | (uint32_t)r->data[6] << 16 | (uint32_t)r->data[7] << 24;
+        if (8u + 12u * n <= r->size) s_bundle[i].nrooms = n;
+    }
     return s_bundle[i].ok = 1;
 }
 static uint32_t rd32(const uint8_t *b, uint32_t o) { return (uint32_t)b[o] | (uint32_t)b[o + 1] << 8 | (uint32_t)b[o + 2] << 16 | (uint32_t)b[o + 3] << 24; }
 static void pe_put_blob(uint32_t dst, const PeBlob *b) {
     for (uint32_t i = 0; i + 4 <= b->size; i += 4) psx_mod_write_word(dst + i, rd32(b->data, i));
-}
-/* Point bank_slots[0] / bank_rows[0][id] at a bundle written to `base` (SceneAssetBlob: directory
- * at word 1; +0x0C model records, +0x10 row records; records 12 bytes, word 1 = offset | id << 24),
- * as Scene_LoadEntityTexture phase 6 does. */
-static void pe_point_bundle(uint32_t base, const PeBlob *b) {
-    const uint32_t dir = rd32(b->data, 4);
-    const uint32_t mdesc = rd32(b->data, dir + 0x0C), mat = mdesc & 0x3FFFFFu;
-    if (mdesc >> 22) psx_mod_write_word(PE_GS + GS_SLOTS, base + (rd32(b->data, mat + 4) & 0xFFFFFFu));
-    const uint32_t desc = rd32(b->data, dir + 0x10), at = desc & 0x3FFFFFu;
-    for (uint32_t i = 0; i < (desc >> 22); ++i) {
-        const uint32_t w = rd32(b->data, at + 12u * i + 4u);
-        if ((w >> 24) < 48u) psx_mod_write_word(PE_GS + GS_ROWS + (w >> 24) * 4u, base + (w & 0xFFFFFFu));
-    }
 }
 static int pe_gameplay_area(unsigned a) { return a == 10u || a == 12u || a == 13u; }
 static int pe_skin_wearable(int i) {
@@ -296,8 +289,9 @@ static void pe_on_entity_texture(struct CPUState *cpu, uint32_t address) {
         if ((flags & 0x200000u) || s_have != w) {            /* our texture through the game's upload */
             pe_put_blob(scratch, &s_bundle[w].tex);
             psx_mod_write_byte(PE_GS + GS_ETPHASE, 3);
+            s_pending = w;                                   /* logged when the pointers go in */
         }
-        s_pending = w;                                       /* model and rows at the row load */
+        s_have = w;                                          /* model and rows: pe_on_entity_textures */
     } else {
         if (s_have != -1) { flags |= 0x200000u; dayflags |= 1u; }   /* the game's own back */
         if (s_have >= 0) pe_log("skin", "worn=Aya game bundle back");
@@ -308,21 +302,146 @@ static void pe_on_entity_texture(struct CPUState *cpu, uint32_t address) {
     psx_mod_write_byte(PE_GS + GS_DAYFLAGS, dayflags);
 }
 
+/* The skin's model and day rows live in mod memory (psx_mod_alloc_guest_memory: not in save
+ * states, so rewritten after a restore); only pointers change. The game's own bundle and day blob
+ * stay as loaded -- the bundle buffer holds more than the model, and the day blob's stream tables
+ * (scene_object_tables / cd_range_read_mode) feed the battle loader. (Overwriting both froze a
+ * battle on 2026-10-20.) */
+static struct { uint32_t base, day_off[9]; int written; } s_mem[PE_SKINS];
+
+static uint32_t pe_skin_mem(int w) {
+    if (!s_mem[w].base) {
+        uint32_t size = (s_bundle[w].model.size + 3u) & ~3u;
+        for (int d = 1; d <= 8; ++d) { s_mem[w].day_off[d] = size; size += (s_bundle[w].day[d].size + 3u) & ~3u; }
+        s_mem[w].base = psx_mod_alloc_guest_memory(size, 4);
+        if (!s_mem[w].base) return 0;
+    }
+    if (!s_mem[w].written) {
+        pe_put_blob(s_mem[w].base, &s_bundle[w].model);
+        for (int d = 1; d <= 8; ++d) pe_put_blob(s_mem[w].base + s_mem[w].day_off[d], &s_bundle[w].day[d]);
+        s_mem[w].written = 1;
+    }
+    return s_mem[w].base;
+}
+
+/* Point a blob's rows (and, for the bundle, bank_slots[0]) at its copy in mod memory; only words
+ * that differ are written, so this can run every frame. Returns how many were rewritten. */
+static int pe_point_blob(uint32_t base, const PeBlob *b, int model) {
+    int n = 0;
+    const uint32_t dir = rd32(b->data, 4);
+    if (model) {
+        const uint32_t mdesc = rd32(b->data, dir + 0x0C), mat = mdesc & 0x3FFFFFu;
+        const uint32_t want = base + (rd32(b->data, mat + 4) & 0xFFFFFFu);
+        if ((mdesc >> 22) && psx_mod_read_word(PE_GS + GS_SLOTS) != want) { psx_mod_write_word(PE_GS + GS_SLOTS, want); ++n; }
+    }
+    const uint32_t desc = rd32(b->data, dir + 0x10), at = desc & 0x3FFFFFu;
+    for (uint32_t i = 0; i < (desc >> 22); ++i) {
+        const uint32_t w = rd32(b->data, at + 12u * i + 4u), want = base + (w & 0xFFFFFFu);
+        if ((w >> 24) >= 48u) continue;
+        const uint32_t slot = PE_GS + GS_ROWS + (w >> 24) * 4u;
+        if (psx_mod_read_word(slot) != want) { psx_mod_write_word(slot, want); ++n; }
+    }
+    return n;
+}
+
+/* Room animations: Scene_LoadRoom puts the room's player rows (door opening, room events) in
+ * bank_rows[0][24..47] -- Aya's skeleton, which twists any other body. rooms.bin (build_skin.py)
+ * holds every such row retargeted, indexed by a fingerprint of Aya's original (FNV-1a over the
+ * row's whole length, walking its channels as Anim_DecodeBoneRotations*). A row we know is copied
+ * to mod memory once per skin and the slot pointed at it. */
+#define PE_ROOM_SLOT0 24
+#define PE_ROOM_SLOTS 24
+static struct { uint32_t src, dst; int idx; } s_rslot[PE_ROOM_SLOTS];
+static uint32_t *s_rguest[PE_SKINS];        /* per skin, per rooms.bin entry: copy in mod memory */
+static uint8_t *s_rwritten[PE_SKINS];
+
+static uint32_t pe_guest_row_length(uint32_t p) {
+    const unsigned flags = psx_mod_read_byte(p), last = psx_mod_read_byte(p + 1u), frames = psx_mod_read_byte(p + 2u);
+    const uint32_t stride = ((frames >> 1) + 1u) * 4u;
+    const int shrt = (flags & 3u) == 2u;
+    const uint32_t bstride = shrt ? stride : ((frames >> 2) + 1u) * 4u;
+    uint32_t cur = 12u;
+    for (int k = 0; k < 3; ++k) cur += psx_mod_read_half(p + cur) ? 4u : stride;
+    for (unsigned k = 0; k < (last + 1u) * 3u; ++k) {
+        cur += (shrt ? psx_mod_read_half(p + cur) != 0 : psx_mod_read_byte(p + cur) != 0) ? 4u : bstride;
+        if (cur > 0x10000u) return 0;
+    }
+    return cur;
+}
+static uint32_t pe_guest_fingerprint(uint32_t p) {
+    const uint32_t n = pe_guest_row_length(p);
+    if (n < 372u) return 0;
+    uint32_t h = 0x811C9DC5u;
+    for (uint32_t i = 0; i < n; ++i) h = (h ^ psx_mod_read_byte(p + i)) * 0x01000193u;
+    return h;
+}
+static int pe_room_entry(int w, uint32_t fp) {          /* rooms.bin table is sorted by fingerprint */
+    const uint8_t *t = s_bundle[w].rooms.data + 8;
+    int lo = 0, hi = (int)s_bundle[w].nrooms - 1;
+    while (lo <= hi) {
+        const int mid = (lo + hi) / 2;
+        const uint32_t f = rd32(t, 12u * (uint32_t)mid);
+        if (f == fp) return mid;
+        if (f < fp) lo = mid + 1; else hi = mid - 1;
+    }
+    return -1;
+}
+static uint32_t pe_room_copy(int w, int e) {
+    if (!s_rguest[w]) {
+        s_rguest[w] = (uint32_t *)calloc(s_bundle[w].nrooms, sizeof(uint32_t));
+        s_rwritten[w] = (uint8_t *)calloc(s_bundle[w].nrooms, 1);
+        if (!s_rguest[w] || !s_rwritten[w]) return 0;
+    }
+    const uint8_t *t = s_bundle[w].rooms.data + 8 + 12u * (uint32_t)e;
+    const uint32_t off = rd32(t, 4), size = rd32(t, 8);
+    if (off + size > s_bundle[w].rooms.size) return 0;
+    if (!s_rguest[w][e]) s_rguest[w][e] = psx_mod_alloc_guest_memory((size + 3u) & ~3u, 4);
+    if (!s_rguest[w][e]) return 0;
+    if (!s_rwritten[w][e]) {
+        for (uint32_t i = 0; i + 4 <= size; i += 4) psx_mod_write_word(s_rguest[w][e] + i, rd32(s_bundle[w].rooms.data, off + i));
+        s_rwritten[w][e] = 1;
+    }
+    return s_rguest[w][e];
+}
+static int s_rslot_skin = -1;
+static void pe_room_rows(int w) {
+    if (!s_bundle[w].nrooms) return;
+    if (s_rslot_skin != w) { memset(s_rslot, 0, sizeof s_rslot); s_rslot_skin = w; }
+    for (int k = 0; k < PE_ROOM_SLOTS; ++k) {
+        const uint32_t slot = PE_GS + GS_ROWS + (uint32_t)(PE_ROOM_SLOT0 + k) * 4u;
+        const uint32_t p = psx_mod_read_word(slot);
+        if (!p) { s_rslot[k].src = s_rslot[k].dst = 0; continue; }
+        if (p == s_rslot[k].dst && p) {                  /* ours; rewritten after a restore */
+            (void)pe_room_copy(w, s_rslot[k].idx);
+            continue;
+        }
+        if (p != s_rslot[k].src) {                       /* a row we haven't seen in this slot */
+            s_rslot[k].src = p; s_rslot[k].dst = 0;
+            s_rslot[k].idx = pe_ptr(p) ? pe_room_entry(w, pe_guest_fingerprint(p)) : -1;
+            if (s_rslot[k].idx < 0) pe_log("skin", "room row slot %d not in rooms.bin", PE_ROOM_SLOT0 + k);
+        }
+        if (s_rslot[k].idx < 0) continue;                /* unknown: left as the game's */
+        if (!s_rslot[k].dst) s_rslot[k].dst = pe_room_copy(w, s_rslot[k].idx);
+        if (s_rslot[k].dst) psx_mod_write_word(slot, s_rslot[k].dst);
+    }
+}
+
+/* Every call (each frame, and the room load's row step): while a skin's texture is in VRAM, keep
+ * bank_slots[0] and the bundle / day rows on the skin's copies -- battles and day changes re-resolve
+ * the game's rows. */
 static void pe_on_entity_textures(struct CPUState *cpu, uint32_t address) {
     (void)cpu; (void)address;
-    const int w = s_pending;
+    const int w = s_have;
     if (w < 0 || psx_mod_read_byte(PE_GS + GS_SSUB) != 0 || psx_mod_read_byte(PE_GS + GS_ETPHASE) != 0) return;
-    s_pending = -1;
-    const uint32_t voice = psx_mod_read_word(PE_GS + GS_VOICE), etex = psx_mod_read_word(PE_GS + GS_ETEX);
-    if (!pe_ptr(voice) || !pe_ptr(etex)) return;
-    pe_put_blob(voice, &s_bundle[w].model);                  /* over the bundle the game just read */
-    pe_point_bundle(voice, &s_bundle[w].model);
+    if (!pe_gameplay_area(psx_mod_read_byte(PE_AREA_TYPE))) return;
+    const uint32_t mem = pe_skin_mem(w);
+    if (!mem) return;
     int day = (int8_t)psx_mod_read_byte(PE_GS + GS_DAY);
     if (day < 1 || day > 8) day = 1;
-    pe_put_blob(etex, &s_bundle[w].day[day]);                /* the game resolves our rows */
-    psx_mod_write_byte(PE_GS + GS_SSUB, 6);
-    s_have = w;
-    pe_log("skin", "worn=%s model+texture+day%d rows in", g_pe_skins[w].name, day);
+    const int n = pe_point_blob(mem, &s_bundle[w].model, 1) + pe_point_blob(mem + s_mem[w].day_off[day], &s_bundle[w].day[day], 0);
+    pe_room_rows(w);
+    if (n && s_pending == w) pe_log("skin", "worn=%s model+texture+day%d rows in", g_pe_skins[w].name, day);
+    s_pending = -1;
 }
 
 /* The game's same-room reload, so a new costume shows when F1 closes. */
@@ -557,7 +676,14 @@ static void pe_collection_tick(void) {
     else memset(s_slot, 0, sizeof s_slot);
     if (s_dirty) pe_profile_save();
 }
-static void pe_collection_restored(void) { s_have = -2; s_pending = -1; }   /* a save state brings its own buffers */
+static void pe_collection_restored(void) {      /* a save state brings its own buffers; mod memory isn't in it */
+    s_have = -2; s_pending = -1;
+    for (int i = 0; i < PE_SKINS; ++i) {
+        s_mem[i].written = 0;
+        if (s_rwritten[i]) memset(s_rwritten[i], 0, s_bundle[i].nrooms);
+    }
+    memset(s_rslot, 0, sizeof s_rslot);
+}
 
 void pe_collection_register(void) {
     pe_profile_load();
