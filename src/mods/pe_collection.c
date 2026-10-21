@@ -452,6 +452,33 @@ static void pe_gun_part(int w) {
     }
 }
 
+/* Diagnostic: while a skin is worn, log each animation the player starts that isn't one of the
+ * skin's copies (action_data +0x1B0; which row-table slot it came from, if any), so an animation
+ * that bypasses the row table (or a slot we don't cover) shows in the play log. Max 30 a room. */
+static uint32_t s_anim_last, s_anim_room;
+static int s_anim_logged;
+static int pe_ours(int w, uint32_t p) {
+    if (s_mem[w].base && p >= s_mem[w].base && p < s_mem[w].base + s_mem[w].day_off[8] + s_bundle[w].day[8].size) return 1;
+    if (s_rguest[w]) for (uint32_t e = 0; e < s_bundle[w].nrooms; ++e)
+        if (s_rguest[w][e] && p >= s_rguest[w][e] && p < s_rguest[w][e] + 0x10000u) return 1;
+    return 0;
+}
+static void pe_anim_watch(int w) {
+    const uint32_t player = psx_mod_read_word(PE_PLAYER_ENTITY);
+    if (!pe_ptr(player)) return;
+    const uint32_t room = psx_mod_read_word(PE_ROOM_TOKEN);
+    if (room != s_anim_room) { s_anim_room = room; s_anim_logged = 0; }
+    const uint32_t a = psx_mod_read_word(player + 0x1B0u);
+    if (a == s_anim_last) return;
+    s_anim_last = a;
+    if (!a || pe_ours(w, a) || s_anim_logged >= 30) return;
+    int slot = -1;
+    for (int i = 0; i < 48 && slot < 0; ++i) if (psx_mod_read_word(PE_GS + GS_ROWS + (uint32_t)i * 4u) == a) slot = i;
+    ++s_anim_logged;
+    pe_log("skin", "anim not ours: mode=%u slot=%d ptr=0x%08X parts=%u frames=%u", psx_mod_read_byte(player + 0x0Eu), slot, a,
+           psx_mod_read_byte(a + 1u) + 1u, psx_mod_read_byte(a + 2u));
+}
+
 /* Every call (each frame, and the room load's row step): while a skin's texture is in VRAM, keep
  * bank_slots[0] and the bundle / day rows on the skin's copies -- battles and day changes re-resolve
  * the game's rows. */
@@ -468,6 +495,7 @@ static void pe_on_entity_textures(struct CPUState *cpu, uint32_t address) {
     if (day < 1 || day > 8) day = 1;
     const int n = pe_point_blob(mem, &s_bundle[w].model, 1) + pe_point_blob(mem + s_mem[w].day_off[day], &s_bundle[w].day[day], 0);
     pe_room_rows(w);
+    pe_anim_watch(w);
     if (n && s_pending == w) pe_log("skin", "worn=%s model+texture+day%d rows in", g_pe_skins[w].name, day);
     s_pending = -1;
 }
