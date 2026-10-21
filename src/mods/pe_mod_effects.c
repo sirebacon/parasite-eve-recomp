@@ -732,6 +732,14 @@ static void pe_fast_volley_tick(int battle) {
     const unsigned mode = psx_mod_read_byte(player + E_ACTION_MODE);
     if (mode != 7u && mode != 9u && mode != 11u) return;
     if (psx_mod_read_byte(PE_HIT_PENDING)) return;       /* this bullet's hit hasn't landed yet */
+    /* ...nor has its damage: a landed hit only marks the target (core flags hitState 0x6000,
+     * ApplyEvasionOutcome); HP drops when the enemy's own step runs the damage and clears the mark
+     * (Battle_StepEnemyMovement, turn.c). Skipping before that let the next-bullet check see a
+     * dying target as alive and fire at it (play test 2026-10-20). */
+    for (int i = 0; i < PE_ENEMY_SLOTS; ++i) {
+        const uint32_t slot = PE_ENEMY_SLOT_BASE + (uint32_t)i * PE_ENEMY_SLOT_STRIDE;
+        if (psx_mod_read_byte(slot) && (psx_mod_read_word(slot + 4u + C_CORE_FLAGS) & 0x6000u)) return;
+    }
     const uint32_t last = (uint32_t)psx_mod_read_byte(player + E_ANIM_LAST) << 16;
     if ((psx_mod_read_word(player + E_ANIM_FRAME) >> 16) >= (last >> 16)) return;
     psx_mod_write_word(player + E_ANIM_FRAME, last);     /* the next advance makes animPrev = last */
