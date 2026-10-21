@@ -759,6 +759,68 @@ static int pe_matches(int rules) {
     return 1;
 }
 
+/* ---- the game's cached weapon data, kept in step with the equipped gun -------------------
+ * Battles read Aya's gun from a cache, g_SavedBattleStateTail (0x800B0CB0, her Combatant's action
+ * block), that Inv_BuildWeaponList (battle/commands.c) fills only when a room loads
+ * (Battle_InitEquipLists) or the equip menu changes the gun. Anything that edits the equipped
+ * record otherwise -- Mod Catalog installs / removes, Tool transfers, boosters, Mod Permits, the
+ * item editor -- reached battle only after the next room change (play test 2026-10-20: RoF 7 +
+ * Attack All installed, the next fight in the same room fired plain single shots). Outside battle
+ * we rebuild the fields Inv_BuildWeaponList writes, the same way, and rewrite them when they
+ * differ: attack, range, kind, packed power / category, the effects word. Never in battle (the
+ * block is live state there), and the loaded-round count (packed bits 0-9) is left to the game. */
+#define PE_WEAPON_CACHE     0x800B0CB0u     /* g_SavedBattleStateTail (WeaponListOutput) */
+#define PE_EFFECT_SHOTS     0x800923D0u     /* g_WeaponEffectCodes: RoF effect -> shots */
+static unsigned s_wcache_syncs;
+
+static int pe_stat(uint32_t rec, unsigned i) {   /* base + bonus, as ClampStat (999 at 1000+) */
+    const int v = psx_mod_read_byte(rec + 0x07u + i) + (int16_t)psx_mod_read_half(rec + 0x0Eu + i * 2u);
+    return v >= 1000 ? 999 : v;
+}
+
+static void pe_sync_weapon_cache(void) {
+    const uint32_t core = pe_aya_core(), rec = pe_cat_record(0);
+    if (!pe_ptr(core) || !rec || psx_mod_read_word(core + C_ACTION) != PE_WEAPON_CACHE) return;
+    const unsigned kind = psx_mod_read_byte(rec + 0x06u);
+    int attack = pe_stat(rec, 0);
+    const int r1 = psx_mod_read_byte(rec + 0x08u) + (int16_t)psx_mod_read_half(rec + 0x10u);
+    const uint32_t range = pe_isqrt(r1 < 1000 ? (uint32_t)(r1 < 0 ? 0 : r1) * 22500u : 0x156FABCu);
+    unsigned code = 0;
+    if (kind != 0 && kind < 8u) code = kind > 4u ? kind - 4u : 1u;
+    else if (kind >= 19u) code = kind - 18u;
+    uint32_t fx = 0x11u;
+    int n = psx_mod_read_byte(rec + 0x14u);
+    if (n > 10) n = 10;
+    for (int m = 0; m < n; ++m) {
+        const unsigned e = psx_mod_read_byte(rec + 0x15u + (uint32_t)m) & 31u;
+        if (e >= 1u && e <= 5u) fx = (fx & ~0xFu) | (psx_mod_read_byte(PE_EFFECT_SHOTS + e) & 0xFu);
+        else if (e >= 6u && e <= 8u) fx = (fx & ~0xC0u) | ((e - 5u) << 6);
+        else if (e >= 9u && e <= 13u) fx |= 1u << (e - 1u);          /* elements: bits 8-12 */
+        else if (e == 14u) fx |= 1u << 15;
+        else if (e == 15u) fx |= 1u << 16;
+        else if (e == 16u || e == 17u) fx = (fx & ~0x6000u) | ((e - 15u) << 13);
+        else if (e == 18u) fx |= 1u << 17;
+        else if (e == 19u || e == 20u) fx = (fx & ~0x30u) | ((e - 17u) << 4);
+    }
+    if (((fx >> 13) & 3u) == 1u) attack = (int16_t)attack >> 1;      /* Steal: half attack */
+    const uint32_t packed_old = psx_mod_read_word(PE_WEAPON_CACHE + 0x0Cu);
+    const uint32_t packed = (packed_old & ~0x3FFC00u) | ((uint32_t)pe_stat(rec, 2) << 10) | ((code & 3u) << 20);
+    const uint16_t a_old = psx_mod_read_half(PE_WEAPON_CACHE), r_old = psx_mod_read_half(PE_WEAPON_CACHE + 2u);
+    const uint16_t k_old = psx_mod_read_half(PE_WEAPON_CACHE + 6u);
+    const uint32_t fx_old = psx_mod_read_word(PE_WEAPON_CACHE + 0x10u);
+    if (a_old == (uint16_t)attack && r_old == (uint16_t)range && k_old == kind && packed_old == packed && fx_old == fx)
+        return;
+    psx_mod_write_half(PE_WEAPON_CACHE, (uint16_t)attack);
+    psx_mod_write_half(PE_WEAPON_CACHE + 2u, (uint16_t)range);
+    psx_mod_write_half(PE_WEAPON_CACHE + 6u, (uint16_t)kind);
+    psx_mod_write_word(PE_WEAPON_CACHE + 0x0Cu, packed);
+    psx_mod_write_word(PE_WEAPON_CACHE + 0x10u, fx);
+    ++s_wcache_syncs;
+    pe_log("wcache", "gun=0x%02X attack=%u->%d range=%u->%u effects=0x%05X->0x%05X packed=0x%08X->0x%08X",
+           psx_mod_read_byte(rec + 0x04u), a_old, attack, r_old, (unsigned)range, (unsigned)fx_old, (unsigned)fx,
+           (unsigned)packed_old, (unsigned)packed);
+}
+
 static void pe_mod_effects_tick(void) {
     if (s_rules != s_rules_shown) {               /* the Rules row was changed */
         pe_apply_rules(s_rules);
@@ -776,6 +838,7 @@ static void pe_mod_effects_tick(void) {
     if (!battle && s_in_battle) pe_battle_end();
     s_in_battle = battle;
     if (!battle) pe_hp_level_repair();            /* any rules: undoes an old build's damage */
+    if (!battle) pe_sync_weapon_cache();          /* any rules: menu edits reach the next battle */
     if (battle) pe_note_reach();                  /* under any rules, like the hit rows */
     if (battle && pe_on()) pe_battle_tick();
     pe_fast_volley_tick(battle);                  /* also restores the game's values when off */
